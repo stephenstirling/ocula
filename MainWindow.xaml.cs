@@ -11,7 +11,7 @@ using Ocula.Services;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Microsoft.Graphics.Canvas;
-using Microsoft.Graphics.DirectX;
+using Windows.Graphics.DirectX;
 using Microsoft.Graphics.Display;
 using Microsoft.UI;
 using Microsoft.UI.Dispatching;
@@ -26,6 +26,7 @@ using Windows.Foundation;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 using Windows.System;
+using FileAttributes = System.IO.FileAttributes;
 using DispatcherQueueTimer = Microsoft.UI.Dispatching.DispatcherQueueTimer;
 
 namespace Ocula;

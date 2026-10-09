@@ -5,7 +5,7 @@ using System.Numerics;
 using System.Threading.Tasks;
 using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.UI.Xaml;
-using Microsoft.Graphics.DirectX;
+using Windows.Graphics.DirectX;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;

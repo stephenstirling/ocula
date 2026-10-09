@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using ImageMagick;
 using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.Effects;
-using Microsoft.Graphics.DirectX;
+using Windows.Graphics.DirectX;
 using Ocula.Models;
 using Windows.Foundation;
 using Windows.Graphics.Imaging;

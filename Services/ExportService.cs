@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ImageMagick;
+using ImageMagick.Drawing;
 using Ocula.Models;
 
 namespace Ocula.Services;

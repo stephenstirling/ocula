@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ImageMagick;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Ocula.Models;
 using Windows.Storage;
 using Windows.Storage.FileProperties;
 using Windows.Storage.Streams;

@@ -6,7 +6,7 @@ using Ocula.Models;
 using Ocula.Services;
 using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.Effects;
-using Microsoft.Graphics.DirectX;
+using Windows.Graphics.DirectX;
 using Microsoft.UI;
 using Microsoft.UI.Text;
 using Microsoft.UI.Windowing;
@@ -377,7 +377,7 @@ public sealed partial class MainWindow
             {
                 Source = source,
                 SourceColorProfile = ColorManagementProfile.CreateCustom(profile.Icc),
-                DestinationColorProfile = new ColorManagementProfile(CanvasColorSpace.ScRgb),
+                OutputColorProfile = new ColorManagementProfile(CanvasColorSpace.ScRgb),
                 Quality = ColorManagementEffect.IsBestQualitySupported(_canvasDevice)
                     ? ColorManagementEffectQuality.Best : ColorManagementEffectQuality.Normal
             };

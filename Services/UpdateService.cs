@@ -8,6 +8,7 @@ using Microsoft.Windows.AppLifecycle;
 using Windows.ApplicationModel;
 using Windows.Services.Store;
 using Windows.System;
+using AppInstance = Microsoft.Windows.AppLifecycle.AppInstance;
 
 namespace Ocula.Services;
 
