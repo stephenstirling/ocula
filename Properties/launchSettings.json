@@ -1,0 +1,7 @@
+{
+  "profiles": {
+    "Ocula (Package)": {
+      "commandName": "MsixPackage"
+    }
+  }
+}
