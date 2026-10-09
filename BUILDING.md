@@ -37,7 +37,7 @@ A WinUI 3 (Windows App SDK) app in C# / .NET 8, built as a native **x64-only** a
    `Services/AppInfo.cs` set your donation page and (optionally) source-code and feedback links.
 7. **Folder right-click menu (C++ part):**
    - Right-click the solution > Add > New Project > **Dynamic-Link Library (DLL)** (C++),
-     named **OculaShell**, in an `OculaShell` folder next to the `Ocula` folder.
+     named **OculaShell**, in the existing `OculaShell` folder at the repo root.
    - Delete its `dllmain.cpp`, `pch.h`, `pch.cpp` and `framework.h`; add this repo's
      `OculaShell\dllmain.cpp` and `OculaShell\OculaShell.def`.
    - Project Properties (All Configurations, All Platforms):

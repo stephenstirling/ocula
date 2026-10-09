@@ -1,0 +1,12 @@
+<Project>
+  <!--
+    MSIX packages can't be registered from a network share, and this repo lives on Z:,
+    so bin and obj go to local disk (the same scheme as Capta). Override
+    StirlingLocalBuildRoot on the command line to put them somewhere else.
+  -->
+  <PropertyGroup>
+    <StirlingLocalBuildRoot Condition="'$(StirlingLocalBuildRoot)' == ''">$(USERPROFILE)\.stirling-build\ocula\</StirlingLocalBuildRoot>
+    <BaseOutputPath>$(StirlingLocalBuildRoot)$(MSBuildProjectName)\bin\</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(StirlingLocalBuildRoot)$(MSBuildProjectName)\obj\</BaseIntermediateOutputPath>
+  </PropertyGroup>
+</Project>

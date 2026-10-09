@@ -13,3 +13,6 @@ BundleArtifacts/
 
 # Local bundle of generated assets (kept out of the repository)
 Ocula-Assets.zip
+
+# Spare icon folder (kept out of the repository)
+Ocula-Assets/
