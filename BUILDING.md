@@ -4,63 +4,81 @@ A WinUI 3 (Windows App SDK) app in C# / .NET 8, built as a native **x64-only** a
 
 ## Setup
 
-1. Install **Visual Studio 2022** with the **WinUI application development** and
-   **Desktop development with C++** workloads.
-2. Create a project from **"Blank App, Packaged (WinUI 3 in Desktop)"** named **Ocula**.
-3. Delete the template's `MainWindow.xaml` / `.cs`, then copy in `MainWindow.xaml`,
-   `MainWindow.xaml.cs`, `ExportDialog.xaml` / `.cs`, `DuplicatesWindow.xaml` / `.cs`, `SettingsWindow.xaml` / `.cs`, `MapWindow.xaml` / `.cs`, `CompareWindow.xaml` / `.cs`, `ImportWindow.xaml` / `.cs`, `SlideshowWindow.xaml` / `.cs`, `EditWindow.xaml` / `.cs`,
-   `ViewerWindow.xaml` / `.cs`, `MainWindow.Workflow.cs`, `MainWindow.Library.cs`,
-   `MainWindow.Viewing.cs`, `Program.cs` and the
-   `Models` and `Services` folders. Replace the template's `App.xaml.cs` with this one (keep
-   its `App.xaml`). If `ExportDialog.xaml` isn't treated as a XAML page, set its Build Action
-   to "Page" in Properties (same for the other window XAML files).
-4. Add NuGet packages:
-   - `Magick.NET-Q8-AnyCPU` (14.x) – decodes RAW files Windows can't
-   - `MetadataExtractor` – camera make/model/exposure, including CR2
-   - `Microsoft.Data.Sqlite` – the local library database
-   - `CommunityToolkit.WinUI.Controls.Segmented` (8.x) – the Light/Dark/System pill
-   - `CommunityToolkit.WinUI.Controls.SettingsControls` (8.x) – Windows 11-style settings cards
-   - `Microsoft.Graphics.Win2D` (1.x, the WinUI 3 version) – HDR preview
-   - `LibVLCSharp.WinUI` (3.7 or later) and `VideoLAN.LibVLC.Windows` (3.0.18 or later) –
-     play MKV, WebM, AVI and other formats Windows' player can't. Ocula is x64 only: VLC's
-     engine isn't available for ARM64, and the Smart recognition and People models are tested on x64.
-   Also update `Microsoft.WindowsAppSDK` to **1.6 or later** (NuGet > Updates); the HDR
-   preview uses its display information API to read the monitor's HDR brightness.
-   - `Microsoft.ML.OnnxRuntime` (1.17 or later, MIT) – runs the Smart recognition model. The model
-     files themselves are not in the project; Ocula downloads them when the user turns the
-     feature on (Settings > Smart recognition).
-   - `CoenM.ImageHash` – perceptual hashing for duplicate detection (MIT). It brings in
-     `SixLabors.ImageSharp`, which is free under the Six Labors Split License for
-     open-source projects and for individuals and companies under US$1M annual revenue.
-5. In the `.csproj`, make sure `<Nullable>enable</Nullable>` is set.
-6. In `Services/CameraImageService.cs`, put your own contact in the User-Agent, and in
-   `Services/AppInfo.cs` set your donation page and (optionally) source-code and feedback links.
-7. **Folder right-click menu (C++ part):**
-   - Right-click the solution > Add > New Project > **Dynamic-Link Library (DLL)** (C++),
-     named **OculaShell**, in the existing `OculaShell` folder at the repo root.
-   - Delete its `dllmain.cpp`, `pch.h`, `pch.cpp` and `framework.h`; add this repo's
-     `OculaShell\dllmain.cpp` and `OculaShell\OculaShell.def`.
-   - Project Properties (All Configurations, All Platforms):
-     C/C++ > Precompiled Headers > **Not Using Precompiled Headers**;
-     Linker > Input > Module Definition File > **OculaShell.def**.
-   - Make sure the solution builds OculaShell for **x64** (Configuration Manager).
-8. **Map library:** download MapLibre GL JS (version 4.x) and put both files in `Assets\Map`
-   next to `map.html`:
-   - https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.js
-   - https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.css
-   It's bundled rather than loaded from the internet, so the map works the same for everyone
-   and nothing but map tiles is fetched online.
-9. Copy everything in `Assets` into the project's `Assets` folder, replacing the template's
-   placeholder logos. In Visual Studio, select the new files > Properties > Build Action
-   **Content** (the template's existing logos already are). This includes the `Map` and
-   `Proofing` folders.
-10. Edit the project files using the two "additions" files:
-   - `Ocula.csproj-additions.xml` → `Ocula.csproj` (single instance + packaging the DLL)
-   - `Package.appxmanifest-additions.xml` → `Package.appxmanifest` (Open with, `ocula`
-     command, folder menu)
-11. Set the platform to x64 and press F5. Deploying registers the menu; if "Open in Ocula"
-   doesn't appear straight away, restart File Explorer (Task Manager > Windows Explorer >
-   Restart).
+The project already exists: `Ocula.csproj` (the app, packaged as MSIX), `Ocula.slnx` and
+`OculaShell\OculaShell.vcxproj` (the C++ folder right-click menu) live at the repo root, next to
+the source. `Ocula.csproj-additions.xml` and `Package.appxmanifest-additions.xml` are already
+merged into `Ocula.csproj` and `Package.appxmanifest` and are kept only as notes.
+
+### What to install
+
+1. **Visual Studio 2026** (Community is fine) with:
+   - **WinUI application development** (the Windows App SDK C# tools), and
+   - **Desktop development with C++** (`Microsoft.VisualStudio.Workload.NativeDesktop`, with
+     its recommended components: the MSVC v145 build tools and a Windows 11 SDK). OculaShell
+     can't build without it. To add it from a terminal:
+     ```
+     "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vs_installer.exe" modify --installPath "C:\Program Files\Microsoft Visual Studio\18\Community" --add Microsoft.VisualStudio.Workload.NativeDesktop --includeRecommended --passive --norestart
+     ```
+     Close the Visual Studio Installer window first; otherwise the command exits at once
+     without installing anything.
+2. The **.NET 10 SDK** (it builds the .NET 8 app) and the **.NET 8 Desktop Runtime**.
+3. **Developer Mode** (Windows Settings > System > For developers), to deploy the unsigned
+   debug package.
+
+### Build output goes to local disk
+
+`Directory.Build.props` sends every project's `bin` and `obj` to
+`%USERPROFILE%\.stirling-build\ocula\<project>\`, because the repo lives on a network drive
+(`Z:`) and Windows won't register an MSIX package from a network share. The same scheme is used
+by Capta. To put the output somewhere else, pass `-p:StirlingLocalBuildRoot=<folder>\`.
+
+### Map library (one-time download)
+
+MapLibre GL JS is bundled with the app rather than loaded from the internet, so the map page
+works the same for everyone and only the map style and tiles are fetched online. The files are
+committed in `Assets\Map`; to download them again, or to update MapLibre, get both files for the
+**same 4.x version** (currently 4.7.1, recorded in `Assets\Map\README.md`):
+
+- https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js
+- https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css
+
+Then update the version in `Assets\Map\README.md`, `THIRD-PARTY-NOTICES.md` and `AppInfo.Notices`.
+
+### Building and running
+
+- **Visual Studio:** open `Ocula.slnx`, choose **Debug | x64** and press **F5**. `Ocula.csproj`
+  builds OculaShell first (it isn't listed in the solution, so that `dotnet build` can use the
+  same file), packages the DLL and deploys the app. Deploying registers "Open with", the `ocula`
+  command and the folder menu; if "Open in Ocula" doesn't appear straight away, restart File
+  Explorer (Task Manager > Windows Explorer > Restart).
+- **Command line, everything:** Visual Studio's MSBuild builds OculaShell too:
+  ```
+  "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe" Ocula.slnx -restore -p:Configuration=Debug -p:Platform=x64
+  ```
+- **Command line, quick check:** `dotnet build -p:Platform=x64` builds the app but not
+  OculaShell (the .NET CLI can't build C++). It packages an OculaShell.dll that was already built,
+  and otherwise warns that the folder menu is missing.
+- **Store package:** add `-p:Configuration=Release -p:GenerateAppxPackageOnBuild=true` to the
+  MSBuild command (or Project > Publish > Create App Packages). Packages go to `AppPackages\`.
+
+NuGet versions are pinned in `Directory.Packages.props`. Packages and what they are for:
+
+| Package | Used for |
+|---|---|
+| `Microsoft.WindowsAppSDK`, `Microsoft.Windows.SDK.BuildTools` | WinUI 3, app lifecycle, HDR display information, MSIX packaging |
+| `Magick.NET-Q8-AnyCPU` | Decoding RAW and other files Windows can't, thumbnails, export |
+| `MetadataExtractor` | Camera, lens and exposure details (including CR2) |
+| `Microsoft.Data.Sqlite` | The local library database |
+| `CommunityToolkit.WinUI.Controls.Segmented`, `.SettingsControls` | The Light/Dark/System pill and settings cards |
+| `Microsoft.Graphics.Win2D` | HDR preview and colour management |
+| `LibVLCSharp.WinUI`, `VideoLAN.LibVLC.Windows` | Playing MKV, WebM, AVI and other videos Windows' player can't (x64 only) |
+| `Microsoft.ML.OnnxRuntime` | Smart recognition and People models (downloaded when turned on) |
+| `CoenM.ImageSharp.ImageHash`, `SixLabors.ImageSharp` 2.1.13 | Duplicate detection; see `docs/KNOWN-ISSUES.md` |
+
+### Before publishing
+
+In `Services/CameraImageService.cs`, put your own contact in the User-Agent, and in
+`Services/AppInfo.cs` set the donation page and (optionally) the feedback link.
 
 ## App icon
 
