@@ -11,6 +11,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.System;
+using FontStyle = Windows.UI.Text.FontStyle;
 
 namespace Ocula;
 

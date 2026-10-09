@@ -13,6 +13,7 @@ using Ocula.Services;
 using Windows.Media.Core;
 using Windows.Storage;
 using Windows.System;
+using DispatcherQueueTimer = Microsoft.UI.Dispatching.DispatcherQueueTimer;
 
 namespace Ocula;
 

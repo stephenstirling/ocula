@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using LibVLCSharp.Platforms.Windows;
 using LibVLCSharp.Shared;
+using LibVLCSharp.Shared.Structures;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;

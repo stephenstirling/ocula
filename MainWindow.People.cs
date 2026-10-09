@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Ocula.Services;
+using Ocula.Models;
 using Microsoft.UI.Xaml;
 
 namespace Ocula;
