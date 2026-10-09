@@ -20,9 +20,10 @@ GitHub holds the source code and the release notes.
 2. **Reserve the name "Ocula"** in Partner Center. It tells you straight away if it's taken.
 3. In Visual Studio: **Project > Publish > Associate App with the Store** and pick the reserved
    name. This writes the Store identity into `Package.appxmanifest`.
-4. In `Services/AppInfo.cs`, set `GitHubRepository` to `"owner/repository"` (for example
-   `"stephenstirling/ocula"`) so Ocula can show release notes, and set `StoreProductId` once
-   the Store gives you one. Leave `GitHubRepository` empty to turn update checks off.
+4. `Services/AppInfo.cs` has `GitHubRepository = "stephenstirling/ocula"`, so Ocula can show
+   release notes; set `StoreProductId` once the Store gives you one. Update checks use GitHub's
+   public API, which can't see a private repository, so make the repository public before the
+   first release (or set `GitHubRepository` to `""` to turn update checks off).
 5. Publish `PRIVACY.md` (it's in the repository) and keep its web address for the Store form.
    Partner Center can also host a privacy policy for you if you'd rather.
 

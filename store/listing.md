@@ -27,9 +27,9 @@ Fields marked **[fill in]** need your own details.
 | Category | Photo and video (choose the closest sub-category that Partner Center offers) |
 | Short title (optional, 50 characters) | Ocula |
 | Developed by | Stephen Stirling |
-| Website | **[fill in]** your GitHub repository address |
-| Support contact | **[fill in]** your GitHub Issues address (`.../issues`) or an email address |
-| Privacy policy URL | **[fill in]** the web address of `PRIVACY.md` in your repository |
+| Website | https://github.com/stephenstirling/ocula (the repository is private: make it public before submitting, or use another site) |
+| Support contact | https://github.com/stephenstirling/ocula/issues (needs the repository to be public), or an email address |
+| Privacy policy URL | https://github.com/stephenstirling/ocula/blob/main/PRIVACY.md (must be publicly reachable: make the repository public first, or publish `PRIVACY.md` elsewhere) |
 | Copyright and trademark info | © 2026 Stephen Stirling |
 | License terms | Leave the default (Standard Application License Terms). Ocula's source-code licence is separate and covers the code, not using the app |
 

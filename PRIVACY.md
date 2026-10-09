@@ -77,4 +77,4 @@ remove location data from the copies it creates; your original files are unchang
 ## Changes and contact
 
 If this policy changes, the new version will be published here with a new date.
-Questions: [CONTACT EMAIL OR GITHUB ISSUES LINK]
+Questions: https://github.com/stephenstirling/ocula/issues

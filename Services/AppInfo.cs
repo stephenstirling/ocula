@@ -17,9 +17,10 @@ public static class AppInfo
     // TODO: replace with your real pages before release. Empty strings hide the buttons.
     public const string SupportUrl = "https://buymeacoffee.com/stephenstirling";
     /// <summary>"owner/repository" on GitHub, used for updates and release notes. Empty turns both off.</summary>
-    public const string GitHubRepository = ""; // e.g. "stephenstirling/ocula"
+    public const string GitHubRepository = "stephenstirling/ocula";
 
-    public const string SourceUrl = "";        // e.g. https://github.com/you/ocula
+    // The repository is private for now, so these stay empty (hidden) until it's public:
+    public const string SourceUrl = "";        // https://github.com/stephenstirling/ocula
     /// <summary>
     /// Microsoft Store policy 10.8.2 sets rules for receiving donations in an app, so the Store
     /// build leaves the "Support Ocula" button out. Keep donations on the GitHub page, or set this
@@ -30,8 +31,8 @@ public static class AppInfo
     public static bool ShowSupport =>
         SupportUrl.Length > 0 && (DonationsInStoreBuild || UpdateService.Channel != UpdateChannel.Store);
 
-    public const string FeedbackUrl = "";      // e.g. https://github.com/you/ocula/issues
-    public const string PrivacyUrl = "";       // e.g. https://github.com/you/ocula/blob/main/PRIVACY.md
+    public const string FeedbackUrl = "";      // https://github.com/stephenstirling/ocula/issues
+    public const string PrivacyUrl = "";       // https://github.com/stephenstirling/ocula/blob/main/PRIVACY.md
     public const string StoreProductId = "";   // from Partner Center, e.g. 9NXXXXXXXXXX
 
     public static string Version
