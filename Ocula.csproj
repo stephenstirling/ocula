@@ -62,17 +62,17 @@
 
   <!--
     OculaShell (the C++ "Open in Ocula" folder menu DLL) is built first and packaged with the app.
-    C++ projects only build under Visual Studio's MSBuild (msbuild / F5), not `dotnet build`,
-    so the reference is skipped there and a warning says the DLL isn't in that build.
+    C++ projects only build under Visual Studio's MSBuild (msbuild, or F5 in Visual Studio), not
+    `dotnet build`, so it isn't in Ocula.slnx; this target builds it instead. Under `dotnet build`
+    an already-built DLL is still packaged, otherwise a warning says it's missing.
   -->
   <PropertyGroup>
     <OculaShellOutDir>$(StirlingLocalBuildRoot)OculaShell\bin\$(Platform)\$(Configuration)\</OculaShellOutDir>
   </PropertyGroup>
-  <ItemGroup Condition="'$(MSBuildRuntimeType)' == 'Full'">
-    <ProjectReference Include="OculaShell\OculaShell.vcxproj">
-      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
-    </ProjectReference>
-  </ItemGroup>
+  <Target Name="BuildOculaShell" BeforeTargets="BeforeBuild" Condition="'$(MSBuildRuntimeType)' == 'Full'">
+    <MSBuild Projects="OculaShell\OculaShell.vcxproj" Targets="Build"
+             Properties="Configuration=$(Configuration);Platform=$(Platform)" />
+  </Target>
   <ItemGroup>
     <Content Include="$(OculaShellOutDir)OculaShell.dll" Condition="'$(MSBuildRuntimeType)' == 'Full' or Exists('$(OculaShellOutDir)OculaShell.dll')">
       <Link>OculaShell.dll</Link>

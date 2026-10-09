@@ -2,7 +2,14 @@
   <Configurations>
     <Platform Name="x64" />
   </Configurations>
+  <!-- OculaShell (C++) isn't listed: Ocula.csproj builds it, so `dotnet build` can use this file too. -->
   <Project Path="Ocula.csproj">
-    <Platform Project="x64" />
+    <Platform Solution="*|x64" Project="x64" />
+    <Deploy />
   </Project>
+  <Folder Name="/Solution Items/">
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Packages.props" />
+    <File Path="BUILDING.md" />
+  </Folder>
 </Solution>
