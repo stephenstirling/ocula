@@ -135,7 +135,7 @@ public sealed partial class CompareWindow : Window
         };
         // Zoom factor 1 = the whole photo fitted in the pane.
         scroller.SizeChanged += (_, e) => { photo.Width = e.NewSize.Width; photo.Height = e.NewSize.Height; };
-        scroller.ViewChanged += (s, _) => Sync((ScrollViewer)s);
+        scroller.ViewChanged += (_, _) => Sync(scroller);
 
         var pick = new ToggleButton { Content = Labelled("\uE73E", "Pick") };
         var reject = new ToggleButton { Content = Labelled("\uE711", "Reject") };

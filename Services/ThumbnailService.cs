@@ -98,7 +98,7 @@ public static class ThumbnailService
         {
             using var image = new MagickImage(SupportedFormats.MagickPath(path));
             image.AutoOrient();
-            if (image.ColorSpace == ColorSpace.CMYK) image.TransformColorSpace(ColorProfile.SRGB); // print-oriented PSDs
+            if (image.ColorSpace == ColorSpace.CMYK) image.TransformColorSpace(ColorProfiles.SRGB); // print-oriented PSDs
             if (image.HasAlpha) image.ColorAlpha(MagickColors.White);                              // JPEG has no transparency
             image.Thumbnail(size, size);
             image.Format = MagickFormat.Jpeg;
