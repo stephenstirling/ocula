@@ -2,5 +2,7 @@
   <Configurations>
     <Platform Name="x64" />
   </Configurations>
-  <Project Path="Ocula.csproj" />
+  <Project Path="Ocula.csproj">
+    <Platform Project="x64" />
+  </Project>
 </Solution>
