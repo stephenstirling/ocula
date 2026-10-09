@@ -1,0 +1,94 @@
+<!--
+  Additions for Package.appxmanifest (right-click it > View Code).
+
+  STEP -1. Windows 10 and 11 only. In <Dependencies>, the line should read:
+
+      <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22621.0" />
+
+  (10.0.17763.0 is Windows 10 version 1809, the oldest version the Windows App SDK supports.)
+  Build and upload the x64 package only.
+
+  STEP 0. Publisher details. In <Properties>, set:
+
+      <DisplayName>Ocula</DisplayName>
+      <PublisherDisplayName>Stephen Stirling</PublisherDisplayName>
+
+          and in <Identity ...>, Publisher must exactly match the subject of the certificate
+          the package is signed with, for example Publisher="CN=Stephen Stirling".
+          If you publish through the Microsoft Store, don't type these by hand: in Visual Studio
+          use Project > Publish > Associate App with the Store, which fills in the Identity and
+          publisher values from your Partner Center account.
+
+  STEP 1. In the opening <Package ...> tag, add these namespace declarations
+          (keep the ones already there):
+
+      xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+      xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+      xmlns:desktop4="http://schemas.microsoft.com/appx/manifest/desktop/windows10/4"
+      xmlns:desktop5="http://schemas.microsoft.com/appx/manifest/desktop/windows10/5"
+      xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
+
+          and add "uap3 desktop desktop4 desktop5 com" to the IgnorableNamespaces="..." list.
+
+  STEP 2. Inside <Application ...>, after </uap:VisualElements>, add the <Extensions> block
+          below. If there's already an <Extensions> element, put these four elements inside it.
+
+  What this does:
+  - File types: Ocula appears under "Open with" for these images and can be the default app.
+  - Execution alias: ocula "D:\Photos" opens a folder from a terminal or Win+R.
+  - Folder menu: "Open in Ocula" when right-clicking a folder in File Explorer.
+  - COM server: tells Windows where the menu's code (OculaShell.dll) lives.
+    The Clsid must be the same GUID as in OculaShell\dllmain.cpp, in both places below.
+-->
+<Extensions>
+  <uap:Extension Category="windows.fileTypeAssociation">
+    <uap:FileTypeAssociation Name="oculaimages">
+      <uap:DisplayName>Image</uap:DisplayName>
+      <uap:SupportedFileTypes>
+        <uap:FileType>.jpg</uap:FileType>
+        <uap:FileType>.jpeg</uap:FileType>
+        <uap:FileType>.png</uap:FileType>
+        <uap:FileType>.gif</uap:FileType>
+        <uap:FileType>.bmp</uap:FileType>
+        <uap:FileType>.tif</uap:FileType>
+        <uap:FileType>.tiff</uap:FileType>
+        <uap:FileType>.webp</uap:FileType>
+        <uap:FileType>.heic</uap:FileType>
+        <uap:FileType>.heif</uap:FileType>
+        <uap:FileType>.avif</uap:FileType>
+        <uap:FileType>.jxr</uap:FileType>
+        <uap:FileType>.psd</uap:FileType>
+        <uap:FileType>.cr2</uap:FileType>
+        <uap:FileType>.cr3</uap:FileType>
+        <uap:FileType>.nef</uap:FileType>
+        <uap:FileType>.arw</uap:FileType>
+        <uap:FileType>.dng</uap:FileType>
+        <uap:FileType>.orf</uap:FileType>
+        <uap:FileType>.rw2</uap:FileType>
+        <uap:FileType>.raf</uap:FileType>
+      </uap:SupportedFileTypes>
+    </uap:FileTypeAssociation>
+  </uap:Extension>
+
+  <uap3:Extension Category="windows.appExecutionAlias" Executable="Ocula.exe" EntryPoint="Windows.FullTrustApplication">
+    <uap3:AppExecutionAlias>
+      <desktop:ExecutionAlias Alias="ocula.exe" />
+    </uap3:AppExecutionAlias>
+  </uap3:Extension>
+
+  <desktop4:Extension Category="windows.fileExplorerContextMenus">
+    <desktop4:FileExplorerContextMenus>
+      <desktop5:ItemType Type="Directory">
+        <desktop5:Verb Id="OpenInOcula" Clsid="6B1F2C3A-8D4E-4F7A-9C2B-5E3D1A7F9B42" />
+      </desktop5:ItemType>
+    </desktop4:FileExplorerContextMenus>
+  </desktop4:Extension>
+
+  <com:Extension Category="windows.comServer">
+    <com:ComServer>
+      <com:SurrogateServer DisplayName="Ocula folder menu">
+        <com:Class Id="6B1F2C3A-8D4E-4F7A-9C2B-5E3D1A7F9B42" Path="OculaShell.dll" ThreadingModel="STA" />
+      </com:SurrogateServer>
+    </com:ComServer>
+  </com:Extension>
+</Extensions>

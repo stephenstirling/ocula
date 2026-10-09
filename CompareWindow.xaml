@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Ocula.CompareWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:models="using:Ocula.Models"
+    Title="Compare">
+
+    <Grid x:Name="Root" RequestedTheme="Dark" Background="#0E0E10" PreviewKeyDown="Root_PreviewKeyDown">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Grid x:Name="DragArea" Padding="16,0,150,0" Background="Transparent">
+            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <Image Source="ms-appx:///Assets/Square44x44Logo.targetsize-24_altform-unplated.png" Width="18" Height="18"/>
+                <TextBlock x:Name="TitleText" Text="Compare" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Toolbar -->
+        <Grid Grid.Row="1" Padding="16,0,16,10" ColumnSpacing="10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="HintText" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                       Text="P pick · X reject · U clear · 1–5 stars · scroll or pinch to zoom; all photos follow"/>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" Padding="3" CornerRadius="8"
+                        Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                <ToggleButton x:Name="TwoUp" Content="2 up" IsChecked="True" Click="Layout_Click" Tag="2"/>
+                <ToggleButton x:Name="FourUp" Content="4 up" Click="Layout_Click" Tag="4"/>
+            </StackPanel>
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" Padding="3" CornerRadius="8"
+                        Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                <Button Content="Fit" Click="Fit_Click"/>
+                <Button Content="100%" Click="Actual_Click"/>
+            </StackPanel>
+            <Button Grid.Column="3" x:Name="RemoveRejectsButton" Click="RemoveRejects_Click" IsEnabled="False">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon Glyph="&#xE74D;" FontSize="14"/>
+                    <TextBlock x:Name="RemoveRejectsText" Text="Move rejects to Recycle Bin"/>
+                </StackPanel>
+            </Button>
+            <Button Grid.Column="4" Content="Done" Style="{StaticResource AccentButtonStyle}" Click="Done_Click"/>
+        </Grid>
+
+        <!-- Panes are created in code: 2 side by side, or 4 in a grid. -->
+        <Grid Grid.Row="2" x:Name="PanesGrid" Padding="12,0,12,12" RowSpacing="12" ColumnSpacing="12"/>
+
+        <!-- Every photo being compared; click one to put it in the highlighted pane. -->
+        <ListView Grid.Row="3" x:Name="Strip" Height="104" Padding="12,8" SelectionMode="None" IsItemClickEnabled="True"
+                  ItemClick="Strip_ItemClick" ScrollViewer.HorizontalScrollMode="Enabled"
+                  ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollMode="Disabled"
+                  ContainerContentChanging="Strip_ContainerContentChanging"
+                  BorderBrush="#26262A" BorderThickness="0,1,0,0">
+            <ListView.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <ItemsStackPanel Orientation="Horizontal"/>
+                </ItemsPanelTemplate>
+            </ListView.ItemsPanel>
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="models:ImageItem">
+                    <Grid Width="112" Height="76" Opacity="{x:Bind TileOpacity, Mode=OneWay}">
+                        <Image Source="{x:Bind Thumbnail, Mode=OneWay}" Stretch="UniformToFill"/>
+                        <Border VerticalAlignment="Bottom" Background="#99000000" Padding="4,1">
+                            <Grid>
+                                <TextBlock Text="{x:Bind Name}" FontSize="10" Foreground="White" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{x:Bind FlagText, Mode=OneWay}" FontSize="11" Foreground="White" HorizontalAlignment="Right"/>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+    </Grid>
+</Window>

@@ -1,0 +1,638 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Ocula.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:models="using:Ocula.Models"
+    xmlns:toolkit="using:CommunityToolkit.WinUI.Controls"
+    xmlns:canvas="using:Microsoft.Graphics.Canvas.UI.Xaml"
+    xmlns:local="using:Ocula"
+    Title="Ocula">
+
+    <Grid x:Name="Root">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="52"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Title bar. Only DragArea moves the window, so the search box and theme pill stay clickable. -->
+        <Grid Padding="16,0,150,0" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="380"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Grid x:Name="DragArea" Background="Transparent">
+                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xEB9F;" FontSize="16" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                    <TextBlock Text="Ocula" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                </StackPanel>
+            </Grid>
+            <AutoSuggestBox Grid.Column="1" x:Name="SearchBox" QueryIcon="Find" VerticalAlignment="Center"
+                            PlaceholderText="Filter this folder · Enter searches your whole library"
+                            TextChanged="SearchBox_TextChanged" QuerySubmitted="SearchBox_QuerySubmitted"
+                            SuggestionChosen="SearchBox_SuggestionChosen" GotFocus="SearchBox_GotFocus"/>
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                <ToggleButton x:Name="SidebarToggle" IsChecked="True" Click="PanelToggle_Click" Background="Transparent"
+                              BorderThickness="0" ToolTipService.ToolTip="Show or hide folders (Ctrl+[)"
+                              AutomationProperties.Name="Folders panel">
+                    <FontIcon Glyph="&#xE89F;" FontSize="15"/>
+                </ToggleButton>
+                <ToggleButton x:Name="DetailsToggle" IsChecked="True" Click="PanelToggle_Click" Background="Transparent"
+                              BorderThickness="0" ToolTipService.ToolTip="Show or hide details (Ctrl+])"
+                              AutomationProperties.Name="Details panel">
+                    <FontIcon Glyph="&#xE89F;" FontSize="15" RenderTransformOrigin="0.5,0.5">
+                        <FontIcon.RenderTransform><ScaleTransform ScaleX="-1"/></FontIcon.RenderTransform>
+                    </FontIcon>
+                </ToggleButton>
+                <Button Click="ImportButton_Click" ToolTipService.ToolTip="Import from a memory card" Margin="6,0,0,0">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE896;" FontSize="14"/>
+                        <TextBlock Text="Import"/>
+                    </StackPanel>
+                </Button>
+                <Button Click="WebButton_Click" ToolTipService.ToolTip="Download images from a web page" Margin="6,0,0,0">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE774;" FontSize="14"/>
+                        <TextBlock Text="Web"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+            <toolkit:Segmented Grid.Column="3" x:Name="ThemePicker" VerticalAlignment="Center"
+                               SelectionChanged="ThemePicker_SelectionChanged">
+                <toolkit:SegmentedItem Tag="Light" ToolTipService.ToolTip="Light" AutomationProperties.Name="Light theme">
+                    <toolkit:SegmentedItem.Icon><FontIcon Glyph="&#xE706;"/></toolkit:SegmentedItem.Icon>
+                </toolkit:SegmentedItem>
+                <toolkit:SegmentedItem Tag="Dark" ToolTipService.ToolTip="Dark" AutomationProperties.Name="Dark theme">
+                    <toolkit:SegmentedItem.Icon><FontIcon Glyph="&#xE708;"/></toolkit:SegmentedItem.Icon>
+                </toolkit:SegmentedItem>
+                <toolkit:SegmentedItem Tag="System" ToolTipService.ToolTip="Use Windows setting" AutomationProperties.Name="System theme">
+                    <toolkit:SegmentedItem.Icon><FontIcon Glyph="&#xE7F4;"/></toolkit:SegmentedItem.Icon>
+                </toolkit:SegmentedItem>
+            </toolkit:Segmented>
+            <Button Grid.Column="4" Click="Settings_Click" VerticalAlignment="Center" Background="Transparent"
+                    BorderThickness="0" ToolTipService.ToolTip="Settings and about" AutomationProperties.Name="Settings">
+                <FontIcon Glyph="&#xE713;" FontSize="16"/>
+            </Button>
+        </Grid>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="SidebarColumn" Width="260"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition x:Name="DetailsColumn" Width="420"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Left: folders -->
+            <Grid x:Name="SidebarPanel" Padding="8,4,8,12" RowSpacing="8">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <!-- Library: timeline, collections and smart albums -->
+                <ListView x:Name="LibraryList" SelectionMode="Single" IsItemClickEnabled="True"
+                          ItemClick="LibraryList_ItemClick" MaxHeight="320" AutomationProperties.Name="Library">
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="local:SidebarEntry">
+                            <Grid ColumnSpacing="10" Padding="{x:Bind Indent}" Opacity="{x:Bind Opacity}" Background="Transparent">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.ContextFlyout>
+                                    <MenuFlyout>
+                                        <MenuFlyoutItem Text="Rename…" Click="SidebarRename_Click" IsEnabled="{x:Bind CanEdit}"/>
+                                        <MenuFlyoutItem Text="Delete" Click="SidebarDelete_Click" IsEnabled="{x:Bind CanEdit}"/>
+                                    </MenuFlyout>
+                                </Grid.ContextFlyout>
+                                <FontIcon Glyph="{x:Bind Glyph}" FontSize="14" Visibility="{x:Bind IconVisibility}"/>
+                                <TextBlock Grid.Column="1" Text="{x:Bind Name}" FontSize="{x:Bind FontSize}" TextTrimming="CharacterEllipsis"
+                                           FontWeight="{x:Bind Weight}" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="2" Text="{x:Bind CountText}" FontSize="12" VerticalAlignment="Center"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+                <TreeView Grid.Row="1" x:Name="FolderTree" SelectionMode="Single"
+                          Expanding="FolderTree_Expanding" ItemInvoked="FolderTree_ItemInvoked"/>
+                <Grid Grid.Row="2" Padding="8,6" ColumnSpacing="8" CornerRadius="6"
+                      Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <ProgressRing x:Name="CrawlRing" Width="16" Height="16" IsActive="False"/>
+                    <TextBlock Grid.Column="1" x:Name="CrawlText" Text="Library" TextWrapping="Wrap"
+                               Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    <Button Grid.Column="2" x:Name="CrawlButton" Click="CrawlButton_Click" Padding="6"
+                            Background="Transparent" BorderThickness="0" Visibility="Collapsed"
+                            ToolTipService.ToolTip="Pause indexing" AutomationProperties.Name="Pause or resume indexing">
+                        <FontIcon x:Name="CrawlIcon" Glyph="&#xE769;" FontSize="12"/>
+                    </Button>
+                </Grid>
+                <Button Grid.Row="3" HorizontalAlignment="Stretch" Click="AddFolder_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE710;" FontSize="14"/>
+                        <TextBlock Text="Add folder"/>
+                    </StackPanel>
+                </Button>
+            </Grid>
+
+            <!-- Middle: thumbnails -->
+            <Grid Grid.Column="1" Background="{ThemeResource LayerFillColorDefaultBrush}"
+                  BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1,1,1,0" CornerRadius="8,8,0,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Grid Padding="20,14" ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock x:Name="FolderTitle" Text="Choose a folder" Style="{StaticResource SubtitleTextBlockStyle}"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock x:Name="FolderCount" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center"/>
+                            <HyperlinkButton x:Name="SaveSearchButton" Content="Save as smart album" Padding="4,0"
+                                             Visibility="Collapsed" Click="SaveSearch_Click"/>
+                        </StackPanel>
+                    </StackPanel>
+                    <ComboBox Grid.Column="1" x:Name="RatingFilter" SelectedIndex="0" VerticalAlignment="Center"
+                              SelectionChanged="Filter_Changed" AutomationProperties.Name="Filter by rating">
+                        <x:String>Any rating</x:String>
+                        <x:String>★ 1 or more</x:String>
+                        <x:String>★★ 2 or more</x:String>
+                        <x:String>★★★ 3 or more</x:String>
+                        <x:String>★★★★ 4 or more</x:String>
+                        <x:String>★★★★★ only</x:String>
+                    </ComboBox>
+                    <ComboBox Grid.Column="2" x:Name="LabelFilter" SelectedIndex="0" VerticalAlignment="Center"
+                              SelectionChanged="Filter_Changed" AutomationProperties.Name="Filter by colour label">
+                        <x:String>Any label</x:String>
+                        <x:String>Red</x:String>
+                        <x:String>Yellow</x:String>
+                        <x:String>Green</x:String>
+                        <x:String>Blue</x:String>
+                        <x:String>Purple</x:String>
+                    </ComboBox>
+                    <ToggleButton Grid.Column="6" x:Name="StacksToggle" IsChecked="True" Click="CullingToggle_Click"
+                                  VerticalAlignment="Center" ToolTipService.ToolTip="Group bursts into stacks"
+                                  AutomationProperties.Name="Stacks">
+                        <FontIcon Glyph="&#xE8F1;" FontSize="16"/>
+                    </ToggleButton>
+                    <ToggleButton Grid.Column="7" x:Name="HideSoftToggle" Click="CullingToggle_Click"
+                                  VerticalAlignment="Center" ToolTipService.ToolTip="Hide soft (blurry) photos"
+                                  AutomationProperties.Name="Hide soft photos">
+                        <FontIcon Glyph="&#xE7B3;" FontSize="16"/>
+                    </ToggleButton>
+                    <Button Grid.Column="8" Click="Compare_Click" VerticalAlignment="Center"
+                            ToolTipService.ToolTip="Compare selected photos (C)" AutomationProperties.Name="Compare">
+                        <FontIcon Glyph="&#xE89F;" FontSize="16"/>
+                    </Button>
+                    <Button Grid.Column="5" Click="Map_Click" VerticalAlignment="Center"
+                            ToolTipService.ToolTip="Map of photos with a location" AutomationProperties.Name="Map">
+                        <FontIcon Glyph="&#xE707;" FontSize="16"/>
+                    </Button>
+                    <Button Grid.Column="4" Click="FindDuplicates_Click" VerticalAlignment="Center"
+                            ToolTipService.ToolTip="Find duplicate and similar photos" AutomationProperties.Name="Find duplicates">
+                        <FontIcon Glyph="&#xE8C8;" FontSize="16"/>
+                    </Button>
+                    <Slider Grid.Column="3" x:Name="SizeSlider" Width="120" Minimum="120" Maximum="320" Value="180"
+                            StepFrequency="10" VerticalAlignment="Center" ValueChanged="SizeSlider_ValueChanged"
+                            ToolTipService.ToolTip="Thumbnail size" AutomationProperties.Name="Thumbnail size"/>
+                </Grid>
+
+                <GridView Grid.Row="1" x:Name="Thumbs" Padding="16,0,16,16" SelectionMode="Extended"
+                          DoubleTapped="Thumbs_DoubleTapped"
+                          ContainerContentChanging="Thumbs_ContainerContentChanging"
+                          SelectionChanged="Thumbs_SelectionChanged" PreviewKeyDown="Thumbs_PreviewKeyDown">
+                    <GridView.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <ItemsWrapGrid Orientation="Horizontal" ItemWidth="180" ItemHeight="191"/>
+                        </ItemsPanelTemplate>
+                    </GridView.ItemsPanel>
+                    <GridView.GroupStyle>
+                        <GroupStyle>
+                            <GroupStyle.HeaderTemplate>
+                                <DataTemplate x:DataType="local:PhotoGroup">
+                                    <TextBlock Text="{x:Bind Title}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,12,0,4"/>
+                                </DataTemplate>
+                            </GroupStyle.HeaderTemplate>
+                        </GroupStyle>
+                    </GridView.GroupStyle>
+                    <GridView.ItemTemplate>
+                        <DataTemplate x:DataType="models:ImageItem">
+                            <Grid Padding="6" RowSpacing="4" Opacity="{x:Bind TileOpacity, Mode=OneWay}">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="16"/>
+                                </Grid.RowDefinitions>
+                                <Border CornerRadius="6" Background="{ThemeResource ControlFillColorSecondaryBrush}">
+                                    <Grid>
+                                        <Image Source="{x:Bind Thumbnail, Mode=OneWay}" Stretch="UniformToFill"/>
+                                        <StackPanel Orientation="Horizontal" Spacing="4" Margin="6"
+                                                    HorizontalAlignment="Left" VerticalAlignment="Top">
+                                            <Border Visibility="{x:Bind SoftVisibility, Mode=OneWay}" Background="#F5B83D" CornerRadius="4" Padding="6,1">
+                                                <TextBlock Text="SOFT" FontSize="10" FontWeight="SemiBold" Foreground="#3A2600"/>
+                                            </Border>
+                                            <Border Visibility="{x:Bind BadgeVisibility, Mode=OneWay}" Background="#B3141416" CornerRadius="4" Padding="6,1">
+                                                <TextBlock Text="{x:Bind Badge, Mode=OneWay}" FontSize="10" FontWeight="SemiBold" Foreground="White"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <Border Visibility="{x:Bind StackVisibility, Mode=OneWay}" Background="#3B6FE0" CornerRadius="10"
+                                                Padding="7,1" Margin="6" HorizontalAlignment="Right" VerticalAlignment="Top">
+                                            <TextBlock Text="{x:Bind StackText, Mode=OneWay}" FontSize="11" FontWeight="SemiBold" Foreground="White"/>
+                                        </Border>
+                                        <Border Visibility="{x:Bind DurationVisibility}" Background="#B3141416" CornerRadius="4"
+                                                Padding="6,1" Margin="6" HorizontalAlignment="Left" VerticalAlignment="Bottom">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <FontIcon Glyph="&#xE768;" FontSize="9" Foreground="White"/>
+                                                <TextBlock Text="{x:Bind DurationText, Mode=OneWay}" FontSize="10" Foreground="White"/>
+                                            </StackPanel>
+                                        </Border>
+                                        <Border Visibility="{x:Bind FlagVisibility, Mode=OneWay}" Background="#B3141416" CornerRadius="11"
+                                                Width="22" Height="22" Margin="6" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                                            <TextBlock Text="{x:Bind FlagText, Mode=OneWay}" FontSize="12" Foreground="White"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                                <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6">
+                                    <Ellipse Width="8" Height="8" VerticalAlignment="Center"
+                                             Fill="{x:Bind LabelBrush, Mode=OneWay}" Visibility="{x:Bind LabelVisibility, Mode=OneWay}"/>
+                                    <TextBlock Text="{x:Bind Name}" TextTrimming="CharacterEllipsis"
+                                               Style="{StaticResource CaptionTextBlockStyle}"/>
+                                </StackPanel>
+                                <TextBlock Grid.Row="2" Text="{x:Bind StarsText, Mode=OneWay}" FontSize="11" Foreground="#C98A1E"/>
+                            </Grid>
+                        </DataTemplate>
+                    </GridView.ItemTemplate>
+                </GridView>
+
+                <!-- Empty, loading and no-results states -->
+                <StackPanel Grid.Row="1" x:Name="StatePanel" Visibility="Collapsed" Spacing="12" MaxWidth="420"
+                            HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <ProgressRing x:Name="StateRing" Width="36" Height="36" IsActive="False" Visibility="Collapsed"/>
+                    <Border x:Name="StateIconHost" Width="72" Height="72" CornerRadius="18" HorizontalAlignment="Center"
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                        <FontIcon x:Name="StateIcon" Glyph="&#xEB9F;" FontSize="32" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                    </Border>
+                    <TextBlock x:Name="StateTitle" Style="{StaticResource SubtitleTextBlockStyle}" TextAlignment="Center" TextWrapping="Wrap"/>
+                    <TextBlock x:Name="StateText" TextAlignment="Center" TextWrapping="Wrap"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                        <Button x:Name="StatePrimary" Style="{StaticResource AccentButtonStyle}" Click="StatePrimary_Click"/>
+                        <Button x:Name="StateSecondary" Click="StateSecondary_Click"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Grid.Row="2" Margin="16,0,16,12" Spacing="8">
+                    <InfoBar x:Name="ExportBar" IsOpen="False" IsClosable="True">
+                        <InfoBar.Content>
+                            <ProgressBar x:Name="ExportProgress" Margin="0,0,0,12"/>
+                        </InfoBar.Content>
+                        <InfoBar.ActionButton>
+                            <Button x:Name="ExportActionButton" Click="ExportAction_Click"/>
+                        </InfoBar.ActionButton>
+                    </InfoBar>
+                    <InfoBar x:Name="UpdateBar" IsOpen="False" Severity="Informational">
+                        <InfoBar.Content>
+                            <HyperlinkButton Content="What's new" Click="WhatsNew_Click" Margin="0,0,0,8" Padding="0"/>
+                        </InfoBar.Content>
+                        <InfoBar.ActionButton>
+                            <Button x:Name="UpdateNowButton" Content="Update" Click="UpdateNow_Click"/>
+                        </InfoBar.ActionButton>
+                    </InfoBar>
+                    <InfoBar x:Name="CardBar" IsOpen="False" Severity="Informational">
+                        <InfoBar.ActionButton>
+                            <Button Content="Import" Click="CardBarImport_Click"/>
+                        </InfoBar.ActionButton>
+                    </InfoBar>
+                    <InfoBar x:Name="UndoBar" IsOpen="False" Severity="Success">
+                        <InfoBar.ActionButton>
+                            <Button Content="Undo" Click="UndoRename_Click"/>
+                        </InfoBar.ActionButton>
+                    </InfoBar>
+                    <InfoBar x:Name="Status" IsOpen="False"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- Right: preview and details -->
+            <ScrollViewer Grid.Column="2" x:Name="DetailsPanel" Padding="20,4,20,16">
+                <StackPanel Spacing="16">
+                    <Border x:Name="PreviewHost" CornerRadius="8" Height="280" Background="{ThemeResource ControlFillColorSecondaryBrush}">
+                        <Grid>
+                            <Image x:Name="Preview" Stretch="Uniform"/>
+                            <local:MediaPlayerView x:Name="VideoPlayer" Visibility="Collapsed"/>
+                            <!-- HDR preview: drawn by Win2D into a high-precision surface Windows shows in HDR. -->
+                            <canvas:CanvasSwapChainPanel x:Name="HdrPanel" Visibility="Collapsed" SizeChanged="HdrPanel_SizeChanged"/>
+                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="8" HorizontalAlignment="Right"
+                                        VerticalAlignment="Top">
+                                <Button Click="PreviewEdit_Click" Padding="8" Background="#B3141416" BorderThickness="0"
+                                        ToolTipService.ToolTip="Edit (E)" AutomationProperties.Name="Edit">
+                                    <FontIcon Glyph="&#xE70F;" FontSize="14" Foreground="White"/>
+                                </Button>
+                                <Button Click="PreviewFullScreen_Click" Padding="8" Background="#B3141416" BorderThickness="0"
+                                        ToolTipService.ToolTip="Full screen (Enter)" AutomationProperties.Name="Full screen">
+                                    <FontIcon Glyph="&#xE740;" FontSize="14" Foreground="White"/>
+                                </Button>
+                            </StackPanel>
+                            <Border x:Name="HdrBadge" Visibility="Collapsed" Margin="8" Padding="6,1" CornerRadius="4"
+                                    HorizontalAlignment="Left" VerticalAlignment="Top" Background="#B3141416">
+                                <TextBlock x:Name="HdrBadgeText" Text="HDR" FontSize="11" FontWeight="SemiBold" Foreground="White"/>
+                            </Border>
+                        </Grid>
+                    </Border>
+
+                    <!-- Filmstrip: the photos either side of the current one -->
+                    <ListView x:Name="Filmstrip" Height="58" Margin="0,-6,0,0" SelectionMode="Single"
+                              IsItemClickEnabled="True" ItemClick="Filmstrip_ItemClick"
+                              ContainerContentChanging="Thumbs_ContainerContentChanging"
+                              ScrollViewer.HorizontalScrollMode="Enabled" ScrollViewer.HorizontalScrollBarVisibility="Hidden"
+                              ScrollViewer.VerticalScrollMode="Disabled" AutomationProperties.Name="Filmstrip">
+                        <ListView.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <ItemsStackPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ListView.ItemsPanel>
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="Padding" Value="2"/>
+                                <Setter Property="MinWidth" Value="0"/>
+                                <Setter Property="Margin" Value="0,0,4,0"/>
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="models:ImageItem">
+                                <Border Width="64" Height="46" CornerRadius="4" Opacity="{x:Bind TileOpacity, Mode=OneWay}"
+                                        Background="{ThemeResource ControlFillColorSecondaryBrush}">
+                                    <Image Source="{x:Bind Thumbnail, Mode=OneWay}" Stretch="UniformToFill"/>
+                                </Border>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+
+                    <StackPanel Spacing="2">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock x:Name="FileName" Style="{StaticResource SubtitleTextBlockStyle}" TextTrimming="CharacterEllipsis"/>
+                            <Border x:Name="BadgeBorder" Visibility="Collapsed" VerticalAlignment="Center" CornerRadius="4" Padding="6,1"
+                                    Background="{ThemeResource ControlFillColorSecondaryBrush}">
+                                <TextBlock x:Name="BadgeText" FontSize="11" FontWeight="SemiBold"/>
+                            </Border>
+                            <Border x:Name="SharpChip" Visibility="Collapsed" VerticalAlignment="Center" CornerRadius="10" Padding="8,1">
+                                <TextBlock x:Name="SharpText" FontSize="11" FontWeight="SemiBold"/>
+                            </Border>
+                        </StackPanel>
+                        <TextBlock x:Name="DateTaken" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        <StackPanel x:Name="StackRow" Orientation="Horizontal" Spacing="4" Visibility="Collapsed">
+                            <FontIcon Glyph="&#xE8F1;" FontSize="13" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                            <TextBlock x:Name="StackInfo" VerticalAlignment="Center" Margin="2,0,4,0"/>
+                            <HyperlinkButton x:Name="ExpandStackButton" Click="ExpandStack_Click" Padding="6,2"/>
+                            <HyperlinkButton Content="Compare stack" Click="CompareStack_Click" Padding="6,2"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- Rating and colour label -->
+                    <StackPanel Orientation="Horizontal" Spacing="16">
+                        <RatingControl x:Name="RatingBox" IsClearEnabled="True" ValueChanged="RatingBox_ValueChanged"
+                                       AutomationProperties.Name="Rating"/>
+                        <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                            <Button x:Name="LabelRed" Tag="Red" Click="Label_Click" Width="28" Height="28" Padding="0" CornerRadius="14"
+                                    BorderThickness="2" BorderBrush="Transparent" Background="Transparent"
+                                    ToolTipService.ToolTip="Red (6)" AutomationProperties.Name="Red label">
+                                <Ellipse Width="14" Height="14" Fill="#D64545"/>
+                            </Button>
+                            <Button x:Name="LabelYellow" Tag="Yellow" Click="Label_Click" Width="28" Height="28" Padding="0" CornerRadius="14"
+                                    BorderThickness="2" BorderBrush="Transparent" Background="Transparent"
+                                    ToolTipService.ToolTip="Yellow (7)" AutomationProperties.Name="Yellow label">
+                                <Ellipse Width="14" Height="14" Fill="#E8B53D"/>
+                            </Button>
+                            <Button x:Name="LabelGreen" Tag="Green" Click="Label_Click" Width="28" Height="28" Padding="0" CornerRadius="14"
+                                    BorderThickness="2" BorderBrush="Transparent" Background="Transparent"
+                                    ToolTipService.ToolTip="Green (8)" AutomationProperties.Name="Green label">
+                                <Ellipse Width="14" Height="14" Fill="#2F8F5B"/>
+                            </Button>
+                            <Button x:Name="LabelBlue" Tag="Blue" Click="Label_Click" Width="28" Height="28" Padding="0" CornerRadius="14"
+                                    BorderThickness="2" BorderBrush="Transparent" Background="Transparent"
+                                    ToolTipService.ToolTip="Blue (9)" AutomationProperties.Name="Blue label">
+                                <Ellipse Width="14" Height="14" Fill="#3B6FE0"/>
+                            </Button>
+                            <Button x:Name="LabelPurple" Tag="Purple" Click="Label_Click" Width="28" Height="28" Padding="0" CornerRadius="14"
+                                    BorderThickness="2" BorderBrush="Transparent" Background="Transparent"
+                                    ToolTipService.ToolTip="Purple" AutomationProperties.Name="Purple label">
+                                <Ellipse Width="14" Height="14" Fill="#8B5CF6"/>
+                            </Button>
+                        </StackPanel>
+                    </StackPanel>
+                    <TextBlock x:Name="SelectionNote" Visibility="Collapsed" TextWrapping="Wrap"
+                               Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+
+                    <!-- Camera card -->
+                    <Grid ColumnSpacing="14" Padding="12" CornerRadius="8" BorderThickness="1"
+                          Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                          BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="104"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Border Height="70" CornerRadius="6" Background="White">
+                            <Grid>
+                                <FontIcon x:Name="CameraFallback" Glyph="&#xE722;" FontSize="28" Foreground="#5C5C64"/>
+                                <Image x:Name="CameraImage" Stretch="Uniform" Margin="4"/>
+                            </Grid>
+                        </Border>
+                        <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                            <TextBlock Text="Shot on" Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            <TextBlock x:Name="CameraName" Style="{StaticResource BodyStrongTextBlockStyle}" TextWrapping="Wrap"/>
+                            <TextBlock x:Name="Exposure" Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            <HyperlinkButton x:Name="CameraCredit" Content="Image: Wikimedia Commons" Padding="0"
+                                             FontSize="12" Visibility="Collapsed"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- HDR -->
+                    <Grid ColumnSpacing="14" Padding="12" CornerRadius="8" BorderThickness="1"
+                          Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                          BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="56"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Border x:Name="HdrIcon" Height="40" CornerRadius="6" VerticalAlignment="Top"
+                                BorderThickness="1.5" BorderBrush="{ThemeResource TextFillColorTertiaryBrush}">
+                            <TextBlock x:Name="HdrIconText" Text="SDR" FontSize="13" FontWeight="Bold"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        </Border>
+                        <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                            <TextBlock x:Name="HdrTitle" Text="Standard dynamic range" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            <TextBlock x:Name="HdrDescription" TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            <ToggleSwitch x:Name="HdrPreviewToggle" Visibility="Collapsed" OnContent="Show in HDR"
+                                          OffContent="Show in HDR" Toggled="HdrPreviewToggle_Toggled" Margin="0,4,0,0"/>
+                            <TextBlock x:Name="HdrPreviewNote" TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Tags -->
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Tags" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                        <ItemsRepeater x:Name="TagList">
+                            <ItemsRepeater.Layout>
+                                <UniformGridLayout MinItemWidth="110" MinItemHeight="32" MinRowSpacing="6"
+                                                   MinColumnSpacing="6" ItemsStretch="Fill"/>
+                            </ItemsRepeater.Layout>
+                            <ItemsRepeater.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Tag="{Binding}" Click="RemoveTag_Click" HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Stretch" Padding="10,4" ToolTipService.ToolTip="Remove tag">
+                                        <Grid ColumnSpacing="6">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis"/>
+                                            <FontIcon Grid.Column="1" Glyph="&#xE711;" FontSize="10"/>
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsRepeater.ItemTemplate>
+                        </ItemsRepeater>
+                        <TextBox x:Name="TagInput" PlaceholderText="Add a tag and press Enter" KeyDown="TagInput_KeyDown"/>
+                        <StackPanel x:Name="SuggestPanel" Spacing="6" Visibility="Collapsed">
+                            <Grid>
+                                <TextBlock Text="Suggested tags" Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center"/>
+                                <HyperlinkButton Content="Add all" HorizontalAlignment="Right" Padding="4,0" Click="AddAllSuggestions_Click"/>
+                            </Grid>
+                            <ItemsRepeater x:Name="SuggestList">
+                                <ItemsRepeater.Layout>
+                                    <UniformGridLayout MinItemWidth="110" MinItemHeight="32" MinRowSpacing="6"
+                                                       MinColumnSpacing="6" ItemsStretch="Fill"/>
+                                </ItemsRepeater.Layout>
+                                <ItemsRepeater.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Tag="{Binding}" Click="Suggestion_Click" HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Stretch" Padding="10,4" ToolTipService.ToolTip="Add this tag">
+                                            <Grid ColumnSpacing="6">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <FontIcon Glyph="&#xE710;" FontSize="10"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding}" TextTrimming="CharacterEllipsis"/>
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsRepeater.ItemTemplate>
+                            </ItemsRepeater>
+                        </StackPanel>
+                        <TextBlock x:Name="TagStorageNote" Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    </StackPanel>
+
+                    <StackPanel Spacing="8">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Style="{StaticResource AccentButtonStyle}" Click="Export_Click" ToolTipService.ToolTip="Export (Ctrl+E)">
+                                <Button.KeyboardAccelerators>
+                                    <KeyboardAccelerator Modifiers="Control" Key="E"/>
+                                </Button.KeyboardAccelerators>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xEDE1;" FontSize="14"/>
+                                    <TextBlock Text="Export…"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Click="Share_Click" ToolTipService.ToolTip="Share">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE72D;" FontSize="14"/>
+                                    <TextBlock Text="Share"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Click="OpenInPhotos_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE8A7;" FontSize="14"/>
+                                    <TextBlock Text="Open in Photos"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Content="Open with…" Click="OpenWith_Click"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <SplitButton x:Name="EditButton" Click="EditButton_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE70F;" FontSize="14"/>
+                                    <TextBlock x:Name="EditButtonText" Text="Edit in…"/>
+                                </StackPanel>
+                                <SplitButton.Flyout>
+                                    <MenuFlyout x:Name="EditMenu" Opening="EditMenu_Opening" Placement="Bottom"/>
+                                </SplitButton.Flyout>
+                            </SplitButton>
+                            <DropDownButton Content="More">
+                                <DropDownButton.Flyout>
+                                    <MenuFlyout x:Name="MoreMenu" Placement="Bottom" Opening="MoreMenu_Opening">
+                                        <MenuFlyoutSubItem x:Name="AddToCollectionMenu" Text="Add to collection">
+                                            <MenuFlyoutSubItem.Icon><FontIcon Glyph="&#xE710;"/></MenuFlyoutSubItem.Icon>
+                                        </MenuFlyoutSubItem>
+                                        <MenuFlyoutItem x:Name="RemoveFromCollectionItem" Text="Remove from this collection"
+                                                        Click="RemoveFromCollection_Click" Visibility="Collapsed">
+                                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE738;"/></MenuFlyoutItem.Icon>
+                                        </MenuFlyoutItem>
+                                        <MenuFlyoutItem Text="Slideshow" Click="Slideshow_Click">
+                                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE786;"/></MenuFlyoutItem.Icon>
+                                            <MenuFlyoutItem.KeyboardAccelerators>
+                                                <KeyboardAccelerator Key="F5"/>
+                                            </MenuFlyoutItem.KeyboardAccelerators>
+                                        </MenuFlyoutItem>
+                                        <MenuFlyoutItem Text="Show on second screen" Click="Presenter_Click">
+                                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE7F4;"/></MenuFlyoutItem.Icon>
+                                        </MenuFlyoutItem>
+                                        <MenuFlyoutSeparator/>
+                                        <MenuFlyoutItem Text="Rename…" Click="Rename_Click">
+                                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8AC;"/></MenuFlyoutItem.Icon>
+                                            <MenuFlyoutItem.KeyboardAccelerators>
+                                                <KeyboardAccelerator Key="F2"/>
+                                            </MenuFlyoutItem.KeyboardAccelerators>
+                                        </MenuFlyoutItem>
+                                        <MenuFlyoutItem Text="Contact sheet (PDF)…" Click="ContactSheet_Click">
+                                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE749;"/></MenuFlyoutItem.Icon>
+                                        </MenuFlyoutItem>
+                                        <MenuFlyoutSeparator/>
+                                        <MenuFlyoutItem Text="Client proofing gallery…" Click="Proofing_Click">
+                                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8F2;"/></MenuFlyoutItem.Icon>
+                                        </MenuFlyoutItem>
+                                        <MenuFlyoutItem Text="Import client favourites…" Click="ImportPicks_Click">
+                                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xEB51;"/></MenuFlyoutItem.Icon>
+                                        </MenuFlyoutItem>
+                                    </MenuFlyout>
+                                </DropDownButton.Flyout>
+                            </DropDownButton>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</Window>

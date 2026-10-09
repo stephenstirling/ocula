@@ -1,0 +1,15 @@
+# Visual Studio / build output
+.vs/
+bin/
+obj/
+x64/
+*.user
+*.suo
+AppPackages/
+BundleArtifacts/
+*.msix
+*.msixupload
+*.appxupload
+
+# Local bundle of generated assets (kept out of the repository)
+Ocula-Assets.zip

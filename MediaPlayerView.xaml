@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="Ocula.MediaPlayerView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vlc="using:LibVLCSharp.Platforms.Windows">
+
+    <Grid Background="Black">
+        <!-- Windows' own player: MP4, MOV, M4V, WMV -->
+        <MediaPlayerElement x:Name="NativePlayer" Visibility="Collapsed" AreTransportControlsEnabled="True" Stretch="Uniform"/>
+
+        <!-- VLC's engine: MKV, WebM, AVI, FLV, MPEG and anything Windows can't play -->
+        <Grid x:Name="VlcHost" Visibility="Collapsed" Tapped="VlcHost_Tapped">
+            <vlc:VideoView x:Name="VlcView" Initialized="VlcView_Initialized"/>
+            <Image x:Name="Poster" Stretch="Uniform" IsHitTestVisible="False"/>
+            <TextBlock x:Name="Message" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24"
+                       TextWrapping="Wrap" TextAlignment="Center" Foreground="#CCFFFFFF" Visibility="Collapsed"/>
+
+            <Border x:Name="Bar" VerticalAlignment="Bottom" Margin="8" Padding="8,4" CornerRadius="10"
+                    Background="#CC1C1C1F" RequestedTheme="Dark" Tapped="Bar_Tapped">
+                <Grid ColumnSpacing="6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="PlayButton" Click="PlayButton_Click" Padding="8" Background="Transparent" BorderThickness="0"
+                            AutomationProperties.Name="Play or pause">
+                        <FontIcon x:Name="PlayIcon" Glyph="&#xE768;" FontSize="14"/>
+                    </Button>
+                    <TextBlock Grid.Column="1" x:Name="TimeText" Text="0:00" VerticalAlignment="Center" FontSize="12" MinWidth="40"/>
+                    <Slider Grid.Column="2" x:Name="SeekSlider" Minimum="0" Maximum="1000" VerticalAlignment="Center"
+                            ValueChanged="SeekSlider_ValueChanged"
+                            AutomationProperties.Name="Position"/>
+                    <TextBlock Grid.Column="3" x:Name="LengthText" Text="0:00" VerticalAlignment="Center" FontSize="12" MinWidth="40"/>
+                    <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="2">
+                        <Button x:Name="MuteButton" Click="MuteButton_Click" Padding="8" Background="Transparent" BorderThickness="0"
+                                AutomationProperties.Name="Mute">
+                            <FontIcon x:Name="MuteIcon" Glyph="&#xE767;" FontSize="14"/>
+                        </Button>
+                        <Slider x:Name="VolumeSlider" Width="72" Minimum="0" Maximum="100" VerticalAlignment="Center"
+                                ValueChanged="VolumeSlider_ValueChanged" AutomationProperties.Name="Volume"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="2">
+                        <DropDownButton Padding="8" Background="Transparent" BorderThickness="0" ToolTipService.ToolTip="Audio track"
+                                        AutomationProperties.Name="Audio track">
+                            <FontIcon Glyph="&#xE8D6;" FontSize="14"/>
+                            <DropDownButton.Flyout>
+                                <MenuFlyout x:Name="AudioMenu" Opening="AudioMenu_Opening" Placement="TopEdgeAlignedRight"/>
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
+                        <DropDownButton Padding="8" Background="Transparent" BorderThickness="0" ToolTipService.ToolTip="Subtitles"
+                                        AutomationProperties.Name="Subtitles">
+                            <FontIcon Glyph="&#xED1E;" FontSize="14"/>
+                            <DropDownButton.Flyout>
+                                <MenuFlyout x:Name="SubtitleMenu" Opening="SubtitleMenu_Opening" Placement="TopEdgeAlignedRight"/>
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
+                        <DropDownButton x:Name="SpeedButton" Content="1×" Padding="8,4" Background="Transparent" BorderThickness="0"
+                                        ToolTipService.ToolTip="Speed" AutomationProperties.Name="Playback speed">
+                            <DropDownButton.Flyout>
+                                <MenuFlyout x:Name="SpeedMenu" Placement="TopEdgeAlignedRight"/>
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

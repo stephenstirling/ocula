@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ocula – download from the web</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit;cursor:pointer}
+a{color:#2A55B8}a:hover{color:#1C3F96}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; display: flex; flex-direction: column; font-family: Geist, 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif; font-size: 14px; background: #F5F5F3; color: #18181A; overflow: hidden; border-radius: 10px; border: 1px solid #E0E0DC">
+
+  <div style="height: 48px; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding-left: 16px; background: #EDEDEA; border-bottom: 1px solid #E0E0DC">
+    <svg width="20" height="20" viewBox="0 0 256 256" aria-hidden="true"><circle cx="128" cy="128" r="112" fill="#16181D"></circle><circle cx="128" cy="128" r="84" fill="#3B6FE0"></circle><circle cx="128" cy="128" r="58" fill="#13254F"></circle><circle cx="128" cy="128" r="27" fill="#FFD27A"></circle></svg>
+    <span style="font-weight: 600">Download from web</span>
+    <span style="flex-grow: 1"></span>
+    <span style="width: 46px; display: flex; justify-content: center; color: #5C5C64"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M0 0l10 10M10 0L0 10" stroke="currentColor"></path></svg></span>
+  </div>
+
+  <div style="flex-grow: 1; min-height: 0; display: flex">
+    <!-- Browser pane -->
+    <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; border-right: 1px solid #E0E0DC">
+      <div style="height: 48px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: #FFFFFF; border-bottom: 1px solid #E0E0DC">
+        <span aria-label="Back" style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: #5C5C64"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"></path></svg></span>
+        <span aria-label="Forward" style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: #B9B9B4"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"></path></svg></span>
+        <span aria-label="Reload" style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: #5C5C64"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"></path></svg></span>
+        <span style="flex-grow: 1; height: 32px; display: flex; align-items: center; padding: 0 12px; border-radius: 16px; background: #F0F0EE; font-size: 13px; color: #3A3A40">https://example-gallery.org/albums/coastal-road-trip</span>
+        <span style="height: 32px; display: flex; align-items: center; padding: 0 14px; border-radius: 8px; background: #3B6FE0; color: #FFFFFF; font-weight: 500; font-size: 13px">Grab images on this page</span>
+      </div>
+      <!-- Pretend web page -->
+      <div style="flex-grow: 1; min-height: 0; background: #FFFFFF; padding: 24px 32px; overflow: hidden">
+        <div style="font-family: Georgia, serif; font-size: 28px; margin-bottom: 4px">Coastal road trip</div>
+        <div style="font-size: 13px; color: #6A6A72; margin-bottom: 20px">24 photos · posted by a community member · 12 March</div>
+        <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px">
+          <sc-for list="{{pagePics}}" as="p" hint-placeholder-count="12">
+            <div style="aspect-ratio: 4 / 3; border-radius: 4px; overflow: hidden">
+              <svg viewBox="0 0 160 120" preserveAspectRatio="xMidYMid slice" style="width: 100%; height: 100%; display: block">
+                <rect width="160" height="120" fill="{{p.sky}}"></rect>
+                <circle cx="{{p.sx}}" cy="34" r="14" fill="{{p.sun}}"></circle>
+                <path d="M0 80 Q40 55 80 70 T160 62 V120 H0Z" fill="{{p.far}}"></path>
+                <path d="M0 98 Q50 78 100 92 T160 88 V120 H0Z" fill="{{p.near}}"></path>
+              </svg>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results and options -->
+    <aside aria-label="Images found" style="width: 420px; flex-shrink: 0; box-sizing: border-box; display: flex; flex-direction: column; background: #FFFFFF">
+      <div style="padding: 16px 18px 10px; display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; align-items: baseline; justify-content: space-between">
+          <span style="font-weight: 600; font-size: 16px">24 images found</span>
+          <span style="font-size: 13px; color: #2A55B8">Select all · {{selectedCount}} selected</span>
+        </div>
+        <div style="display: flex; gap: 4px; padding: 3px; border-radius: 8px; background: #F0F0EE">
+          <sc-for list="{{sizes}}" as="s" hint-placeholder-count="3">
+            <button type="button" onClick="{{s.pick}}" aria-pressed="{{s.pressed}}" style="flex: 1; height: 28px; border: 0; border-radius: 6px; font-size: 13px; background: {{s.bg}}; box-shadow: {{s.shadow}}">{{s.label}}</button>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="padding: 0 18px; height: 290px; flex-shrink: 0; overflow: hidden">
+        <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px">
+          <sc-for list="{{found}}" as="p" hint-placeholder-count="12">
+            <button type="button" onClick="{{p.toggle}}" aria-pressed="{{p.pressed}}" aria-label="{{p.aria}}" style="padding: 0; border: 0; background: none; position: relative; aspect-ratio: 1; border-radius: 5px; overflow: hidden; opacity: {{p.opacity}}">
+              <svg viewBox="0 0 160 120" preserveAspectRatio="xMidYMid slice" style="width: 100%; height: 100%; display: block">
+                <rect width="160" height="120" fill="{{p.sky}}"></rect>
+                <circle cx="{{p.sx}}" cy="34" r="14" fill="{{p.sun}}"></circle>
+                <path d="M0 80 Q40 55 80 70 T160 62 V120 H0Z" fill="{{p.far}}"></path>
+                <path d="M0 98 Q50 78 100 92 T160 88 V120 H0Z" fill="{{p.near}}"></path>
+              </svg>
+              <span style="position: absolute; left: 4px; top: 4px; width: 14px; height: 14px; border-radius: 4px; background: {{p.box}}; border: 1.5px solid #FFFFFF"></span>
+              <span style="position: absolute; right: 3px; bottom: 3px; padding: 1px 4px; border-radius: 4px; background: rgba(0,0,0,0.6); color: #FFFFFF; font-size: 10px">{{p.dim}}</span>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="padding: 10px 18px 0; display: flex; flex-direction: column; gap: 14px; flex-grow: 1; min-height: 0">
+        
+        <div style="display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 10px; background: #F5F5F3; border: 1px solid #E0E0DC">
+          <div style="display: flex; align-items: baseline; justify-content: space-between">
+            <span style="font-size: 13px; font-weight: 600">Suggested tags</span>
+            <span style="font-size: 12px; color: #5C5C64">Found in the page text</span>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px">
+            <sc-for list="{{tags}}" as="t" hint-placeholder-count="4">
+              <button type="button" onClick="{{t.toggle}}" aria-pressed="{{t.pressed}}" title="{{t.why}}" style="height: 28px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 14px; border: 1px solid {{t.border}}; background: {{t.bg}}; color: {{t.fg}}; font-size: 13px">
+                <span style="font-size: 12px">{{t.mark}}</span>{{t.label}}
+              </button>
+            </sc-for>
+          </div>
+          <span style="font-size: 12px; color: #5C5C64">“Anna Berg” appears in the page title and 21 of 24 captions. Tags are added to every downloaded photo.</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <span style="font-size: 13px; font-weight: 600">Save to</span>
+          <div style="display: flex; gap: 6px">
+            <span style="flex-grow: 1; height: 34px; display: flex; align-items: center; padding: 0 10px; border-radius: 7px; border: 1px solid #D0D0CB; font-size: 13px">D:\Photos\Downloads\Coastal road trip</span>
+            <span style="height: 34px; display: flex; align-items: center; padding: 0 12px; border-radius: 7px; border: 1px solid #D0D0CB; font-size: 13px">Browse</span>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; justify-content: space-between">
+          <div style="display: flex; flex-direction: column">
+            <span style="font-size: 13px; font-weight: 600">Save the source in each photo</span>
+            <span style="font-size: 12px; color: #5C5C64">Adds the page address and title as tags</span>
+          </div>
+          <button type="button" onClick="{{toggleSource}}" aria-pressed="{{sourcePressed}}" aria-label="Save the source in each photo" style="width: 40px; height: 22px; padding: 0; border-radius: 11px; border: 0; background: {{sourceTrack}}; position: relative; flex-shrink: 0">
+            <span style="position: absolute; top: 3px; left: {{sourceKnob}}; width: 16px; height: 16px; border-radius: 8px; background: #FFFFFF; transition: left 120ms ease"></span>
+          </button>
+        </div>
+        
+      </div>
+    </aside>
+  </div>
+
+  <div style="height: 64px; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 20px; background: #EDEDEA; border-top: 1px solid #E0E0DC">
+    <span style="flex-grow: 1; font-size: 12px; color: #5C5C64">Only download images you have the right to use. Ocula can’t get past paywalls or logins you haven’t signed in to yourself.</span>
+    <span style="font-size: 13px">{{selectedCount}} images · about {{sizeMb}} MB</span>
+    <a href="Library4.dc.html" style="height: 36px; display: flex; align-items: center; padding: 0 16px; border-radius: 8px; border: 1px solid #D0D0CB; background: #FFFFFF; color: #18181A; text-decoration: none">Cancel</a>
+    <a href="Library4.dc.html" style="height: 36px; display: flex; align-items: center; padding: 0 18px; border-radius: 8px; background: #3B6FE0; color: #FFFFFF; text-decoration: none; font-weight: 500">Download {{selectedCount}} images</a>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { size: 1, source: true, tg: { 0: true, 1: true, 2: true }, off: { 3: true, 9: true, 14: true } };
+  }
+  renderVals() {
+    const s = this.state;
+    const pal = [
+      ['#BFD9EC', '#FFF1C9', '#7FA6C4', '#3F5F7A'],
+      ['#F6D9B8', '#F2A65A', '#C98B6B', '#7A4E3A'],
+      ['#CFE3C8', '#F7E9A0', '#8DB580', '#4F7A45'],
+      ['#D9E4E1', '#F5F5F0', '#9DB5B0', '#5A7570'],
+      ['#FBE3A6', '#F59E0B', '#C7883A', '#6B4423']
+    ];
+    const pic = (i) => {
+      const p = pal[(i * 3) % pal.length];
+      return { sky: p[0], sun: p[1], far: p[2], near: p[3], sx: 30 + ((i * 37) % 100) };
+    };
+    const dims = ['4000×3000', '3200×2400', '1920×1280', '2400×1600', '640×480', '4000×3000'];
+    const minPx = [0, 1500, 3000][s.size];
+    const widths = [4000, 3200, 1920, 2400, 640, 4000];
+    const total = 24;
+    const found = Array.from({ length: 12 }, (_, i) => {
+      const w = widths[i % 6];
+      const eligible = w >= minPx;
+      const on = eligible && !s.off[i];
+      return Object.assign(pic(i), {
+        dim: dims[i % 6], pressed: on ? 'true' : 'false', box: on ? '#3B6FE0' : 'rgba(255,255,255,0.7)',
+        opacity: eligible ? 1 : 0.35, aria: 'Image ' + (i + 1) + ' of ' + total,
+        toggle: () => { const off = Object.assign({}, this.state.off); off[i] ? delete off[i] : off[i] = true; this.setState({ off }); }
+      });
+    });
+    const sel = [24, 17, 9][s.size] - (s.size === 0 ? 3 : 0);
+    const labels = ['All sizes', 'Large 1500+', 'Huge 3000+'];
+    const tagDefs = [['Anna Berg', 'Page title and 21 of 24 captions'], ['Coastal road trip', 'Gallery title'], ['travel', 'Category on the page'], ['example-gallery.org', 'Source site']];
+    const tags = tagDefs.map((d, i) => {
+      const on = !!s.tg[i];
+      return { label: d[0], why: d[1], mark: on ? '✓' : '+', pressed: on ? 'true' : 'false',
+        bg: on ? '#E4EBFB' : '#FFFFFF', border: on ? '#3B6FE0' : '#D0D0CB', fg: on ? '#1C3F96' : '#3A3A40',
+        toggle: () => { const tg = Object.assign({}, this.state.tg); tg[i] ? delete tg[i] : tg[i] = true; this.setState({ tg }); } };
+    });
+    return {
+      tags,
+      pagePics: Array.from({ length: 12 }, (_, i) => pic(i + 1)),
+      found,
+      sizes: labels.map((label, i) => ({
+        label, pressed: s.size === i ? 'true' : 'false', bg: s.size === i ? '#FFFFFF' : 'transparent',
+        shadow: s.size === i ? '0 1px 2px rgba(0,0,0,0.15)' : 'none', pick: () => this.setState({ size: i })
+      })),
+      selectedCount: sel,
+      sizeMb: Math.round(sel * 3.4),
+      toggleSource: () => this.setState({ source: !this.state.source }),
+      sourceTrack: s.source ? '#3B6FE0' : '#B9B9B4', sourceKnob: s.source ? '21px' : '3px', sourcePressed: s.source ? 'true' : 'false'
+    };
+  }
+}
+</script>
+</body>
+</html>

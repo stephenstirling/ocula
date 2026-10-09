@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Gallery</title>
+<style>
+  :root { --bg: #F5F5F3; --card: #FFFFFF; --text: #18181A; --muted: #5C5C64; --accent: #3B6FE0; --line: #E0E0DC; --heart: #E5484D; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #121214; --card: #1B1B1E; --text: #F2F2F3; --muted: #A3A3AB; --line: #2B2B30; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
+         padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+  header { padding: calc(28px + env(safe-area-inset-top, 0px)) 20px 8px; max-width: 1400px; margin: 0 auto; }
+  h1 { margin: 0 0 6px; font-size: clamp(24px, 4vw, 34px); letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--muted); }
+  main { max-width: 1400px; margin: 0 auto; padding: 16px 20px; display: grid; gap: 12px;
+         grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); }
+  figure { margin: 0; position: relative; border-radius: 10px; overflow: hidden; background: var(--card); aspect-ratio: 3 / 2; cursor: zoom-in; }
+  figure img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .heart { position: absolute; right: 8px; bottom: 8px; width: 44px; height: 44px; border-radius: 22px; border: 0;
+           background: rgba(20,20,22,0.55); color: #fff; font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .heart[aria-pressed="true"] { background: var(--heart); }
+  .name { position: absolute; left: 8px; bottom: 10px; color: #fff; font-size: 12px; text-shadow: 0 1px 3px rgba(0,0,0,0.7); }
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 1px solid var(--line);
+         padding: 12px 20px calc(12px + env(safe-area-inset-bottom, 0px)); display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
+  .bar strong { margin-right: 6px; }
+  .bar button, .bar a { height: 44px; padding: 0 18px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text);
+         font: inherit; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; }
+  .bar .primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .viewer { position: fixed; inset: 0; background: rgba(8,8,10,0.94); display: none; align-items: center; justify-content: center; z-index: 10; }
+  .viewer.open { display: flex; }
+  .viewer img { max-width: 92vw; max-height: 82vh; border-radius: 6px; }
+  .viewer .heart { position: fixed; right: 20px; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
+  .viewer .nav, .viewer .close { position: fixed; border: 0; background: rgba(255,255,255,0.12); color: #fff; width: 48px; height: 48px;
+         border-radius: 24px; font-size: 22px; cursor: pointer; }
+  .viewer .prev { left: 16px; top: 50%; } .viewer .next { right: 16px; top: 50%; }
+  .viewer .close { right: 16px; top: calc(16px + env(safe-area-inset-top, 0px)); }
+  .viewer .caption { position: fixed; left: 20px; bottom: calc(30px + env(safe-area-inset-bottom, 0px)); color: #ddd; }
+  footer { text-align: center; color: var(--muted); font-size: 13px; padding: 20px; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title"></h1>
+  <p id="intro"></p>
+</header>
+<main id="grid"></main>
+<footer id="footer"></footer>
+
+<div class="bar">
+  <strong id="count">0 favourites</strong>
+  <a class="primary" id="send" href="#">Send my favourites</a>
+  <button type="button" id="copy">Copy list</button>
+</div>
+
+<div class="viewer" id="viewer" role="dialog" aria-modal="true" aria-label="Photo">
+  <button class="close" type="button" aria-label="Close">×</button>
+  <button class="nav prev" type="button" aria-label="Previous">‹</button>
+  <img alt="">
+  <button class="nav next" type="button" aria-label="Next">›</button>
+  <span class="caption"></span>
+  <button class="heart" type="button" aria-label="Favourite" aria-pressed="false">♥</button>
+</div>
+
+<script>
+  const config = /*OCULA_CONFIG*/null;
+  const storageKey = 'ocula-favourites-' + config.id;
+  let favourites = new Set();
+  try { favourites = new Set(JSON.parse(localStorage.getItem(storageKey) || '[]')); } catch (e) { }
+
+  document.title = config.title;
+  document.getElementById('title').textContent = config.title;
+  document.getElementById('intro').textContent =
+    (config.client ? 'For ' + config.client + '. ' : '') + 'Tap the heart on the photos you love, then press "Send my favourites".';
+  document.getElementById('footer').textContent = config.copyright;
+
+  const grid = document.getElementById('grid');
+  const hearts = new Map();
+  config.photos.forEach((photo, index) => {
+    const figure = document.createElement('figure');
+    const img = document.createElement('img');
+    img.src = photo.file; img.loading = 'lazy'; img.alt = photo.name;
+    const name = document.createElement('span');
+    name.className = 'name'; name.textContent = photo.name;
+    const heart = document.createElement('button');
+    heart.className = 'heart'; heart.type = 'button'; heart.textContent = '♥';
+    heart.setAttribute('aria-label', 'Favourite ' + photo.name);
+    heart.addEventListener('click', (e) => { e.stopPropagation(); toggle(photo.name); });
+    figure.addEventListener('click', () => open(index));
+    figure.append(img, name, heart);
+    grid.append(figure);
+    hearts.set(photo.name, heart);
+  });
+
+  function toggle(name) {
+    favourites.has(name) ? favourites.delete(name) : favourites.add(name);
+    try { localStorage.setItem(storageKey, JSON.stringify([...favourites])); } catch (e) { }
+    refresh();
+  }
+
+  function list() { return config.photos.map(p => p.name).filter(n => favourites.has(n)); }
+
+  function refresh() {
+    hearts.forEach((button, name) => button.setAttribute('aria-pressed', favourites.has(name)));
+    const picks = list();
+    document.getElementById('count').textContent = picks.length + (picks.length === 1 ? ' favourite' : ' favourites');
+    const subject = encodeURIComponent('Favourites: ' + config.title);
+    const body = encodeURIComponent('My favourites from "' + config.title + '":\n\n' + picks.join('\n'));
+    document.getElementById('send').href = 'mailto:' + encodeURIComponent(config.email) + '?subject=' + subject + '&body=' + body;
+    if (current >= 0) viewerHeart.setAttribute('aria-pressed', favourites.has(config.photos[current].name));
+  }
+
+  document.getElementById('copy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(list().join('\n')); document.getElementById('copy').textContent = 'Copied'; }
+    catch (e) { prompt('Copy your favourites:', list().join(', ')); }
+  });
+
+  const viewer = document.getElementById('viewer');
+  const viewerImg = viewer.querySelector('img');
+  const viewerHeart = viewer.querySelector('.heart');
+  const caption = viewer.querySelector('.caption');
+  let current = -1;
+  function open(index) {
+    current = (index + config.photos.length) % config.photos.length;
+    const photo = config.photos[current];
+    viewerImg.src = photo.file; viewerImg.alt = photo.name; caption.textContent = photo.name;
+    viewer.classList.add('open'); refresh();
+  }
+  function close() { viewer.classList.remove('open'); current = -1; }
+  viewer.querySelector('.close').addEventListener('click', close);
+  viewer.querySelector('.prev').addEventListener('click', () => open(current - 1));
+  viewer.querySelector('.next').addEventListener('click', () => open(current + 1));
+  viewerHeart.addEventListener('click', () => toggle(config.photos[current].name));
+  document.addEventListener('keydown', (e) => {
+    if (current < 0) return;
+    if (e.key === 'Escape') close();
+    if (e.key === 'ArrowLeft') open(current - 1);
+    if (e.key === 'ArrowRight') open(current + 1);
+    if (e.key === ' ') { e.preventDefault(); toggle(config.photos[current].name); }
+  });
+
+  refresh();
+</script>
+</body>
+</html>

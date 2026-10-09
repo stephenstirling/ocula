@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Ocula.SettingsWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:toolkit="using:CommunityToolkit.WinUI.Controls"
+    xmlns:services="using:Ocula.Services"
+    Title="Ocula settings">
+
+    <Grid x:Name="Root">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Grid x:Name="DragArea" Padding="16,0,150,0" Background="Transparent">
+            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <Image Source="ms-appx:///Assets/Square44x44Logo.targetsize-24_altform-unplated.png" Width="18" Height="18"/>
+                <TextBlock Text="Settings" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+            </StackPanel>
+        </Grid>
+
+        <ScrollViewer Grid.Row="1" Padding="24,8,24,24">
+            <StackPanel Spacing="4" MaxWidth="900">
+
+                <!-- Appearance -->
+                <TextBlock Text="Appearance" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,8,0,4"/>
+                <toolkit:SettingsCard Header="Theme" Description="Light, dark, or follow your Windows setting.">
+                    <toolkit:SettingsCard.HeaderIcon><FontIcon Glyph="&#xE790;"/></toolkit:SettingsCard.HeaderIcon>
+                    <ComboBox x:Name="ThemeBox" SelectionChanged="ThemeBox_SelectionChanged" MinWidth="200">
+                        <ComboBoxItem Content="Light" Tag="Light"/>
+                        <ComboBoxItem Content="Dark" Tag="Dark"/>
+                        <ComboBoxItem Content="Use Windows setting" Tag="System"/>
+                    </ComboBox>
+                </toolkit:SettingsCard>
+
+                <toolkit:SettingsCard Header="Colour-managed preview"
+                                      Description="Shows photos with wide-gamut colour profiles (Display P3, Adobe RGB, ProPhoto) with accurate colours. For the best results on a wide-gamut monitor, also turn on Automatic colour management in Windows display settings.">
+                    <toolkit:SettingsCard.HeaderIcon><FontIcon Glyph="&#xE7B8;"/></toolkit:SettingsCard.HeaderIcon>
+                    <ToggleSwitch x:Name="ColourToggle" Toggled="ColourToggle_Toggled"/>
+                </toolkit:SettingsCard>
+
+                <!-- Folders -->
+                <TextBlock Text="Library" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,20,0,4"/>
+                <toolkit:SettingsExpander x:Name="FoldersExpander" Header="Folders"
+                                          Description="Folders shown in the left-hand tree. Removing one here doesn't delete anything."
+                                          IsExpanded="True">
+                    <toolkit:SettingsExpander.HeaderIcon><FontIcon Glyph="&#xE8B7;"/></toolkit:SettingsExpander.HeaderIcon>
+                    <Button Content="Add folder" Click="AddFolder_Click"/>
+                    <toolkit:SettingsExpander.ItemTemplate>
+                        <DataTemplate>
+                            <toolkit:SettingsCard Header="{Binding}">
+                                <Button Content="Remove" Tag="{Binding}" Click="RemoveFolder_Click"/>
+                            </toolkit:SettingsCard>
+                        </DataTemplate>
+                    </toolkit:SettingsExpander.ItemTemplate>
+                </toolkit:SettingsExpander>
+
+                <toolkit:SettingsCard x:Name="CacheCard" Header="Library cache">
+                    <toolkit:SettingsCard.HeaderIcon><FontIcon Glyph="&#xE74E;"/></toolkit:SettingsCard.HeaderIcon>
+                    <Button Content="Clear cache" Click="ClearCache_Click"/>
+                </toolkit:SettingsCard>
+
+                <!-- Privacy -->
+                <TextBlock Text="Privacy" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,20,0,4"/>
+                <toolkit:SettingsCard Header="Show camera photos"
+                                      Description="Looks up each camera model on Wikidata and downloads a photo from Wikimedia Commons. Only the camera's model name is sent, never your photos.">
+                    <toolkit:SettingsCard.HeaderIcon><FontIcon Glyph="&#xE722;"/></toolkit:SettingsCard.HeaderIcon>
+                    <ToggleSwitch x:Name="CameraToggle" Toggled="CameraToggle_Toggled"/>
+                </toolkit:SettingsCard>
+
+                <toolkit:SettingsCard Header="Map"
+                                      Description="Downloads map images from OpenFreeMap when you open the map. The map provider can see which areas you view, which are where your photos were taken. Photos and their exact locations are never sent.">
+                    <toolkit:SettingsCard.HeaderIcon><FontIcon Glyph="&#xE707;"/></toolkit:SettingsCard.HeaderIcon>
+                    <ToggleSwitch x:Name="MapToggle" Toggled="MapToggle_Toggled"/>
+                </toolkit:SettingsCard>
+
+                <!-- Smart recognition -->
+                <TextBlock Text="Smart recognition" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,20,0,4"/>
+                <toolkit:SettingsExpander x:Name="SmartExpander" Header="Recognise what's in photos"
+                                          Description="Suggests tags such as beach or dog, and lets you search by describing a photo, for example “? sunset over water”. Everything runs on this PC: no photo or result is ever sent anywhere. The first time, Ocula downloads a recognition model (OpenAI CLIP, MIT licence) from Hugging Face."
+                                          IsExpanded="True">
+                    <toolkit:SettingsExpander.HeaderIcon><FontIcon Glyph="&#xE9D9;"/></toolkit:SettingsExpander.HeaderIcon>
+                    <ToggleSwitch x:Name="SmartToggle" Toggled="SmartToggle_Toggled"/>
+                    <toolkit:SettingsExpander.Items>
+                        <toolkit:SettingsCard x:Name="SmartTierCard" Header="Model size"
+                                              Description="Compact is quicker and fine for most libraries. Accurate is a little better at telling similar things apart.">
+                            <ComboBox x:Name="SmartTierBox" SelectionChanged="SmartTierBox_SelectionChanged" MinWidth="220">
+                                <ComboBoxItem Content="Compact (about 155 MB)" Tag="Compact"/>
+                                <ComboBoxItem Content="Accurate (about 610 MB)" Tag="Accurate"/>
+                            </ComboBox>
+                        </toolkit:SettingsCard>
+                        <toolkit:SettingsCard x:Name="SmartStatusCard" Header="Model status">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <ProgressBar x:Name="SmartProgress" Width="160" Minimum="0" Maximum="1" Visibility="Collapsed"/>
+                                <Button x:Name="SmartDownloadButton" Content="Download" Click="SmartDownload_Click"/>
+                                <Button x:Name="SmartCancelButton" Content="Cancel" Click="SmartCancel_Click" Visibility="Collapsed"/>
+                            </StackPanel>
+                        </toolkit:SettingsCard>
+                        <toolkit:SettingsCard Header="Delete recognition data"
+                                              Description="Removes the downloaded models and everything Ocula has worked out about your photos. Your photos and tags are not touched.">
+                            <Button Content="Delete" Click="SmartDelete_Click"/>
+                        </toolkit:SettingsCard>
+                    </toolkit:SettingsExpander.Items>
+                </toolkit:SettingsExpander>
+
+                <!-- People -->
+                <TextBlock Text="People" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,20,0,4"/>
+                <toolkit:SettingsExpander x:Name="PeopleExpander" Header="Group photos by who is in them"
+                                          Description="Finds faces and groups the ones that look alike, so you can give each group a name. Ocula never says who someone is: the names are the ones you type. Everything runs on this PC and nothing is sent anywhere. The first time, Ocula downloads two small face models (YuNet and SFace, about 40 MB) from Hugging Face."
+                                          IsExpanded="True">
+                    <toolkit:SettingsExpander.HeaderIcon><FontIcon Glyph="&#xE716;"/></toolkit:SettingsExpander.HeaderIcon>
+                    <ToggleSwitch x:Name="PeopleToggle" Toggled="PeopleToggle_Toggled"/>
+                    <toolkit:SettingsExpander.Items>
+                        <toolkit:SettingsCard x:Name="PeopleStatusCard" Header="Model status">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <ProgressBar x:Name="PeopleProgress" Width="160" Minimum="0" Maximum="1" Visibility="Collapsed"/>
+                                <Button x:Name="PeopleDownloadButton" Content="Download" Click="PeopleDownload_Click"/>
+                                <Button x:Name="PeopleCancelButton" Content="Cancel" Click="PeopleCancel_Click" Visibility="Collapsed"/>
+                            </StackPanel>
+                        </toolkit:SettingsCard>
+                        <toolkit:SettingsCard Header="Delete face data"
+                                              Description="Removes the face models and every face group and name Ocula holds. Your photos and any tags already added to them are not touched.">
+                            <Button Content="Delete" Click="PeopleDelete_Click"/>
+                        </toolkit:SettingsCard>
+                    </toolkit:SettingsExpander.Items>
+                </toolkit:SettingsExpander>
+
+                <!-- Updates -->
+                <TextBlock Text="Updates" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,20,0,4"/>
+                <toolkit:SettingsExpander x:Name="UpdatesExpander" Header="Ocula updates" IsExpanded="True">
+                    <toolkit:SettingsExpander.HeaderIcon><FontIcon Glyph="&#xE895;"/></toolkit:SettingsExpander.HeaderIcon>
+                    <Button x:Name="CheckUpdatesButton" Content="Check for updates" Click="CheckUpdates_Click"/>
+                    <toolkit:SettingsExpander.Items>
+                        <toolkit:SettingsCard x:Name="UpdateStatusCard" Header="Not checked yet">
+                            <Button x:Name="InstallUpdateButton" Content="Update" Visibility="Collapsed"
+                                    Style="{StaticResource AccentButtonStyle}" Click="InstallUpdate_Click"/>
+                        </toolkit:SettingsCard>
+                        <toolkit:SettingsCard Header="Check for updates automatically"
+                                              Description="Once a day. Ocula asks GitHub which version is newest; nothing about you or your photos is sent.">
+                            <ToggleSwitch x:Name="AutoUpdateToggle" Toggled="AutoUpdate_Toggled"/>
+                        </toolkit:SettingsCard>
+                        <toolkit:SettingsCard Header="What's new in this version" IsClickEnabled="True" Click="WhatsNewSettings_Click">
+                            <toolkit:SettingsCard.ActionIcon><FontIcon Glyph="&#xE8A7;"/></toolkit:SettingsCard.ActionIcon>
+                        </toolkit:SettingsCard>
+                    </toolkit:SettingsExpander.Items>
+                </toolkit:SettingsExpander>
+
+                <!-- About -->
+                <TextBlock Text="About" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,20,0,4"/>
+                <toolkit:SettingsExpander x:Name="AboutExpander" Header="Ocula" IsExpanded="True">
+                    <toolkit:SettingsExpander.HeaderIcon>
+                        <ImageIcon Source="ms-appx:///Assets/Square44x44Logo.targetsize-32_altform-unplated.png"/>
+                    </toolkit:SettingsExpander.HeaderIcon>
+                    <Button x:Name="SupportButton" Style="{StaticResource AccentButtonStyle}" Click="Support_Click">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xEB51;" FontSize="14"/>
+                            <TextBlock Text="Support Ocula"/>
+                        </StackPanel>
+                    </Button>
+                    <toolkit:SettingsExpander.Items>
+                        <toolkit:SettingsCard Header="Ocula is free. If it's useful to you, a small donation helps keep it going."
+                                              x:Name="SupportCard"/>
+                        <toolkit:SettingsCard x:Name="SourceCard" Header="Source code" IsClickEnabled="True" Click="Source_Click">
+                            <toolkit:SettingsCard.ActionIcon><FontIcon Glyph="&#xE8A7;"/></toolkit:SettingsCard.ActionIcon>
+                        </toolkit:SettingsCard>
+                        <toolkit:SettingsCard x:Name="FeedbackCard" Header="Report a problem or suggest a feature"
+                                              IsClickEnabled="True" Click="Feedback_Click">
+                            <toolkit:SettingsCard.ActionIcon><FontIcon Glyph="&#xE8A7;"/></toolkit:SettingsCard.ActionIcon>
+                        </toolkit:SettingsCard>
+                        <toolkit:SettingsCard x:Name="RateCard" Header="Rate Ocula in the Microsoft Store"
+                                              IsClickEnabled="True" Click="Rate_Click">
+                            <toolkit:SettingsCard.ActionIcon><FontIcon Glyph="&#xE8A7;"/></toolkit:SettingsCard.ActionIcon>
+                        </toolkit:SettingsCard>
+                        <toolkit:SettingsCard x:Name="PrivacyCard" Header="Privacy policy" IsClickEnabled="True" Click="Privacy_Click">
+                            <toolkit:SettingsCard.ActionIcon><FontIcon Glyph="&#xE8A7;"/></toolkit:SettingsCard.ActionIcon>
+                        </toolkit:SettingsCard>
+                        <toolkit:SettingsCard Header="Third-party notices" HorizontalContentAlignment="Stretch"
+                                              ContentAlignment="Vertical">
+                            <ItemsRepeater x:Name="NoticesList" Margin="0,8,0,0">
+                                <ItemsRepeater.Layout><StackLayout Spacing="10"/></ItemsRepeater.Layout>
+                                <ItemsRepeater.ItemTemplate>
+                                    <DataTemplate x:DataType="services:ThirdPartyNotice">
+                                        <StackPanel>
+                                            <HyperlinkButton Content="{x:Bind Name}" NavigateUri="{x:Bind Link}" Padding="0"/>
+                                            <TextBlock Style="{StaticResource CaptionTextBlockStyle}"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}">
+                                                <Run Text="{x:Bind License}"/><Run Text=" · "/><Run Text="{x:Bind Purpose}"/>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsRepeater.ItemTemplate>
+                            </ItemsRepeater>
+                        </toolkit:SettingsCard>
+                    </toolkit:SettingsExpander.Items>
+                </toolkit:SettingsExpander>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Window>

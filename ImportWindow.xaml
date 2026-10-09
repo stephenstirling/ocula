@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Ocula.ImportWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:services="using:Ocula.Services"
+    xmlns:local="using:Ocula"
+    Title="Import photos">
+
+    <Grid x:Name="Root">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Grid x:Name="DragArea" Padding="16,0,150,0" Background="Transparent">
+            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <Image Source="ms-appx:///Assets/Square44x44Logo.targetsize-24_altform-unplated.png" Width="18" Height="18"/>
+                <TextBlock Text="Import photos" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+            </StackPanel>
+        </Grid>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="380"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Card and its photos -->
+            <Grid Padding="20,8,20,16" RowSpacing="12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Grid Padding="14" ColumnSpacing="14" CornerRadius="10" BorderThickness="1"
+                      Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                      BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE88E;" FontSize="26" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <ComboBox x:Name="CardBox" MinWidth="220" SelectionChanged="CardBox_SelectionChanged"
+                                  AutomationProperties.Name="Memory card"/>
+                        <TextBlock x:Name="CardSummary" Margin="0,4,0,0" Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    </StackPanel>
+                    <CheckBox Grid.Column="2" x:Name="ShowImportedBox" Content="Show already imported" Click="ShowImported_Click"/>
+                    <Button Grid.Column="3" Content="Select all" Click="SelectAll_Click"/>
+                </Grid>
+
+                <Grid Grid.Row="1">
+                    <ProgressRing x:Name="ScanRing" IsActive="False" Width="40" Height="40"/>
+                    <GridView x:Name="Photos" SelectionMode="Multiple" SelectionChanged="Photos_SelectionChanged"
+                              ContainerContentChanging="Photos_ContainerContentChanging">
+                        <GridView.GroupStyle>
+                            <GroupStyle>
+                                <GroupStyle.HeaderTemplate>
+                                    <DataTemplate x:DataType="local:ImportDay">
+                                        <TextBlock Text="{x:Bind Title}" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                    </DataTemplate>
+                                </GroupStyle.HeaderTemplate>
+                            </GroupStyle>
+                        </GridView.GroupStyle>
+                        <GridView.ItemTemplate>
+                            <DataTemplate x:DataType="services:ImportItem">
+                                <StackPanel Width="132" Spacing="4" Padding="4">
+                                    <Border Height="96" CornerRadius="5" Background="{ThemeResource ControlFillColorSecondaryBrush}">
+                                        <Image Source="{x:Bind Thumbnail, Mode=OneWay}" Stretch="UniformToFill"/>
+                                    </Border>
+                                    <TextBlock Text="{x:Bind Caption}" Style="{StaticResource CaptionTextBlockStyle}" TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </GridView.ItemTemplate>
+                    </GridView>
+                    <TextBlock x:Name="EmptyText" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center"
+                               TextAlignment="Center" TextWrapping="Wrap" MaxWidth="420"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                </Grid>
+            </Grid>
+
+            <!-- Options -->
+            <ScrollViewer Grid.Column="1" Padding="20,8,20,16" Background="{ThemeResource LayerFillColorDefaultBrush}">
+                <StackPanel Spacing="16">
+                    <TextBox x:Name="EventBox" Header="Event name" PlaceholderText="For example Smith wedding" TextChanged="Options_Changed"/>
+                    <StackPanel Spacing="6">
+                        <Grid ColumnSpacing="6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="DestinationBox" Header="Save to" TextChanged="Options_Changed"/>
+                            <Button Grid.Column="1" Content="Browse…" VerticalAlignment="Bottom" Click="BrowseDestination_Click"/>
+                        </Grid>
+                        <TextBox x:Name="FolderPatternBox" Header="Folders" TextChanged="Options_Changed"/>
+                    </StackPanel>
+                    <StackPanel Spacing="6">
+                        <ToggleSwitch x:Name="RenameToggle" Header="Rename files" Toggled="Options_Changed"/>
+                        <TextBox x:Name="NamePatternBox" TextChanged="Options_Changed"/>
+                        <TextBlock x:Name="PreviewText" TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        <TextBlock TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                   Text="Tokens: {date} {time} {event} {camera} {seq} {name} {year} {month} {day}"/>
+                    </StackPanel>
+                    <TextBox x:Name="TagsBox" Header="Add tags" PlaceholderText="Separate with commas"/>
+                    <StackPanel Spacing="6" Padding="12" CornerRadius="8" Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                        <ToggleSwitch x:Name="BackupToggle" Header="Also copy to a backup folder (e.g. the NAS)" Toggled="Options_Changed"/>
+                        <Grid ColumnSpacing="6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="BackupBox" PlaceholderText="\\NAS\photo\Backups"/>
+                            <Button Grid.Column="1" Content="Browse…" Click="BrowseBackup_Click"/>
+                        </Grid>
+                    </StackPanel>
+                    <ToggleSwitch x:Name="EjectToggle" Header="Eject the card when done"/>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+
+        <!-- Footer -->
+        <Grid Grid.Row="2" Padding="20,12" ColumnSpacing="10" BorderThickness="0,1,0,0"
+              BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="220"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="FooterText" VerticalAlignment="Center" TextWrapping="Wrap"/>
+            <ProgressBar Grid.Column="1" x:Name="ImportProgress" Visibility="Collapsed" VerticalAlignment="Center"/>
+            <Button Grid.Column="2" x:Name="CancelButton" Content="Close" Click="Cancel_Click"/>
+            <Button Grid.Column="3" x:Name="ImportButton" Style="{StaticResource AccentButtonStyle}" Content="Import"
+                    IsEnabled="False" Click="Import_Click"/>
+        </Grid>
+    </Grid>
+</Window>

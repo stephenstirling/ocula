@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Ocula.MapWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Ocula map">
+
+    <Grid x:Name="Root">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Grid Padding="16,0,150,0" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Grid x:Name="DragArea" Background="Transparent">
+                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <Image Source="ms-appx:///Assets/Square44x44Logo.targetsize-24_altform-unplated.png" Width="18" Height="18"/>
+                    <TextBlock Text="Map" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                    <TextBlock x:Name="CountText" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
+            </Grid>
+            <Button Grid.Column="1" Content="Refresh" Click="Refresh_Click" VerticalAlignment="Center"/>
+        </Grid>
+
+        <WebView2 Grid.Row="1" x:Name="Map"/>
+    </Grid>
+</Window>

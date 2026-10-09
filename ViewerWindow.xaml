@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Ocula.ViewerWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:models="using:Ocula.Models"
+    xmlns:local="using:Ocula"
+    Title="Ocula viewer">
+
+    <Grid x:Name="Root" Background="#0B0B0C" RequestedTheme="Dark" PointerMoved="Root_PointerMoved"
+          KeyDown="Root_KeyDown" IsTabStop="True">
+        <ScrollViewer x:Name="Scroller" ZoomMode="Enabled" MinZoomFactor="1" MaxZoomFactor="8"
+                      HorizontalScrollMode="Enabled" VerticalScrollMode="Enabled"
+                      HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"
+                      SizeChanged="Scroller_SizeChanged" ViewChanged="Scroller_ViewChanged"
+                      DoubleTapped="Scroller_DoubleTapped">
+            <Image x:Name="Photo" Stretch="Uniform"/>
+        </ScrollViewer>
+        <local:MediaPlayerView x:Name="Video" Visibility="Collapsed"/>
+        <ProgressRing x:Name="Busy" Width="36" Height="36" IsActive="False"/>
+
+        <!-- Overlays fade out after a moment without the mouse moving. -->
+        <Grid x:Name="Overlay">
+            <Grid VerticalAlignment="Top" Height="64" Padding="20,0,12,0" ColumnSpacing="10" Background="#B30B0B0C">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock x:Name="NameText" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock x:Name="InfoText" FontSize="12" Opacity="0.7"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" Padding="3" CornerRadius="8" Background="#22FFFFFF"
+                            VerticalAlignment="Center">
+                    <Button Click="ZoomOut_Click" ToolTipService.ToolTip="Zoom out (−)" AutomationProperties.Name="Zoom out">
+                        <FontIcon Glyph="&#xE71F;" FontSize="14"/>
+                    </Button>
+                    <TextBlock x:Name="ZoomText" MinWidth="52" TextAlignment="Center" VerticalAlignment="Center" FontSize="13"/>
+                    <Button Click="ZoomIn_Click" ToolTipService.ToolTip="Zoom in (+)" AutomationProperties.Name="Zoom in">
+                        <FontIcon Glyph="&#xE8A3;" FontSize="14"/>
+                    </Button>
+                    <Button Content="Fit" Click="Fit_Click" ToolTipService.ToolTip="Fit (0)"/>
+                    <Button Content="100%" Click="Actual_Click" ToolTipService.ToolTip="Actual pixels (1)"/>
+                </StackPanel>
+                <Button Grid.Column="2" Click="Edit_Click" VerticalAlignment="Center" ToolTipService.ToolTip="Edit (E)">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE70F;" FontSize="14"/>
+                        <TextBlock Text="Edit"/>
+                    </StackPanel>
+                </Button>
+                <Button Grid.Column="3" Click="Close_Click" VerticalAlignment="Center" ToolTipService.ToolTip="Close (Esc)"
+                        AutomationProperties.Name="Close">
+                    <FontIcon Glyph="&#xE711;" FontSize="14"/>
+                </Button>
+            </Grid>
+
+            <Button Click="Previous_Click" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="20,0,0,0"
+                    Width="52" Height="52" CornerRadius="26" Background="#33FFFFFF" AutomationProperties.Name="Previous">
+                <FontIcon Glyph="&#xE76B;" FontSize="18"/>
+            </Button>
+            <Button Click="Next_Click" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,20,0"
+                    Width="52" Height="52" CornerRadius="26" Background="#33FFFFFF" AutomationProperties.Name="Next">
+                <FontIcon Glyph="&#xE76C;" FontSize="18"/>
+            </Button>
+
+            <ListView x:Name="Strip" VerticalAlignment="Bottom" Height="100" Padding="12,10" Background="#B30B0B0C"
+                      SelectionMode="Single" IsItemClickEnabled="True" ItemClick="Strip_ItemClick"
+                      ContainerContentChanging="Strip_ContainerContentChanging"
+                      ScrollViewer.HorizontalScrollMode="Enabled" ScrollViewer.HorizontalScrollBarVisibility="Hidden"
+                      ScrollViewer.VerticalScrollMode="Disabled">
+                <ListView.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <ItemsStackPanel Orientation="Horizontal"/>
+                    </ItemsPanelTemplate>
+                </ListView.ItemsPanel>
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="models:ImageItem">
+                        <Grid Width="96" Height="66">
+                            <Image Source="{x:Bind Thumbnail, Mode=OneWay}" Stretch="UniformToFill"/>
+                            <FontIcon Glyph="&#xE768;" FontSize="14" Visibility="{x:Bind DurationVisibility}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+        </Grid>
+    </Grid>
+</Window>

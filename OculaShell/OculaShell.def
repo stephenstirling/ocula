@@ -1,0 +1,4 @@
+LIBRARY OculaShell
+EXPORTS
+    DllGetClassObject PRIVATE
+    DllCanUnloadNow PRIVATE

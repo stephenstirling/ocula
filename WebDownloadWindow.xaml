@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Ocula.WebDownloadWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:services="using:Ocula.Services"
+    Title="Download from the web">
+
+    <Grid x:Name="Root">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Grid x:Name="DragArea" Padding="16,0,150,0" Background="Transparent">
+            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <Image Source="ms-appx:///Assets/Square44x44Logo.targetsize-24_altform-unplated.png" Width="18" Height="18"/>
+                <TextBlock Text="Download from the web" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Address bar -->
+        <Grid Grid.Row="1" Padding="16,4,16,10" ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Button x:Name="BackButton" Click="Back_Click" ToolTipService.ToolTip="Back" AutomationProperties.Name="Back">
+                <FontIcon Glyph="&#xE72B;" FontSize="14"/>
+            </Button>
+            <TextBox Grid.Column="1" x:Name="UrlBox" PlaceholderText="Type or paste a page address, then press Enter"
+                     KeyDown="UrlBox_KeyDown" AutomationProperties.Name="Page address"/>
+            <Button Grid.Column="2" Content="Go" Click="Go_Click"/>
+            <Button Grid.Column="3" x:Name="GrabButton" Style="{StaticResource AccentButtonStyle}" Click="Grab_Click"
+                    Content="Grab images on this page"/>
+        </Grid>
+
+        <!-- Browser pane / picker -->
+        <Grid Grid.Row="2">
+            <WebView2 x:Name="Browser"/>
+            <ProgressRing x:Name="Busy" IsActive="False" Width="40" Height="40" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+
+            <Grid x:Name="PickerPane" Visibility="Collapsed" Background="{ThemeResource LayerFillColorDefaultBrush}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="360"/>
+                </Grid.ColumnDefinitions>
+
+                <Grid Padding="20,8,12,8" RowSpacing="10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel>
+                        <TextBlock x:Name="PageTitle" Style="{StaticResource SubtitleTextBlockStyle}" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock x:Name="PageHost" Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    </StackPanel>
+                    <Grid Grid.Row="1" ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="FoundText" VerticalAlignment="Center" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                        <HyperlinkButton Grid.Column="1" x:Name="SelectAllLink" Content="Select all" Click="SelectAll_Click"/>
+                        <ComboBox Grid.Column="2" x:Name="SizeBox" SelectionChanged="SizeBox_SelectionChanged"
+                                  AutomationProperties.Name="Minimum size">
+                            <ComboBoxItem Content="All sizes"/>
+                            <ComboBoxItem Content="Large (1500 px and up)"/>
+                            <ComboBoxItem Content="Huge (3000 px and up)"/>
+                        </ComboBox>
+                    </Grid>
+                    <GridView Grid.Row="2" x:Name="ImageGrid" SelectionMode="None" IsItemClickEnabled="True"
+                              ItemClick="Grid_ItemClick">
+                        <GridView.ItemTemplate>
+                            <DataTemplate x:DataType="services:WebImage">
+                                <Grid Width="168" Padding="4" RowSpacing="4" Opacity="{x:Bind Opacity, Mode=OneWay}">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Border Height="120" CornerRadius="6" Background="{ThemeResource ControlFillColorSecondaryBrush}">
+                                        <Grid>
+                                            <Image Source="{x:Bind Thumbnail, Mode=OneWay}" Stretch="UniformToFill"/>
+                                            <Border Visibility="{x:Bind CheckVisibility, Mode=OneWay}" Width="24" Height="24" CornerRadius="12"
+                                                    HorizontalAlignment="Left" VerticalAlignment="Top" Margin="6"
+                                                    Background="{ThemeResource AccentFillColorDefaultBrush}">
+                                                <FontIcon Glyph="&#xE73E;" FontSize="12" Foreground="White"/>
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                    <TextBlock Grid.Row="1" Text="{x:Bind StatusText, Mode=OneWay}" TextTrimming="CharacterEllipsis"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </GridView.ItemTemplate>
+                    </GridView>
+                </Grid>
+
+                <!-- Tags, destination -->
+                <Border Grid.Column="1" Padding="20,8,20,12" BorderThickness="1,0,0,0"
+                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
+                    <ScrollViewer>
+                        <StackPanel Spacing="16">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Suggested tags" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                <TextBlock Text="Found in the page text. Ticked tags are added to every downloaded photo."
+                                           Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                <ItemsRepeater x:Name="TagList">
+                                    <ItemsRepeater.Layout>
+                                        <UniformGridLayout MinItemWidth="10" MinRowSpacing="6" MinColumnSpacing="6"/>
+                                    </ItemsRepeater.Layout>
+                                    <ItemsRepeater.ItemTemplate>
+                                        <DataTemplate x:DataType="services:TagChip">
+                                            <ToggleButton Content="{x:Bind Label}" IsChecked="{x:Bind On, Mode=TwoWay}"
+                                                          ToolTipService.ToolTip="{x:Bind Reason}" CornerRadius="14" Padding="12,4"/>
+                                        </DataTemplate>
+                                    </ItemsRepeater.ItemTemplate>
+                                </ItemsRepeater>
+                                <TextBlock x:Name="NoTagsText" Text="No names or topics stood out on this page."
+                                           Visibility="Collapsed" Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                <TextBox x:Name="ExtraTagBox" PlaceholderText="Add your own tag and press Enter"
+                                         KeyDown="ExtraTag_KeyDown"/>
+                            </StackPanel>
+
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Save to" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="DestinationBox" TextChanged="Destination_TextChanged"/>
+                                    <Button Grid.Column="1" Content="Browse" Click="Browse_Click"/>
+                                </Grid>
+                                <TextBlock x:Name="FolderNote" Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            </StackPanel>
+
+                            <ToggleSwitch x:Name="SourceToggle" Header="Save the source in each photo"
+                                          OnContent="Adds the site and page title as tags" OffContent="Not saved"/>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+            </Grid>
+        </Grid>
+
+        <!-- Footer -->
+        <Grid Grid.Row="3" Padding="16,10" ColumnSpacing="12" BorderThickness="0,1,0,0"
+              BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel VerticalAlignment="Center" Spacing="2">
+                <TextBlock x:Name="RightsText" TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           Text="Only download images you have the right to use. Ocula can’t get past paywalls, ad screens or logins you haven’t signed in to yourself."/>
+                <ProgressBar x:Name="DownloadBar" Minimum="0" Maximum="1" Visibility="Collapsed"/>
+            </StackPanel>
+            <TextBlock Grid.Column="1" x:Name="SelectedText" VerticalAlignment="Center"/>
+            <Button Grid.Column="2" x:Name="CancelButton" Content="Cancel" Click="Cancel_Click"/>
+            <Button Grid.Column="3" x:Name="DownloadButton" Style="{StaticResource AccentButtonStyle}"
+                    Content="Download" IsEnabled="False" Click="Download_Click"/>
+        </Grid>
+    </Grid>
+</Window>

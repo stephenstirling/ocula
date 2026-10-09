@@ -1,0 +1,37 @@
+<!--
+  Additions for Ocula.csproj (right-click the Ocula project > Edit Project File).
+  Paste these inside the existing <Project> element.
+-->
+
+<!-- 1. Use the single-instance entry point in Program.cs instead of the generated one. -->
+<PropertyGroup>
+  <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+</PropertyGroup>
+
+<!-- 1b. x64 only, Windows 10 1809 and later (the Windows App SDK's own minimum). -->
+<PropertyGroup>
+  <Platforms>x64</Platforms>
+  <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+  <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+  <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+</PropertyGroup>
+
+<!-- 2. The icon and publisher details shown for Ocula.exe (File Explorer > Properties > Details). -->
+<PropertyGroup>
+  <Product>Ocula</Product>
+  <Company>Stephen Stirling</Company>
+  <Authors>Stephen Stirling</Authors>
+  <Copyright>© 2026 Stephen Stirling</Copyright>
+  <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+</PropertyGroup>
+
+<!-- 3. Build OculaShell (the C++ right-click menu DLL) first and include it in the package. -->
+<ItemGroup>
+  <ProjectReference Include="..\OculaShell\OculaShell.vcxproj">
+    <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+  </ProjectReference>
+  <Content Include="$(SolutionDir)$(Platform)\$(Configuration)\OculaShell.dll">
+    <Link>OculaShell.dll</Link>
+    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+  </Content>
+</ItemGroup>

@@ -1,0 +1,570 @@
+# Building Ocula
+
+A WinUI 3 (Windows App SDK) app in C# / .NET 8, built as a native **x64-only** app for Windows 10 (version 1809 and later) and Windows 11.
+
+## Setup
+
+1. Install **Visual Studio 2022** with the **WinUI application development** and
+   **Desktop development with C++** workloads.
+2. Create a project from **"Blank App, Packaged (WinUI 3 in Desktop)"** named **Ocula**.
+3. Delete the template's `MainWindow.xaml` / `.cs`, then copy in `MainWindow.xaml`,
+   `MainWindow.xaml.cs`, `ExportDialog.xaml` / `.cs`, `DuplicatesWindow.xaml` / `.cs`, `SettingsWindow.xaml` / `.cs`, `MapWindow.xaml` / `.cs`, `CompareWindow.xaml` / `.cs`, `ImportWindow.xaml` / `.cs`, `SlideshowWindow.xaml` / `.cs`, `EditWindow.xaml` / `.cs`,
+   `ViewerWindow.xaml` / `.cs`, `MainWindow.Workflow.cs`, `MainWindow.Library.cs`,
+   `MainWindow.Viewing.cs`, `Program.cs` and the
+   `Models` and `Services` folders. Replace the template's `App.xaml.cs` with this one (keep
+   its `App.xaml`). If `ExportDialog.xaml` isn't treated as a XAML page, set its Build Action
+   to "Page" in Properties (same for the other window XAML files).
+4. Add NuGet packages:
+   - `Magick.NET-Q8-AnyCPU` (14.x) – decodes RAW files Windows can't
+   - `MetadataExtractor` – camera make/model/exposure, including CR2
+   - `Microsoft.Data.Sqlite` – the local library database
+   - `CommunityToolkit.WinUI.Controls.Segmented` (8.x) – the Light/Dark/System pill
+   - `CommunityToolkit.WinUI.Controls.SettingsControls` (8.x) – Windows 11-style settings cards
+   - `Microsoft.Graphics.Win2D` (1.x, the WinUI 3 version) – HDR preview
+   - `LibVLCSharp.WinUI` (3.7 or later) and `VideoLAN.LibVLC.Windows` (3.0.18 or later) –
+     play MKV, WebM, AVI and other formats Windows' player can't. Ocula is x64 only: VLC's
+     engine isn't available for ARM64, and the Smart recognition and People models are tested on x64.
+   Also update `Microsoft.WindowsAppSDK` to **1.6 or later** (NuGet > Updates); the HDR
+   preview uses its display information API to read the monitor's HDR brightness.
+   - `Microsoft.ML.OnnxRuntime` (1.17 or later, MIT) – runs the Smart recognition model. The model
+     files themselves are not in the project; Ocula downloads them when the user turns the
+     feature on (Settings > Smart recognition).
+   - `CoenM.ImageHash` – perceptual hashing for duplicate detection (MIT). It brings in
+     `SixLabors.ImageSharp`, which is free under the Six Labors Split License for
+     open-source projects and for individuals and companies under US$1M annual revenue.
+5. In the `.csproj`, make sure `<Nullable>enable</Nullable>` is set.
+6. In `Services/CameraImageService.cs`, put your own contact in the User-Agent, and in
+   `Services/AppInfo.cs` set your donation page and (optionally) source-code and feedback links.
+7. **Folder right-click menu (C++ part):**
+   - Right-click the solution > Add > New Project > **Dynamic-Link Library (DLL)** (C++),
+     named **OculaShell**, in an `OculaShell` folder next to the `Ocula` folder.
+   - Delete its `dllmain.cpp`, `pch.h`, `pch.cpp` and `framework.h`; add this repo's
+     `OculaShell\dllmain.cpp` and `OculaShell\OculaShell.def`.
+   - Project Properties (All Configurations, All Platforms):
+     C/C++ > Precompiled Headers > **Not Using Precompiled Headers**;
+     Linker > Input > Module Definition File > **OculaShell.def**.
+   - Make sure the solution builds OculaShell for **x64** (Configuration Manager).
+8. **Map library:** download MapLibre GL JS (version 4.x) and put both files in `Assets\Map`
+   next to `map.html`:
+   - https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.js
+   - https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.css
+   It's bundled rather than loaded from the internet, so the map works the same for everyone
+   and nothing but map tiles is fetched online.
+9. Copy everything in `Assets` into the project's `Assets` folder, replacing the template's
+   placeholder logos. In Visual Studio, select the new files > Properties > Build Action
+   **Content** (the template's existing logos already are). This includes the `Map` and
+   `Proofing` folders.
+10. Edit the project files using the two "additions" files:
+   - `Ocula.csproj-additions.xml` → `Ocula.csproj` (single instance + packaging the DLL)
+   - `Package.appxmanifest-additions.xml` → `Package.appxmanifest` (Open with, `ocula`
+     command, folder menu)
+11. Set the platform to x64 and press F5. Deploying registers the menu; if "Open in Ocula"
+   doesn't appear straight away, restart File Explorer (Task Manager > Windows Explorer >
+   Restart).
+
+## App icon
+
+"Lens and light": a lens seen head-on with a warm light at its centre. `AppIcon.svg` is the
+master; sizes 32 px and below use the simplified `AppIcon-small.svg` so they stay crisp.
+`AppIcon.ico` holds every size from 16 to 256 px and is used for the window, the .exe and
+the folder right-click menu. The PNGs are the package logos (Start menu, taskbar, splash).
+
+## What's in this build (phase 1)
+
+- **Light / Dark / System pill** in the title bar, remembered between sessions.
+- **Remembered folders**: folders you add stay in the tree next time.
+- **Local library** (`%LOCALAPPDATA%\Ocula\library.db`): thumbnails and metadata are stored
+  after the first visit, so folders reopen instantly. Changed files are re-read automatically.
+- **RAW+JPEG pairing**: IMG_0001.CR2 + IMG_0001.JPG show as one tile with a "RAW+JPG" badge;
+  tags and ratings are written to both.
+- **Ratings and colour labels**, with Lightroom's shortcuts (0–5 stars; 6 red, 7 yellow,
+  8 green, 9 blue) and filters for both.
+- **Multi-select editing**: ratings, labels and tags apply to every selected image.
+- **Search** across file names, tags and camera models.
+- **Folder watching**: new, deleted or renamed images appear without a refresh.
+- **HDR detection**: an HDR card in the details panel and an "HDR" badge on tiles. Detects
+  gain-map photos (Ultra HDR, iPhone, ISO 21496-1), PQ/HLG-encoded AVIF/HEIC/PNG, 32-bit HDR
+  merges (DNG/TIFF), and photos taken in a phone's HDR mode. Existing libraries are re-checked
+  automatically after updating.
+- **OneDrive online-only files** are detected. Ocula uses OneDrive's cloud thumbnails and
+  doesn't read their contents, so browsing a cloud folder won't download it.
+
+## Phase 2 (this build)
+
+- **Batch export** (Ctrl+E) with presets: Web, Social, Full-size JPEG and Archive TIFF
+  (from RAW), plus your own. Each preset sets size, format (JPEG, PNG, WebP, AVIF, TIFF),
+  quality, location/metadata removal, watermark, file-name suffix and destination folder.
+  Each preset remembers its folder, so "Web" can point at the website folder on the NAS.
+  Exports run in the background with progress and Cancel.
+- **Share** selected photos through the Windows share sheet.
+- **Open from File Explorer**: Ocula appears under "Open with" for image files and can be
+  the default app. Opening a file shows its folder with that file selected.
+- **Command line**: `ocula "D:\Photos"` opens a folder.
+- **"Open in Ocula" on folders** in File Explorer's right-click menu (the main Windows 11
+  menu, not just "Show more options").
+- **Single window**: opening a photo or folder while Ocula is running brings the existing
+  window forward and shows it there, instead of starting a second copy.
+
+Export notes: output is standard range (HDR gain maps aren't kept); RAW exports use a
+neutral conversion and don't include edits made in other apps; removing location also
+removes the XMP block, which is where some apps keep a second copy of the GPS position.
+
+## Publishing to the Microsoft Store
+
+1. Create a free **individual** developer account in Partner Center
+   (https://storedeveloper.microsoft.com): a Microsoft account and a quick ID check, with no
+   fee or credit card. Use the name Stephen Stirling.
+2. **Reserve the name "Ocula"**. If it's taken, the Store will say so straight away.
+3. In Visual Studio: **Project > Publish > Associate App with the Store** and pick the reserved
+   name. This writes the correct Identity and publisher values into `Package.appxmanifest`.
+4. **Project > Publish > Create App Packages > Microsoft Store**, for **x64 only** (untick
+   ARM64; ARM PCs can still run it through Windows' x64 emulation). Run the Windows App Certification Kit when offered.
+5. The listing text (description, features, search terms, system requirements, screenshot
+   plan, age-rating answers and certification notes) is ready to paste from `store/listing.md`.
+   In Partner Center, create a submission: upload the `.msixupload`, set pricing to **Free**,
+   add screenshots and a description, complete the age rating questionnaire, and give the
+   **privacy policy** URL (the published `PRIVACY.md`).
+6. Ocula declares the `runFullTrust` capability (all WinUI 3 desktop apps do) and a File
+   Explorer menu extension; Partner Center may ask you to explain why. "Desktop photo browser
+   that integrates with File Explorer" is the honest answer.
+7. After certification (usually a few days), copy the Store ID into `AppInfo.StoreProductId`
+   and the GitHub README links.
+
+Never commit `.pfx` signing files to GitHub; `.gitignore` already excludes them.
+
+## Publishing and the "Unknown publisher" warning
+
+Windows takes the publisher name from the package's digital signature, not from the app, so
+the name only shows (and install warnings go away) once the package is signed with a
+certificate Windows trusts:
+
+- **Microsoft Store** (recommended): free for individual developers. Microsoft signs the
+  package and the Store lists "Stephen Stirling" as the publisher. Use Project > Publish >
+  Associate App with the Store in Visual Studio.
+- **Your own download** isn't planned: it would need a paid certificate (see `RELEASING.md`
+  for the options if that ever changes). GitHub carries the source code and release notes.
+
+The copyright line (© 2026 Stephen Stirling) appears on the About page and in the .exe's
+file details.
+
+## Settings and About
+
+The gear button in the title bar opens Settings:
+- **Appearance**: theme (also available from the pill in the title bar).
+- **Library**: add or remove folders from the tree, and see or clear the library cache.
+- **Privacy**: turn online camera photos (Wikidata / Wikimedia Commons) on or off.
+- **About**: version, "Support Ocula" donation button, source and feedback links (hidden
+  until set in `AppInfo.cs`), and third-party notices.
+
+Before publishing, finish `THIRD-PARTY-NOTICES.md` by pasting in each licence text, and ship
+it with the app (and in the repository if you open-source it).
+
+## Phase 3: library search, background indexing and map
+
+**Search your whole library.** Typing in the search box still filters the open folder as you
+type; press **Enter** to search every indexed photo instead. Plain words match file names,
+tags and camera models, and filters can be combined:
+
+| Filter | Example |
+|---|---|
+| Camera | `camera:R5` |
+| Tag | `tag:wedding`, `tag:"smith wedding"` |
+| Rating | `rating>=4`, `rating:5` |
+| Colour label | `label:red` |
+| Date | `year:2025`, `date:2026-09`, `date:2026-09-26` |
+| Folder | `folder:Lisbon` |
+| Type | `hdr`, `raw`, `gps` (has a location) |
+
+The box suggests filters, camera models and tags as you type. Clear it to go back to the folder.
+
+**Background indexing.** A few seconds after launch, Ocula works through every folder in the
+tree, reading metadata and building thumbnails, so search is complete and folders open
+instantly, which makes the biggest difference for NAS folders. It's gentle: a few photos at a
+time on local drives and one at a time on network drives. The status and a pause button sit
+under the folder tree. Unchanged photos are skipped quickly, so later runs finish fast.
+
+**Map.** The map button (next to Find duplicates) shows every photo with a GPS location,
+grouped into numbered clusters until you zoom in. Click a photo for a preview and "Show in
+Ocula". It uses MapLibre (bundled) and free OpenFreeMap tiles, and can be turned off in
+Settings > Privacy. Existing libraries are re-read once to pick up locations.
+
+## HDR preview
+
+On a display with HDR turned on (Windows Settings > System > Display > Use HDR), HDR photos
+are shown in true HDR in the preview panel, marked with an "HDR" badge. A "Show in HDR"
+switch in the HDR card turns it off, and the card explains why when HDR preview isn't possible.
+
+- **Gain-map JPEGs** (Android Ultra HDR, Pixel, Samsung, Lightroom and Adobe exports): the
+  photo and its gain map are combined using the Adobe/Ultra HDR gain map formula, scaled to
+  the screen's actual headroom, so a 400-nit laptop and a 1,000-nit monitor both look right.
+- **PQ and HLG images** (AVIF, HEIC, PNG): converted to real brightness, with highlights
+  beyond the screen's peak rolled off smoothly instead of clipped. AVIF and HEIC need
+  Microsoft's AV1 Video Extension and HEIF Image Extensions, as for any Windows app.
+- **Not yet supported:** iPhone gain maps (Apple's own format, in HEIC and some JPEGs) and
+  32-bit HDR merges. These show the standard version, with "Open in Photos" for HDR.
+
+It follows the monitor: switching HDR on or off, or moving the window to another screen,
+updates the preview straight away. Untested combinations of monitors and photo sources may
+need tuning; the preview is computed at screen size, so it's quick even for large photos.
+
+## Culling: sharpness, stacks, compare and flags
+
+**Sharpness.** Every photo gets a sharpness score from 0 to 100 as it's indexed. Photos under
+35 get an amber **SOFT** badge, and the details panel shows "Sharp · 82" or "Soft · 21". The
+score is based on the sharpest parts of the photo, so a portrait with a blurred background
+still counts as sharp. The eye button in the toolbar hides soft photos; search with `soft` or
+`sharp` across the library. The threshold is a starting point and may need tuning on your photos.
+
+**Stacks.** Photos taken within 1.5 seconds of each other on the same camera collapse into
+one tile with a "×6" badge, showing the picked, best-rated or sharpest shot. "Show all" in the
+details panel expands a stack; the stack button in the toolbar turns stacking off.
+
+**Compare** (button in the toolbar, or press **C**). Select 2 or more photos, or one stack, to
+see them side by side, 2 or 4 at a time. Zooming or panning one photo moves them all to the
+same spot; **100%** shows real pixels for checking focus. Each photo shows its sharpness, and
+the sharpest is tagged. Click a photo in the strip to put it in the highlighted pane.
+
+**Pick and reject** (P, X, U to clear; also in compare). Rejected photos are dimmed. Search
+with `picked` or `rejected`, and in compare, "Move rejects to Recycle Bin" clears them out.
+Flags are kept in Ocula's library: there's no standard place for them in JPEG files.
+
+## Getting photos in and out
+
+**Memory card import.** When a camera card (anything with a DCIM folder) is inserted, a bar
+offers to import it; the **Import** button in the title bar does the same at any time. Photos
+are grouped by day, already-imported ones are hidden, and RAW+JPEG pairs stay together. Choose:
+- an event name, where to save, and a folder pattern (default `{year}\{date} {event}`);
+- renaming, with a pattern such as `{date}_{event}_{seq}` and a live example;
+- tags to add, a backup copy to a second folder (e.g. `\\NAS\photo\Backups`), and ejecting
+  the card when done.
+Every copy is size-checked and keeps its original dates. Ocula remembers what it has imported
+(by name, size and capture time), so the same photo isn't imported twice even after the card
+is reused. Videos are copied too; playing them in Ocula comes in the next batch. Cameras that
+connect over USB without showing up as a drive (MTP) aren't supported; use a card reader.
+
+**Batch rename** (More > Rename…, or **F2**). Same pattern tokens as import, with a live preview
+and checks for clashes. RAW+JPEG pairs and `.xmp` sidecars are renamed together, library data
+(flags, sharpness, thumbnails) moves with them, and **Undo** reverses the last rename.
+
+**Edit in…** opens the selected photos in Lightroom Classic, Photoshop, Capture One, Affinity
+Photo, darktable, RawTherapee or GIMP, whichever are installed, and remembers your choice.
+RAW-capable editors get the RAW file of a pair. "Add an editor…" adds any other program.
+How each editor treats the files (open, or import into its catalogue) is up to that editor.
+
+**Contact sheets** (More > Contact sheet). A PDF of the selection, or the whole folder, with
+3 to 6 photos per row, file names, star ratings, a title, page numbers and your copyright line.
+
+**Client proofing** (More > Client proofing gallery). Creates a folder with web-sized,
+watermarked photos (location removed) and an `index.html`. Copy it to any web space, such as
+the NAS's Web Station folder, and send the client the link. They tap a heart on favourites
+(saved in their browser) and press **Send my favourites**, which emails you the file names.
+Then More > **Import client favourites**, paste the list, and those photos are marked as
+picked and tagged "client pick". There's no server or login involved, so anyone with the link
+can view; use the web server's password protection for private shoots.
+
+## Viewing and organising
+
+**Video.** Videos appear alongside photos with their length on the tile, and play in the
+preview panel and the full-screen viewer. Two playback engines work together:
+- **Windows' own player** handles MP4, MOV, M4V and WMV (hardware-accelerated, nothing extra).
+- **VLC's engine** handles MKV, WebM, AVI, FLV, 3GP, MPEG, VOB and anything else, including
+  clips Windows can't open. It adds a control bar with seek, volume, **audio-track** and
+  **subtitle** menus and playback speed. Subtitle files with the same name as the video
+  (`movie.srt` next to `movie.mkv`) load automatically.
+If Windows' player fails on a file, Ocula retries with VLC by itself. Thumbnails for formats
+Windows can't preview are captured with VLC too, and tags and ratings go in an `.xmp` sidecar,
+as for RAW files. Search with `video`. Export, compare and proofing galleries skip videos.
+`.ts` files aren't listed, because they're far more often TypeScript than video.
+
+**Licence note for VLC.** LibVLC is licensed under the LGPL 2.1. Ocula uses it as separate DLLs
+(not compiled in), and the licence and credit are in the third-party notices. The LGPL expects
+people to be able to swap in their own build of the library; a signed MSIX package makes that
+awkward, and Ocula's own source licence doesn't allow modified builds. That's a recognised
+grey area for LGPL libraries in packaged apps, so read the LGPL (or take advice) before
+publishing. Playing only MP4, MOV and WMV with Windows' own player avoids the question: remove
+the three LibVLC packages and `MediaPlayerView` falls back to it automatically.
+
+**Slideshow** (More > Slideshow, or **F5**). Full screen on any monitor, with cross-fades, 3 to
+15 seconds per photo, shuffle, and file names on request (I). Space pauses, arrows step, Esc
+closes. With several photos selected, only those play.
+
+**Second screen** (More > Show on second screen). A TV, projector or second monitor shows
+whatever you select in Ocula, full screen, while you keep browsing on your own screen. Handy
+for going through photos with a client.
+
+**Colour management.** Photos with a wide-gamut colour profile (Display P3 from phones, Adobe
+RGB and ProPhoto from cameras and editors) are converted properly instead of looking dull or
+oversaturated; the preview shows a "P3" or "ADOBE RGB" badge. For the best results on a
+wide-gamut monitor, also turn on **Automatic colour management** (Windows Settings > System >
+Display). It can be turned off in Settings > Appearance.
+
+**Timeline.** Every indexed photo, newest first, grouped by month (top of the sidebar).
+
+**Collections.** Group photos without moving or copying them (More > Add to collection, or
+"New collection…" in the sidebar). A photo can be in any number of collections, and they
+survive renames. Right-click a collection to rename or delete it.
+
+**Smart albums.** Saved searches that keep themselves up to date: search the library, then
+"Save as smart album" under the title. For example `rating>=4 year:2026` or `tag:wedding picked`.
+
+## Editing, full-screen viewing and layout (phase 5)
+
+**Edit** (E, the pencil on the preview, or Edit in the full-screen viewer):
+- **Crop**: drag the corners, edges or the whole box, with Free, Original, 1:1, 4:5, 3:2,
+  16:9 and 9:16 shapes and rule-of-thirds guides.
+- **Straighten** (±45°, zooming in just enough to hide the corners), **rotate** ([ and ]) and
+  **flip**.
+- **Adjust**: exposure, contrast, highlights, shadows, warmth and saturation, previewed live.
+  Double-click a slider to reset it. **Before / after** (B) splits the photo down the middle.
+- **Save as copy** (default) writes `name_edited.jpg` next to the original. **Save over
+  original** (JPEG, PNG, TIFF) sends the original to the Recycle Bin first, so it can be
+  restored. Saved photos keep their camera details, tags, rating and colour profile.
+- RAW files are edited from Windows' RAW conversion (or the camera preview) and saved as a JPEG
+  copy; for full RAW development, use Edit in… with Lightroom, darktable or similar.
+
+**Full-screen viewer** (Enter, double-click, or the expand button on the preview). Zoom with
+the mouse wheel, pinch, + and -, double-click, Fit (0) and 100% (1); arrows move between photos;
+videos play. The top bar, arrows and filmstrip fade out after a moment and come back when the
+mouse moves. Esc returns to the library on the same photo.
+
+**Filmstrip** under the preview for quick stepping between photos.
+
+**Panels**: the two buttons left of Import (or Ctrl+[ and Ctrl+]) hide the folders and details
+panels for a bigger grid; Ocula remembers the layout.
+
+**Helpful empty states**: a welcome screen, "Opening folder…", an empty folder, nothing found,
+and "no photos match these filters" each explain what's happening, with a button for the
+obvious next step.
+
+## Duplicate and similar photos
+
+The button next to the thumbnail-size slider opens **Find duplicates** for the current folder
+(optionally including subfolders). Choose how close a match must be:
+
+- **Exact copies**: the same photo, even if renamed, re-saved or converted.
+- **Very similar** (default): also resized or re-compressed versions and light edits.
+- **Similar**: also lightly cropped copies (up to roughly 8% trimmed), colour edits and near-identical
+  burst shots. Heavier crops are not reliably found.
+
+A "Rotated or mirrored" switch (on by default) also matches copies that were turned or flipped.
+
+How matching works: each photo gets two kinds of hash (pHash and dHash, from CoenM.ImageHash) in all 8
+orientations (4 rotations, with and without a mirror), plus a 16x16 grayscale picture, stored as 384 bytes
+in the library (`images.fp`). A pair of photos matches only if (1) both hashes agree within the limits for
+the chosen level and (2) the 16x16 pictures correlate closely enough (a brightness-independent pixel check,
+tried in all 8 orientations when "Rotated or mirrored" is on). The limits are in `DuplicateFinder.Limits`
+(differing bits of 64 for pHash / dHash, then minimum correlation): Exact 2 / 4 / 0.97, Very similar
+6 / 12 / 0.93, Similar 20 / 30 / 0.75. The pixel check is what lets "Similar" use loose hash limits and
+still find lightly cropped copies without lumping together different photos.
+Groups are built around the best copy: every other photo must match that copy, so a chain of look-alikes
+(A like B, B like C) no longer merges unrelated photos. The old single-hash column (`phash`) is unused;
+the first scan after updating recomputes fingerprints.
+
+Checked so far: a Python re-creation (the `imagehash` library plus a 16x16 correlation) on 60 synthetic
+images (smooth random scenes, not real photos). Resized, re-compressed, brightened, rotated and mirrored
+copies were found every time; at the "Similar" settings, copies cropped by 5% and 8% per side were found
+every time and 15% crops never; and there were no false matches among 1,770 different pairs (the highest
+correlation between different synthetic photos was 0.45). Real photos with similar layouts, such as two
+sunsets or two shots of the same room, will correlate much higher than random scenes, so expect more
+look-alikes at "Similar" and tune the limits on a real library. The C# is not compiled or run.
+
+Each group shows every match with its size, folder, rating and RAW+JPEG badge. Ocula ticks
+"Keep" on the best copy (highest rating, then RAW+JPEG pairs, then largest file); change any
+tick before pressing **Move to Recycle Bin**. Pairs and their `.xmp` sidecars move together,
+and every group must keep at least one photo. Everything can be restored from the Recycle Bin.
+
+Fingerprints come from the cached thumbnails and are saved in the library, so RAW files are
+checked quickly and repeat scans are nearly instant. Online-only OneDrive files are skipped.
+
+### Where tags, ratings and labels are saved
+
+| File type | Tags | Rating | Colour label |
+|---|---|---|---|
+| JPEG, TIFF, HEIC | inside the file | inside the file | Ocula library only* |
+| RAW (CR2 etc.), PNG, WebP… | `.xmp` sidecar | `.xmp` sidecar | `.xmp` sidecar |
+| RAW+JPEG pair | both | both | `.xmp` sidecar |
+
+*Windows has no metadata field for colour labels in JPEGs. Writing raw XMP into JPEGs with
+ExifTool would fix this and is a possible later addition.
+
+Test on copies of your photos first.
+
+## Still to build
+
+**Phase 4 – culling, viewing, organising and sharing**
+
+_Culling_ (done: compare view, blur detection, burst stacks, pick/reject flags; see above)
+- (done) Memory card import, batch rename, "Edit in…", contact sheets, client proofing; see above.
+
+_Viewing and organising_ (done: video, slideshow and second screen, colour management,
+timeline, collections and smart albums; see above)
+
+_Still to come_
+- **People (face grouping, you name the faces)**: on-device and opt-in.
+  - Faces are found with YuNet and matched with SFace (both from OpenCV's model collection),
+    run through ONNX Runtime (MIT). Check the models' licences and training-data provenance
+    before release.
+  - Similar faces are grouped; you name a group once and Ocula offers that name as a tag on
+    every matching photo, including in the web downloader's "Suggested tags".
+  - Optional "Look up on Wikidata" when you name someone: Ocula lists matches with a short
+    description (many people share a name) and you pick one. The person card (full name including
+    middle names, from Wikidata's "birth name" when it has one; date and place of
+    birth, occupation, current spouse, number of children, height and languages spoken when Wikidata has them) comes from Wikidata (CC0), is kept in the local library only, and only the
+    name is sent. Only the name is written into photos, as a tag. Never automatic, and not
+    offered for people you haven't chosen to look up.
+    Spouse is the one with no end date on Wikidata, shown with the retrieval date and an "can be
+    out of date" note.
+    Former spouses are the P26 entries that have an end date, and "former partners" are Wikidata's
+    unmarried-partner entries (P451, which is not gender specific, so the label is "partners"). Both
+    are only what Wikidata lists, with years when it has them, and are often incomplete.
+  - Lookup order: Wikidata first. Any field it leaves empty (height and former partners most
+    often) is filled from DBpedia's public endpoint (CC BY-SA, no key). For musicians,
+    MusicBrainz (CC0, needs a User-Agent, about one request a second) can add more. Anything still
+    empty stays blank. Never guessed.
+  - The card doesn't label each field with its source, to keep it uncluttered. One line under the
+    card credits "Wikidata and DBpedia (CC BY-SA)" with the retrieval date (the credit DBpedia
+    requires), and Ocula stores the source per field internally. DBpedia is itself derived from
+    Wikipedia, so it fills gaps and is not an independent second opinion. Add DBpedia to
+    `THIRD-PARTY-NOTICES.md` / `AppInfo.Notices` when built.
+  - Skipped on purpose: TMDB (needs an API key that can't be hidden in a distributed app, and
+    non-commercial terms), IMDb datasets (non-commercial, little data), Google Knowledge Graph
+    (terms don't allow storing the results).
+  - **Search by person details.** Once a card is saved, the normal search box understands things
+    like `people taller than 5'3"`, `born before 1990`, `over 40`, `married`, `has children`,
+    `actress`, `born in Texas` or `speaks Spanish`, and they can be combined. Ocula shows how it read the query
+    ("Understood as" chips you can remove) and returns photos of the matching people. It only
+    searches saved cards, runs on this PC, and says what it left out ("1 person has no height on
+    record, 4 named groups haven't been looked up"). It never guesses for people with no card.
+    The cards would be stored as fields (height in cm, birth date, place, occupation, spouse
+    status, child count), not just text, so these are plain database filters rather than AI. Children appear as a count only, never by name.
+  - The Wikidata picker lists people only (items that are instances of "human"); given names,
+    disambiguation pages and other non-person entries are filtered out. The name tags it offers
+    are chips you choose from, for example "Shakira" (ticked) and her full name (not ticked),
+    and only the ticked ones are written into the photos' tags.
+  - No database of named people is shipped, so Ocula only knows names you give it. It does not
+    identify celebrities or strangers.
+  - Off by default, nothing leaves the PC, a one-click "Delete all face data" button, and face
+    data stays in the local library (never written into photo files). Names are written as
+    tags only when you choose.
+- **Smart recognition (what's in the photo)**: on-device and opt-in.
+  - Uses OpenAI's CLIP (MIT licence) via ONNX Runtime to suggest scene and object tags such as
+    beach, sunset, dog, car, snow, and to power natural-language search ("sunset over water").
+  - Embeddings are stored in the local library, computed in the background after indexing.
+  - Suggested tags are shown for approval, never added automatically.
+  - Model download of roughly 100-350 MB, fetched on first use, with a size-versus-accuracy
+    choice in Settings.
+  - Shares the ONNX Runtime setup with People, so build them together.
+
+**Phase 6 – download from the web** (code added, untested)
+- Toolbar > Web opens `WebDownloadWindow`: an address bar and a WebView2 browser pane (so sign-ins and
+  script-built pages work). "Grab images on this page" runs `PageScanner.GrabScript` in the page and
+  lists the images (img, srcset, lazy-load attributes, plain links to image files). Icons under 80 px
+  are skipped.
+- Thumbnail > full size: an image wrapped in a link to an image file uses that file; a link to another
+  page is opened once (`PageScanner.ResolveAsync`) and the full picture is chosen from the declared
+  main image (`og:image`), then large `<img>` tags, by file size (under about 30 KB is treated as an icon
+  or ad). Nothing deeper than one link, and no clicking through ad screens, countdowns, forms,
+  paywalls or logins. Cookies from the page the user is signed in to are only sent back to that same site.
+  Images where no larger version is found show "Couldn't find the full-size version" and aren't selectable.
+- Suggested tags: `TagSuggester` reads the title, headings, breadcrumbs, keywords, alt text, captions and
+  file names, and proposes repeated names and topics as chips. Hover shows why. Text only.
+- Download: `WebDownloader` fetches three at a time into `<Save to>\<page title>`, keeps the real file name,
+  skips pictures already in the folder (same bytes), and reports failures. Then ticked tags (and, if on,
+  `source: site` and `page: title`) are written into the files with `MainWindow.TagDownloadsAsync`,
+  and the folder is opened in the library.
+- Files: `WebImage.cs`, `PageScanner.cs`, `TagSuggester.cs`, `WebDownloader.cs`, `WebDownloadWindow.xaml(.cs)`,
+  `MainWindow.Web.cs`.
+- Checked so far: the grab script was run in headless Chromium on a sample page and found the right images,
+  the lazy-load and srcset variants, captions and links. Nothing else (the C#, the resolver, the tag
+  suggester, the downloader) has been compiled or run.
+- First things to check on a PC: a plain gallery page; a page whose thumbnails link to full-size images;
+  a page that needs sign-in (sign in in the pane, then grab); that tags land in the files; and what
+  `TagSuggester` proposes on a page with a name in the title.
+- Not planned (unchanged): site-specific scrapers or rules for named image hosts, DRM, paywall, ad-screen or
+  login circumvention. Later: following "next page" links, resume, scheduling.
+- (Original plan, kept for reference)
+- "Download from web…" next to Import from card. Browse to a page in a built-in WebView2 pane
+  (so logins and JavaScript-heavy pages work) and choose "Grab images on this page".
+- Finds `<img>`, `srcset`, `og:image` and links to larger images; size filter, select all,
+  thumbnail grid to pick from.
+- Parallel downloads with progress, rename pattern and destination folder as in card import;
+  duplicates skipped using the existing duplicate finder.
+- Writes the source URL and page title into each file's metadata (tags / XMP) so downloads stay
+  searchable.
+- Suggested tags before downloading: Ocula reads the page's own text (title, headings, captions,
+  image alt text and file names, breadcrumbs, `og:` / schema.org data, forum thread titles) and
+  proposes repeated names and topics as tag chips, for example a person's name that appears in
+  the thread title and most captions. Nothing is added until you tick it; ticked tags are written
+  to every downloaded photo. Text only: no face recognition, nothing leaves the PC.
+- Single page first. Following "next page" links, resume and scheduling come later.
+- Not planned: site-specific scrapers, DRM, paywall or login circumvention.
+- Before release: update the Store listing's IARC answers (web access), the privacy policy
+  (Ocula would contact sites the user chooses) and add a short "only download what you have the
+  right to use" note in the dialog.
+
+**People** (code added, untested; Wikidata person card not built yet)
+- Settings > People: switch on and Ocula downloads YuNet and SFace (about 40 MB) from Hugging Face.
+- Faces are found in the background (idle only), grouped when similarity is above 0.45, and
+  stored in the library (`people`, `faces`, `face_scans` tables). Face data is never written to photos.
+- Sidebar > People…: name a group (Enter or Save name), optionally add the name as a tag to all
+  its photos, show the photos, hide the group, "Not this person" on a face (right-click), or
+  delete all face data. Naming a group with an existing name merges the two.
+- Files: `FaceModels.cs`, `FaceService.cs`, `FaceIndexer.cs`, `MainWindow.People.cs`,
+  `PeopleWindow.xaml(.cs)`.
+- First things to check on a PC: YuNet output names and decoding (boxes in the right place),
+  alignment quality, and whether 0.45 groups sensibly. Confirm SFace's licence and its training
+  data provenance before release.
+
+**Smart recognition** (code added, untested)
+- Settings > Smart recognition: switch on, choose Compact (about 155 MB) or Accurate (about
+  610 MB), and Ocula downloads OpenAI's CLIP (ONNX export by Xenova, MIT) from Hugging Face.
+- Analysis runs in the background, one photo at a time, only while you're not using the
+  computer, and results are stored in the library (`embeddings` table). Each photo is analysed
+  once per model; OneDrive online-only files and videos are skipped.
+- Search: type `? sunset over water` in the search box. Results are the closest matches, best
+  first (not a fixed number).
+- Suggested tags: select a photo and tick the chips under Tags, or "Add all". Nothing is added
+  until you click. The list of possible labels is in `Services/SmartLabels.cs`.
+- Delete recognition data removes the models and all stored results.
+- Files: `ClipTokenizer.cs`, `SmartModels.cs` (download), `SmartService.cs` (model),
+  `SmartIndexer.cs` (background), `SmartLabels.cs`, `MainWindow.Smart.cs`, plus the
+  `embeddings` table in `IndexService.cs`.
+- First things to check on a PC:
+  1. Tokenizer: `new ClipTokenizer(vocab, merges).Encode("a photo of a cat")` should start
+     49406, 320, 1125, 539, 320, 2368, 49407 and then be all zeros.
+  2. The model input and output names. The code looks them up (`pixel_values`, `input_ids`,
+     `attention_mask`, `image_embeds`, `text_embeds`) rather than assuming, but confirm
+     `? dog` finds dogs and `? beach` finds beaches.
+  3. Speed: Compact on a laptop CPU should take well under a second per photo.
+- Not yet: GPU acceleration (DirectML), "find similar photos" from a selected photo, and
+  Smart search as its own sidebar view (it is a search-box prefix for now).
+
+**Phase 7 – back up to Google Photos and iCloud Photos** (planned)
+- **Google Photos (upload only):** sign in once, choose folders or albums, and Ocula uploads new
+  photos and videos, skipping ones already sent. Uses the Google Photos Library API's
+  `appendonly` scope. Since 31 March 2025 Google no longer lets apps read a user's whole library,
+  so Ocula can upload and make albums but cannot browse, list or download what is already in
+  Google Photos, and cannot manage sharing.
+  - Needs a free Google Cloud project and OAuth client for Ocula, plus Google's app review for
+    the Photos scope. Check the current quota and review requirements before committing.
+- **iCloud Photos:** Apple has no public API, so Ocula hands photos to the iCloud for Windows
+  app by copying them into its "Uploads" folder, which iCloud then uploads. Needs iCloud for
+  Windows installed and signed in; Ocula cannot see upload progress or what is in iCloud.
+- **Also:** OneDrive and NAS folders are plain destinations, and the import screen already
+  backs up to a NAS while importing.
+- Settings: choose what to back up (folders, ratings or labels, RAW or JPEG only), a log of what
+  was sent, and a clear "disconnect and forget my sign-in" button.
+- Not planned: syncing edits back from Google or Apple, or reading either library.
+
+**Photoshop files (.psd, .psb)** (code added, untested)
+- Listed with thumbnails and previews. Ocula reads the flattened composite that Photoshop saves
+  inside the file ("Maximize Compatibility"), so large layered files open quickly. Files saved
+  without it may preview slightly differently (blend modes and adjustment layers are approximated).
+- CMYK files are converted to sRGB for display; transparent areas show on white in thumbnails.
+- Read-only: tags, ratings and labels go in an `.xmp` sidecar, so the PSD is never modified.
+  Export and Edit in… work from the composite.
+- Not included: browsing layers, and other layered formats (GIMP .xcf, Krita .kra, Affinity).
+
+**Later**
+- Phase 6 extras: multi-page galleries, resumable downloads.
+- iPhone HDR gain maps and 32-bit HDR merges in the HDR preview.

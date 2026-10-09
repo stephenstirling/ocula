@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Ocula.DuplicatesWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Ocula"
+    Title="Find duplicates">
+
+    <Grid x:Name="Root">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Grid x:Name="DragArea" Padding="16,0,150,0" Background="Transparent">
+            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <Image Source="ms-appx:///Assets/Square44x44Logo.targetsize-24_altform-unplated.png" Width="18" Height="18"/>
+                <TextBlock Text="Find duplicates" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Options -->
+        <Grid Grid.Row="1" Padding="20,8,20,14" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel VerticalAlignment="Center">
+                <TextBlock x:Name="FolderText" Style="{StaticResource SubtitleTextBlockStyle}" TextTrimming="CharacterEllipsis"/>
+                <TextBlock x:Name="StatusText" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+            </StackPanel>
+            <ToggleSwitch Grid.Column="1" x:Name="SubfoldersToggle" Header="Include subfolders" IsOn="True"/>
+            <ToggleSwitch Grid.Column="2" x:Name="RotatedToggle" Header="Rotated or mirrored" IsOn="True"
+                          OnContent="Also match" OffContent="Ignore"/>
+            <ComboBox Grid.Column="3" x:Name="SensitivityBox" Header="Match" SelectedIndex="1" MinWidth="150">
+                <x:String>Exact copies</x:String>
+                <x:String>Very similar</x:String>
+                <x:String>Similar</x:String>
+            </ComboBox>
+            <Button Grid.Column="4" x:Name="ScanButton" Style="{StaticResource AccentButtonStyle}" VerticalAlignment="Bottom"
+                    Click="Scan_Click" Content="Scan"/>
+        </Grid>
+
+        <!-- Results -->
+        <Grid Grid.Row="2" Background="{ThemeResource LayerFillColorDefaultBrush}"
+              BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,1,0,1">
+            <ProgressBar x:Name="Progress" VerticalAlignment="Top" Visibility="Collapsed"/>
+            <TextBlock x:Name="EmptyText" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
+                       TextWrapping="Wrap" MaxWidth="420" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                       Text="Choose how closely photos must match, then press Scan. Fingerprints are saved, so scanning again is quick."/>
+            <ScrollViewer Padding="20,16">
+                <ItemsRepeater x:Name="Groups">
+                    <ItemsRepeater.Layout>
+                        <StackLayout Spacing="14"/>
+                    </ItemsRepeater.Layout>
+                    <ItemsRepeater.ItemTemplate>
+                        <DataTemplate x:DataType="local:DuplicateGroup">
+                            <StackPanel Padding="14" Spacing="10" CornerRadius="8" BorderThickness="1"
+                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                                <TextBlock Text="{x:Bind Summary, Mode=OneWay}" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                <ItemsRepeater ItemsSource="{x:Bind Items}">
+                                    <ItemsRepeater.Layout>
+                                        <StackLayout Orientation="Horizontal" Spacing="12"/>
+                                    </ItemsRepeater.Layout>
+                                    <ItemsRepeater.ItemTemplate>
+                                        <DataTemplate x:DataType="local:DuplicateCandidate">
+                                            <StackPanel Width="180" Spacing="6">
+                                                <Border CornerRadius="6" Height="135" BorderThickness="2"
+                                                        BorderBrush="{x:Bind KeepBrush, Mode=OneWay}"
+                                                        Background="{ThemeResource ControlFillColorSecondaryBrush}">
+                                                    <Image Source="{x:Bind Thumbnail, Mode=OneWay}" Stretch="UniformToFill"/>
+                                                </Border>
+                                                <TextBlock Text="{x:Bind Name}" TextTrimming="CharacterEllipsis"
+                                                           Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                <TextBlock Text="{x:Bind Details}" TextTrimming="CharacterEllipsis"
+                                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                <TextBlock Text="{x:Bind FolderName}" TextTrimming="CharacterEllipsis"
+                                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                <CheckBox Content="Keep" IsChecked="{x:Bind Keep, Mode=TwoWay}"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsRepeater.ItemTemplate>
+                                </ItemsRepeater>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsRepeater.ItemTemplate>
+                </ItemsRepeater>
+            </ScrollViewer>
+        </Grid>
+
+        <!-- Footer -->
+        <Grid Grid.Row="3" Padding="20,12" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="SelectionText" VerticalAlignment="Center" TextWrapping="Wrap"/>
+            <Button Grid.Column="1" x:Name="AutoSelectButton" Content="Keep best in each group" Click="AutoSelect_Click" IsEnabled="False"/>
+            <Button Grid.Column="2" x:Name="RemoveButton" Style="{StaticResource AccentButtonStyle}" IsEnabled="False"
+                    Click="Remove_Click">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon Glyph="&#xE74D;" FontSize="14"/>
+                    <TextBlock Text="Move to Recycle Bin"/>
+                </StackPanel>
+            </Button>
+        </Grid>
+    </Grid>
+</Window>

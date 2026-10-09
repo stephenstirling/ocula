@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Ocula.EditWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:canvas="using:Microsoft.Graphics.Canvas.UI.Xaml"
+    Title="Edit">
+
+    <Grid x:Name="Root">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="52"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Title bar -->
+        <Grid Padding="12,0,150,0" ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Grid x:Name="DragArea" Background="Transparent">
+                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <Image Source="ms-appx:///Assets/Square44x44Logo.targetsize-24_altform-unplated.png" Width="18" Height="18"/>
+                    <StackPanel>
+                        <TextBlock x:Name="TitleText" Text="Edit" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                        <TextBlock x:Name="SizeText" Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+            <ToggleButton Grid.Column="1" x:Name="CompareToggle" Click="Compare_Click" VerticalAlignment="Center"
+                          ToolTipService.ToolTip="Before and after (B)">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <FontIcon Glyph="&#xE89F;" FontSize="14"/>
+                    <TextBlock Text="Before / after"/>
+                </StackPanel>
+            </ToggleButton>
+            <Button Grid.Column="2" Content="Cancel" Click="Cancel_Click" VerticalAlignment="Center"/>
+            <Button Grid.Column="3" x:Name="OverwriteButton" Content="Save over original" Click="SaveOver_Click" VerticalAlignment="Center"/>
+            <Button Grid.Column="4" x:Name="SaveButton" Style="{StaticResource AccentButtonStyle}" Click="SaveCopy_Click"
+                    VerticalAlignment="Center" Content="Save as copy"/>
+        </Grid>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="340"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Stage -->
+            <Grid Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}">
+                <canvas:CanvasControl x:Name="Stage" Draw="Stage_Draw" ClearColor="Transparent"
+                                      PointerPressed="Stage_PointerPressed" PointerMoved="Stage_PointerMoved"
+                                      PointerReleased="Stage_PointerReleased" PointerCanceled="Stage_PointerReleased"/>
+                <ProgressRing x:Name="Busy" IsActive="True" Width="40" Height="40"/>
+                <TextBlock x:Name="StatusText" Margin="16" HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           Text="Edits are saved as a copy unless you choose otherwise. Your original stays as it is."/>
+            </Grid>
+
+            <!-- Tools -->
+            <ScrollViewer Grid.Column="1" Padding="20,12,20,20" Background="{ThemeResource LayerFillColorDefaultBrush}">
+                <StackPanel Spacing="18">
+                    <Grid ColumnSpacing="4" Padding="4" CornerRadius="8" Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition/>
+                            <ColumnDefinition/>
+                        </Grid.ColumnDefinitions>
+                        <ToggleButton x:Name="CropTab" HorizontalAlignment="Stretch" IsChecked="True" Click="Tab_Click" Tag="crop">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE7A8;" FontSize="14"/>
+                                <TextBlock Text="Crop"/>
+                            </StackPanel>
+                        </ToggleButton>
+                        <ToggleButton Grid.Column="1" x:Name="AdjustTab" HorizontalAlignment="Stretch" Click="Tab_Click" Tag="adjust">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE9E9;" FontSize="14"/>
+                                <TextBlock Text="Adjust"/>
+                            </StackPanel>
+                        </ToggleButton>
+                    </Grid>
+
+                    <StackPanel x:Name="CropPanel" Spacing="18">
+                        <ComboBox x:Name="AspectBox" Header="Aspect ratio" HorizontalAlignment="Stretch"
+                                  SelectionChanged="Aspect_Changed" SelectedIndex="0">
+                            <x:String>Free</x:String>
+                            <x:String>Original</x:String>
+                            <x:String>1:1 square</x:String>
+                            <x:String>4:5 portrait</x:String>
+                            <x:String>3:2</x:String>
+                            <x:String>16:9</x:String>
+                            <x:String>9:16 story</x:String>
+                        </ComboBox>
+                        <Slider x:Name="StraightenSlider" Header="Straighten" Minimum="-45" Maximum="45" StepFrequency="0.1"
+                                ValueChanged="Straighten_Changed"/>
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Rotate and flip" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Click="RotateLeft_Click" ToolTipService.ToolTip="Rotate left ([)" AutomationProperties.Name="Rotate left">
+                                    <FontIcon Glyph="&#xE7AD;" FontSize="16"/>
+                                </Button>
+                                <Button Click="RotateRight_Click" ToolTipService.ToolTip="Rotate right (])" AutomationProperties.Name="Rotate right">
+                                    <FontIcon Glyph="&#xE7AD;" FontSize="16" RenderTransformOrigin="0.5,0.5">
+                                        <FontIcon.RenderTransform><ScaleTransform ScaleX="-1"/></FontIcon.RenderTransform>
+                                    </FontIcon>
+                                </Button>
+                                <ToggleButton x:Name="FlipHToggle" Click="Flip_Click" ToolTipService.ToolTip="Flip horizontally"
+                                              AutomationProperties.Name="Flip horizontally">
+                                    <FontIcon Glyph="&#xE8AB;" FontSize="16"/>
+                                </ToggleButton>
+                                <ToggleButton x:Name="FlipVToggle" Click="Flip_Click" ToolTipService.ToolTip="Flip vertically"
+                                              AutomationProperties.Name="Flip vertically">
+                                    <FontIcon Glyph="&#xE8AB;" FontSize="16" RenderTransformOrigin="0.5,0.5">
+                                        <FontIcon.RenderTransform><RotateTransform Angle="90"/></FontIcon.RenderTransform>
+                                    </FontIcon>
+                                </ToggleButton>
+                            </StackPanel>
+                        </StackPanel>
+                        <TextBlock TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   Text="Drag the corners or edges to crop, or drag inside the box to move it."/>
+                        <Button Content="Reset crop" Click="ResetCrop_Click"/>
+                    </StackPanel>
+
+                    <StackPanel x:Name="AdjustPanel" Spacing="12" Visibility="Collapsed">
+                        <Slider x:Name="ExposureSlider" Header="Exposure" Minimum="-100" Maximum="100" ValueChanged="Adjust_Changed"/>
+                        <Slider x:Name="ContrastSlider" Header="Contrast" Minimum="-100" Maximum="100" ValueChanged="Adjust_Changed"/>
+                        <Slider x:Name="HighlightsSlider" Header="Highlights" Minimum="-100" Maximum="100" ValueChanged="Adjust_Changed"/>
+                        <Slider x:Name="ShadowsSlider" Header="Shadows" Minimum="-100" Maximum="100" ValueChanged="Adjust_Changed"/>
+                        <Slider x:Name="WarmthSlider" Header="Warmth" Minimum="-100" Maximum="100" ValueChanged="Adjust_Changed"/>
+                        <Slider x:Name="SaturationSlider" Header="Saturation" Minimum="-100" Maximum="100" ValueChanged="Adjust_Changed"/>
+                        <TextBlock TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   Text="Double-click a slider to reset it. For RAW development, use Edit in… with a RAW editor."/>
+                        <Button Content="Reset adjustments" Click="ResetAdjust_Click"/>
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</Window>

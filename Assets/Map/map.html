@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ocula map</title>
+<!-- MapLibre GL JS is bundled with the app (see BUILDING.md), not loaded from the internet. -->
+<link rel="stylesheet" href="maplibre-gl.css">
+<script src="maplibre-gl.js"></script>
+<style>
+  html, body, #map { margin: 0; height: 100%; }
+  body { font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif; background: #E6E6E3; }
+  #empty { position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+           text-align: center; color: #5C5C64; padding: 24px; pointer-events: none; }
+  .photo { width: 220px; }
+  .photo img { width: 220px; height: 150px; object-fit: cover; border-radius: 6px; background: #EEE; display: block; }
+  .photo .name { font-weight: 600; margin-top: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .photo .date { color: #5C5C64; font-size: 12px; margin: 2px 0 8px; }
+  .photo button { width: 100%; height: 32px; border: 0; border-radius: 6px; background: #3B6FE0; color: #fff;
+                  font: inherit; font-weight: 500; cursor: pointer; }
+  .photo button:hover { background: #2A55B8; }
+  .maplibregl-popup-content { border-radius: 10px; padding: 10px; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="empty">No photos with a location yet. Photos taken with GPS on, or on most phones, will appear here once Ocula has indexed them.</div>
+<script>
+  const send = (message) => window.chrome.webview.postMessage(message);
+
+  const map = new maplibregl.Map({
+    container: 'map',
+    style: 'https://tiles.openfreemap.org/styles/liberty',
+    center: [0, 30],
+    zoom: 1.5,
+    attributionControl: { compact: true }
+  });
+  map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+
+  let loaded = false;
+  let pending = null;
+
+  map.on('load', () => {
+    map.addSource('photos', {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: [] },
+      cluster: true, clusterRadius: 48, clusterMaxZoom: 16
+    });
+    map.addLayer({
+      id: 'clusters', type: 'circle', source: 'photos', filter: ['has', 'point_count'],
+      paint: {
+        'circle-color': '#3B6FE0', 'circle-stroke-color': '#FFFFFF', 'circle-stroke-width': 2,
+        'circle-radius': ['step', ['get', 'point_count'], 16, 25, 22, 250, 30]
+      }
+    });
+    map.addLayer({
+      id: 'cluster-count', type: 'symbol', source: 'photos', filter: ['has', 'point_count'],
+      layout: { 'text-field': ['get', 'point_count_abbreviated'], 'text-size': 13, 'text-font': ['Noto Sans Regular'] },
+      paint: { 'text-color': '#FFFFFF' }
+    });
+    map.addLayer({
+      id: 'photo', type: 'circle', source: 'photos', filter: ['!', ['has', 'point_count']],
+      paint: { 'circle-color': '#FFD27A', 'circle-radius': 7, 'circle-stroke-color': '#13254F', 'circle-stroke-width': 2 }
+    });
+
+    map.on('click', 'clusters', async (e) => {
+      const feature = map.queryRenderedFeatures(e.point, { layers: ['clusters'] })[0];
+      const zoom = await map.getSource('photos').getClusterExpansionZoom(feature.properties.cluster_id);
+      map.easeTo({ center: feature.geometry.coordinates, zoom });
+    });
+    map.on('click', 'photo', (e) => showPhoto(e.features[0]));
+    for (const layer of ['clusters', 'photo']) {
+      map.on('mouseenter', layer, () => map.getCanvas().style.cursor = 'pointer');
+      map.on('mouseleave', layer, () => map.getCanvas().style.cursor = '');
+    }
+
+    loaded = true;
+    if (pending) showPhotos(pending);
+    send({ type: 'ready' });
+  });
+
+  function showPhotos(items) {
+    if (!loaded) { pending = items; return; }
+    document.getElementById('empty').style.display = items.length ? 'none' : 'flex';
+    map.getSource('photos').setData({
+      type: 'FeatureCollection',
+      features: items.map(p => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [p.lon, p.lat] },
+        properties: { path: p.path, name: p.name, date: p.date || '' }
+      }))
+    });
+    if (items.length) {
+      const bounds = new maplibregl.LngLatBounds();
+      items.forEach(p => bounds.extend([p.lon, p.lat]));
+      map.fitBounds(bounds, { padding: 60, maxZoom: 12, duration: 0 });
+    }
+  }
+
+  // Build the popup with DOM calls (not HTML strings) so file names can't inject markup.
+  function showPhoto(feature) {
+    const { path, name, date } = feature.properties;
+    const box = document.createElement('div');
+    box.className = 'photo';
+    const img = document.createElement('img');
+    img.alt = '';
+    img.dataset.path = path;
+    const title = document.createElement('div');
+    title.className = 'name';
+    title.textContent = name;
+    const when = document.createElement('div');
+    when.className = 'date';
+    when.textContent = date;
+    const open = document.createElement('button');
+    open.textContent = 'Show in Ocula';
+    open.addEventListener('click', () => send({ type: 'open', path }));
+    box.append(img, title, when, open);
+
+    new maplibregl.Popup({ offset: 12, maxWidth: '260px' })
+      .setLngLat(feature.geometry.coordinates).setDOMContent(box).addTo(map);
+    send({ type: 'thumb', path });
+  }
+
+  window.chrome.webview.addEventListener('message', (e) => {
+    const m = e.data;
+    if (m.type === 'photos') showPhotos(m.items);
+    if (m.type === 'thumb') {
+      document.querySelectorAll('img[data-path]').forEach(img => {
+        if (img.dataset.path === m.path) img.src = m.data;
+      });
+    }
+  });
+</script>
+</body>
+</html>
