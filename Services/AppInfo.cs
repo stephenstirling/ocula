@@ -69,8 +69,8 @@ public static class AppInfo
         new ThirdPartyNotice("MetadataExtractor", "Apache-2.0", "https://github.com/drewnoakes/metadata-extractor-dotnet", "Camera and EXIF details"),
         new ThirdPartyNotice("Microsoft.Data.Sqlite / SQLite", "MIT / public domain", "https://github.com/dotnet/efcore", "Local library"),
         new ThirdPartyNotice("CoenM.ImageHash", "MIT", "https://github.com/coenm/ImageHash", "Duplicate detection"),
-        new ThirdPartyNotice("SixLabors.ImageSharp", "Six Labors Split License", "https://github.com/SixLabors/ImageSharp", "Used by ImageHash"),
-        new ThirdPartyNotice("MapLibre GL JS", "BSD-3-Clause", "https://github.com/maplibre/maplibre-gl-js", "Map view"),
+        new ThirdPartyNotice("SixLabors.ImageSharp 2.1", "Apache-2.0", "https://github.com/SixLabors/ImageSharp", "Used by ImageHash"),
+        new ThirdPartyNotice("MapLibre GL JS 4.7.1", "BSD-3-Clause", "https://github.com/maplibre/maplibre-gl-js", "Map view"),
         new ThirdPartyNotice("OpenFreeMap, OpenMapTiles and OpenStreetMap", "Map data © OpenStreetMap contributors (ODbL)", "https://openfreemap.org", "Map tiles (credited on the map)"),
         new ThirdPartyNotice("Wikidata and Wikimedia Commons", "CC0 data; photos under their own free licences", "https://commons.wikimedia.org", "Camera photos (credited per photo)"),
     };

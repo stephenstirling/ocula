@@ -10,8 +10,8 @@
 <style>
   html, body, #map { margin: 0; height: 100%; }
   body { font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif; background: #E6E6E3; }
-  #empty { position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
-           text-align: center; color: #5C5C64; padding: 24px; pointer-events: none; }
+  #empty, #offline { position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+                     text-align: center; color: #5C5C64; padding: 24px; pointer-events: none; }
   .photo { width: 220px; }
   .photo img { width: 220px; height: 150px; object-fit: cover; border-radius: 6px; background: #EEE; display: block; }
   .photo .name { font-weight: 600; margin-top: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -24,13 +24,15 @@
 </head>
 <body>
 <div id="map"></div>
+<div id="offline">The map needs an internet connection for its background map. It will appear as soon as you're back online.</div>
 <div id="empty">No photos with a location yet. Photos taken with GPS on, or on most phones, will appear here once Ocula has indexed them.</div>
 <script>
   const send = (message) => window.chrome.webview.postMessage(message);
 
+  const styleUrl = 'https://tiles.openfreemap.org/styles/liberty';
   const map = new maplibregl.Map({
     container: 'map',
-    style: 'https://tiles.openfreemap.org/styles/liberty',
+    style: styleUrl,
     center: [0, 30],
     zoom: 1.5,
     attributionControl: { compact: true }
@@ -39,6 +41,16 @@
 
   let loaded = false;
   let pending = null;
+
+  // The background map (style and tiles) comes from the internet. Without a connection the map
+  // never finishes loading, so say why instead of showing a blank map, and retry when back online.
+  const offline = document.getElementById('offline');
+  map.on('error', () => { if (!loaded) offline.style.display = 'flex'; });
+  window.addEventListener('online', () => {
+    if (loaded) return;
+    offline.style.display = 'none';
+    map.setStyle(styleUrl);
+  });
 
   map.on('load', () => {
     map.addSource('photos', {
@@ -75,6 +87,7 @@
     }
 
     loaded = true;
+    offline.style.display = 'none';
     if (pending) showPhotos(pending);
     send({ type: 'ready' });
   });

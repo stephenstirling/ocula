@@ -36,7 +36,8 @@
     <Compile Remove="OculaShell\**;Ocula-Assets\**;docs\**" />
     <None Remove="OculaShell\**;Ocula-Assets\**;docs\**" />
     <Page Remove="OculaShell\**;Ocula-Assets\**;docs\**" />
-    <Content Include="Assets\**" Exclude="Assets\AppIcon*.svg" />
+    <!-- The Windows App SDK packages everything under Assets\ by default; leave out sources and notes. -->
+    <Content Remove="Assets\AppIcon*.svg;Assets\**\README.md" />
   </ItemGroup>
 
   <ItemGroup>
