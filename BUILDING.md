@@ -566,5 +566,9 @@ _Still to come_
 - Not included: browsing layers, and other layered formats (GIMP .xcf, Krita .kra, Affinity).
 
 **Later**
+- **Own duplicate hashing, then ImageSharp 4.x.** Replace `CoenM.ImageSharp.ImageHash` with
+  Ocula's own pHash and dHash (`DuplicateFinder`), keeping the stored fingerprint format or
+  recomputing it once, then move ImageSharp from 2.1.13 to 4.1.2 or later to clear the five
+  advisories in `docs/KNOWN-ISSUES.md`. Check the Six Labors Split License (3.0 and later) first.
 - Phase 6 extras: multi-page galleries, resumable downloads.
 - iPhone HDR gain maps and 32-bit HDR merges in the HDR preview.
