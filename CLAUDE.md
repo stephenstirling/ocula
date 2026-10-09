@@ -9,14 +9,56 @@ Windows App SDK, SQLite library, WebView2, ImageSharp, CoenM.ImageHash, ONNX Run
 Distributed through the Microsoft Store (free signing) and GitHub. No paid certificates, no Azure.
 Donations (Buy Me a Coffee) are hidden in Store builds (`AppInfo.DonationsInStoreBuild = false`).
 
-## Honest status
-**Nothing here has ever been compiled or run.** All code was written without a Windows machine.
-Expect compile errors. There is no `.csproj` yet: `Ocula.csproj-additions.xml` and
-`Package.appxmanifest-additions.xml` describe what to merge into a fresh WinUI 3 project.
+## Status (October 2026)
+The project builds and runs. `Ocula.csproj` (the app, single-project MSIX), `Ocula.slnx` and
+`OculaShell\OculaShell.vcxproj` (C++ "Open in Ocula" folder menu) are at the repo root.
+`Ocula.csproj-additions.xml` and `Package.appxmanifest-additions.xml` are already merged and are
+kept only as notes. The code was first written without a Windows machine, so treat any feature
+not listed as tested below as unverified.
+
+**Build and run** (details in `BUILDING.md`):
+- Visual Studio 2026 **Community** has the .NET/WinUI tools and the **Desktop development with
+  C++** workload. Use it, not the separate "Visual Studio 18 Insiders" install (C++ only; leave
+  it alone). Open `Ocula.slnx`, Debug | x64, F5. `Ocula.csproj` builds OculaShell itself, because
+  OculaShell isn't in the solution (so `dotnet build` can use the same file).
+- Everything from the command line: Community's
+  `MSBuild.exe Ocula.slnx -restore -p:Configuration=Debug -p:Platform=x64`.
+- Quick check: `dotnet build -p:Platform=x64` (builds the app but not the C++ DLL).
+- `Directory.Build.props` sends all `bin`/`obj` output to `%USERPROFILE%\.stirling-build\ocula\`,
+  because Windows can't register an MSIX package from the `Z:` network share.
+- Command-line `devenv` builds log "NuGet package restore failed… could not be loaded" but
+  succeed; Capta logs the same. It's harmless.
+- Git refuses to run on the share ("dubious ownership") unless `safe.directory` allows it. Use
+  `git -c safe.directory='%(prefix)///Plex/Plex/Data/sites/ocula' …` or ask the owner to add it
+  globally; don't change global git config yourself.
+
+**Repository:** `github.com/stephenstirling/ocula`, **private**, `origin`, branch `main`.
+`AppInfo.GitHubRepository` points at it. While it's private, update checks fail (GitHub's public
+API can't see it) and the in-app Source/Feedback/Privacy links stay hidden.
+
+**Tested on the owner's PC:** launch from Start, the folder tree and background indexing
+(including videos), the single-instance redirect, `ocula <folder>` from a terminal, screen-reader
+names for tiles and sidebar entries, a Release MSIX build, and the Map page offline and online
+(in headless Edge, not inside the app).
+
+**Still untested:**
+- F5 pressed in the Visual Studio IDE (only `devenv /Build` and `/Deploy` from the command line).
+- "Open in Ocula" on folders in File Explorer, and "Open with" for image files.
+- The Map window inside the app: points, popups, "Show in Ocula", and the offline message.
+- Viewer, slideshow, second screen, compare, edit, export, import, rename, contact sheets,
+  proofing galleries, collections, smart albums, and whether settings are saved.
+- Video playback in either engine (VLC is only tested for length and thumbnails).
+- HDR preview and colour management on real HDR and wide-gamut screens.
+- Smart recognition (CLIP tokenizer, ONNX input/output names, search quality) and People
+  (YuNet/SFace decoding, grouping threshold), including the model downloads.
+- Duplicate finder limits on real photos.
+- Web download on real pages.
+- Update checks and Store packaging with the Windows App Certification Kit.
 
 ## Read first
-1. `BUILDING.md` — architecture, phases, roadmap, first-run checks.
-2. `README.md`, `RELEASING.md`, `PRIVACY.md`, `THIRD-PARTY-NOTICES.md`.
+1. `BUILDING.md` — setup and build, architecture, phases, roadmap, first-run checks.
+2. `docs/KNOWN-ISSUES.md` (ImageSharp 2.1.13 advisories), `README.md`, `RELEASING.md`,
+   `PRIVACY.md`, `THIRD-PARTY-NOTICES.md`.
 3. `docs/mockups/*.png` and `docs/design-canvas/*.dc.html` — the agreed UI designs (design only).
 
 ## Rules
