@@ -48,6 +48,9 @@ public sealed class ImageItem : INotifyPropertyChanged
     public bool IsCloudOnly { get; }
     public bool IsVideo => SupportedFormats.IsVideo(Path);
 
+    /// <summary>What screen readers announce for a tile (list items fall back to ToString()).</summary>
+    public override string ToString() => Name;
+
     /// <summary>Length of a video clip (null for photos).</summary>
     public TimeSpan? Duration
     {

@@ -37,6 +37,9 @@ public sealed class SidebarEntry
     public FontWeight Weight => Kind == Kinds.Heading ? FontWeights.SemiBold : FontWeights.Normal;
     public double Opacity => Kind is Kinds.Heading or Kinds.Action ? 0.7 : 1;
     public Thickness Indent => Kind == Kinds.Heading ? new Thickness(0, 8, 0, 0) : new Thickness(0);
+
+    /// <summary>What screen readers announce for the entry (list items fall back to ToString()).</summary>
+    public override string ToString() => Name;
 }
 
 /// <summary>A month of photos in the timeline.</summary>
