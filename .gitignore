@@ -16,3 +16,6 @@ Ocula-Assets.zip
 
 # Spare icon folder (kept out of the repository)
 Ocula-Assets/
+
+# Signing certificates: never commit
+*.pfx
