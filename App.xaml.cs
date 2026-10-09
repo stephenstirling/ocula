@@ -66,9 +66,16 @@ public partial class App : Application
         return null;
     }
 
+    /// <summary>
+    /// The first argument that is an existing file or folder. A launch's arguments can include
+    /// Ocula's own exe (or the "ocula" alias) as the first item; that's skipped, otherwise a plain
+    /// launch would open Ocula's install folder.
+    /// </summary>
     private static string? FirstExistingPath(IEnumerable<string> candidates) =>
         candidates.Select(a => a.Trim().Trim('"'))
-                  .FirstOrDefault(a => a.Length > 0 && (File.Exists(a) || Directory.Exists(a)));
+                  .FirstOrDefault(a => a.Length > 0 &&
+                                       !a.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
+                                       (File.Exists(a) || Directory.Exists(a)));
 
     /// <summary>Splits a command line on spaces, keeping "quoted paths with spaces" together.</summary>
     private static IEnumerable<string> SplitArguments(string commandLine)
