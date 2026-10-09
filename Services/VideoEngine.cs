@@ -91,7 +91,11 @@ public static class VideoProbe
     private static async Task<VideoInfo?> ProbeCoreAsync(string path)
     {
         using var media = new Media(Vlc(), path, FromType.FromPath);
-        if (await media.Parse(MediaParseOptions.ParseLocal, 10000) != MediaParsedStatus.Done) return null;
+        var status = await media.Parse(MediaParseOptions.ParseLocal, 10000);
+        // LibVLCSharp completes Parse on VLC's own event thread. Releasing the media or starting the
+        // next parse from inside that callback crashes libvlc, so continue on the thread pool.
+        await Task.Yield();
+        if (status != MediaParsedStatus.Done) return null;
 
         var video = media.Tracks.FirstOrDefault(t => t.TrackType == TrackType.Video);
         return new VideoInfo(TimeSpan.FromMilliseconds(Math.Max(0, media.Duration)),
@@ -128,11 +132,14 @@ public static class VideoProbe
                     (opaque, planes) => { Marshal.WriteIntPtr(planes, pin.AddrOfPinnedObject()); return IntPtr.Zero; },
                     (opaque, picture, planes) => { },
                     (opaque, picture) => { if (++frames == 3) gotFrame.TrySetResult(true); }); // skip the first frames, which can be blank
+                // Short clips (and screen recordings of a still screen) can end before a third frame;
+                // then use the last frame there was.
+                player.EndReached += (_, _) => gotFrame.TrySetResult(frames > 0);
 
                 player.Play();
                 var done = await Task.WhenAny(gotFrame.Task, Task.Delay(8000));
                 await Task.Run(() => player.Stop()); // after this, no more writes into the buffer
-                if (done != gotFrame.Task) return null;
+                if (done != gotFrame.Task || !gotFrame.Task.Result) return null;
             }
             finally
             {
