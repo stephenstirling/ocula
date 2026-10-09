@@ -244,12 +244,14 @@ public sealed class FaceService : IDisposable
         y = Math.Clamp(y, 0, accessor.Height - 1.001f);
         int x0 = (int)x, y0 = (int)y;
         float fx = x - x0, fy = y - y0;
+        // Row spans can't be captured by the local function, so copy out the four neighbours.
         var top = accessor.GetRowSpan(y0);
         var bottom = accessor.GetRowSpan(y0 + 1);
+        Rgb24 tl = top[x0], tr = top[x0 + 1], bl = bottom[x0], br = bottom[x0 + 1];
 
         float Mix(Func<Rgb24, float> channel) =>
-            channel(top[x0]) * (1 - fx) * (1 - fy) + channel(top[x0 + 1]) * fx * (1 - fy) +
-            channel(bottom[x0]) * (1 - fx) * fy + channel(bottom[x0 + 1]) * fx * fy;
+            channel(tl) * (1 - fx) * (1 - fy) + channel(tr) * fx * (1 - fy) +
+            channel(bl) * (1 - fx) * fy + channel(br) * fx * fy;
 
         return (Mix(p => p.R), Mix(p => p.G), Mix(p => p.B));
     }
