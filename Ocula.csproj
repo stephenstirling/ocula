@@ -10,6 +10,9 @@
     <!-- x64 only: VLC's engine has no ARM64 build, and the ONNX models are tested on x64. -->
     <Platforms>x64</Platforms>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <!-- Always build for win-x64 so native DLLs (Win2D, Magick, SQLite, ONNX) land next to Ocula.exe. -->
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishProfile>win-$(Platform).pubxml</PublishProfile>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <UseWinUI>true</UseWinUI>
