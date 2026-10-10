@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -23,9 +24,15 @@ public enum SmartTier
 /// </summary>
 public static class SmartModels
 {
-    private const string Repo = "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/main/";
+    // Pinned to one revision so the files can't change under the hashes below
+    // (https://huggingface.co/Xenova/clip-vit-base-patch32/tree/d15189d7028b43f1d3e65039190477f6af591c2a).
+    private const string Repo = "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/d15189d7028b43f1d3e65039190477f6af591c2a/";
 
-    public sealed record ModelFile(string LocalName, string Url);
+    /// <summary>
+    /// A file to download. When Size and Sha256 are given, a download that doesn't match both is
+    /// rejected, so a changed, truncated or tampered file is never loaded.
+    /// </summary>
+    public sealed record ModelFile(string LocalName, string Url, long Size = 0, string? Sha256 = null);
 
     public static string Folder(SmartTier tier) => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -35,18 +42,39 @@ public static class SmartModels
 
     public static string SizeText(SmartTier tier) => tier == SmartTier.Compact ? "about 155 MB" : "about 610 MB";
 
-    public static IReadOnlyList<ModelFile> Files(SmartTier tier) => new[]
-    {
-        new ModelFile("vision.onnx", Repo + (tier == SmartTier.Compact ? "onnx/vision_model_quantized.onnx" : "onnx/vision_model.onnx")),
-        new ModelFile("text.onnx",   Repo + (tier == SmartTier.Compact ? "onnx/text_model_quantized.onnx"   : "onnx/text_model.onnx")),
-        new ModelFile("vocab.json",  Repo + "vocab.json"),
-        new ModelFile("merges.txt",  Repo + "merges.txt")
-    };
+    // Sizes and SHA-256 hashes as published by Hugging Face for the pinned revision.
+    public static IReadOnlyList<ModelFile> Files(SmartTier tier) => tier == SmartTier.Compact
+        ? new[]
+        {
+            new ModelFile("vision.onnx", Repo + "onnx/vision_model_quantized.onnx", 89_117_001,
+                          "583fd1110a514667812fee7d684952aaf82a99b959760c8d7dca7e0ab9839299"),
+            new ModelFile("text.onnx", Repo + "onnx/text_model_quantized.onnx", 64_504_507,
+                          "73baab855d406190da9faa498cfedf65f15cf309f4cc7385b7b032e6d08e5c3a"),
+            Vocab, Merges
+        }
+        : new[]
+        {
+            new ModelFile("vision.onnx", Repo + "onnx/vision_model.onnx", 351_685_709,
+                          "fd6e1402a588279d1723c7534d4bcba5bc0b14b47dfab0e46f8c47b8270d7d40"),
+            new ModelFile("text.onnx", Repo + "onnx/text_model.onnx", 254_058_553,
+                          "3f6571f5bad13a97c469c1622e1cfc4d9aef78b79fdbfcff804ca357bfada8cc"),
+            Vocab, Merges
+        };
 
+    private static readonly ModelFile Vocab = new("vocab.json", Repo + "vocab.json", 862_328,
+        "5047b556ce86ccaf6aa22b3ffccfc52d391ea4accdab9c2f2407da5b742d4363");
+    private static readonly ModelFile Merges = new("merges.txt", Repo + "merges.txt", 524_619,
+        "9fd691f7c8039210e0fced15865466c65820d09b63988b0174bfe25de299051a");
+
+    /// <summary>Every file is present with the expected size (hashes are checked when downloading).</summary>
     public static bool IsInstalled(SmartTier tier)
     {
         foreach (var file in Files(tier))
-            if (!File.Exists(Path.Combine(Folder(tier), file.LocalName))) return false;
+        {
+            var path = Path.Combine(Folder(tier), file.LocalName);
+            if (!File.Exists(path)) return false;
+            if (file.Size > 0 && new FileInfo(path).Length != file.Size) return false;
+        }
         return true;
     }
 
@@ -73,6 +101,7 @@ public static class SmartModels
         var sizes = new long[files.Count];
         for (var i = 0; i < files.Count; i++)
         {
+            if (files[i].Size > 0) { sizes[i] = files[i].Size; continue; }
             using var head = new HttpRequestMessage(HttpMethod.Head, files[i].Url);
             using var response = await http.SendAsync(head, cancel);
             response.EnsureSuccessStatusCode();
@@ -113,8 +142,19 @@ public static class SmartModels
                 File.Delete(part);
                 throw new IOException($"{files[i].LocalName} downloaded incompletely. Please try again.");
             }
+            if (files[i].Sha256 is { } expected && !string.Equals(await Sha256Async(part, cancel), expected, StringComparison.OrdinalIgnoreCase))
+            {
+                File.Delete(part);
+                throw new IOException($"{files[i].LocalName} didn't match the expected file. Please try again.");
+            }
             File.Move(part, target, overwrite: true);
         }
+    }
+
+    private static async Task<string> Sha256Async(string path, CancellationToken cancel)
+    {
+        await using var stream = File.OpenRead(path);
+        return Convert.ToHexString(await SHA256.HashDataAsync(stream, cancel));
     }
 
     public static void Delete(SmartTier tier)
