@@ -1,0 +1,75 @@
+# Builds Ocula and runs the unit tests on every push to main and every pull request.
+# The C++ OculaShell DLL isn't built here: it needs Visual Studio's MSVC v145 tools, and
+# `dotnet build` skips it with a warning (see BUILDING.md).
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      # ClipModelTests skip a tier whose models aren't here; Compact is downloaded below.
+      OCULA_MODELS_DIR: ${{ github.workspace }}\models
+    steps:
+      - uses: actions/checkout@v6
+
+      # The .NET 10 SDK builds the app; the .NET 8 runtime runs the net8.0 tests.
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ hashFiles('Directory.Packages.props', '**/*.csproj') }}
+          restore-keys: nuget-
+
+      # The Compact CLIP models (about 155 MB), at the revision and hashes in Services/SmartModels.cs.
+      - uses: actions/cache@v5
+        id: models
+        with:
+          path: models
+          key: clip-b32-compact-d15189d7028b43f1d3e65039190477f6af591c2a
+
+      - name: Download the Compact CLIP models
+        if: steps.models.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $repo = 'https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/d15189d7028b43f1d3e65039190477f6af591c2a/'
+          $files = @(
+            @{ Name = 'vision.onnx'; Path = 'onnx/vision_model_quantized.onnx'; Sha256 = '583fd1110a514667812fee7d684952aaf82a99b959760c8d7dca7e0ab9839299' },
+            @{ Name = 'text.onnx';   Path = 'onnx/text_model_quantized.onnx';   Sha256 = '73baab855d406190da9faa498cfedf65f15cf309f4cc7385b7b032e6d08e5c3a' },
+            @{ Name = 'vocab.json';  Path = 'vocab.json';                       Sha256 = '5047b556ce86ccaf6aa22b3ffccfc52d391ea4accdab9c2f2407da5b742d4363' },
+            @{ Name = 'merges.txt';  Path = 'merges.txt';                       Sha256 = '9fd691f7c8039210e0fced15865466c65820d09b63988b0174bfe25de299051a' }
+          )
+          $folder = Join-Path $env:OCULA_MODELS_DIR 'clip-b32-compact'
+          New-Item -ItemType Directory -Force $folder | Out-Null
+          foreach ($f in $files) {
+            $target = Join-Path $folder $f.Name
+            Invoke-WebRequest -Uri ($repo + $f.Path) -OutFile $target
+            $hash = (Get-FileHash $target -Algorithm SHA256).Hash
+            if ($hash -ne $f.Sha256) { throw "$($f.Name): SHA-256 $hash doesn't match $($f.Sha256)" }
+          }
+
+      - name: Build
+        run: dotnet build -p:Platform=x64
+
+      - name: Test
+        run: dotnet test -p:Platform=x64
