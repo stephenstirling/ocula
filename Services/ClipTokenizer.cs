@@ -42,10 +42,14 @@ public sealed class ClipTokenizer
         }
     }
 
-    /// <summary>Returns exactly 77 token ids: start, the words, end, then zero padding.</summary>
+    /// <summary>
+    /// Returns exactly 77 token ids: start, the words, end, then padding with the end token, as the
+    /// reference tokenizer does (its pad_token is &lt;|endoftext|&gt;).
+    /// </summary>
     public long[] Encode(string text)
     {
-        text = Regex.Replace(text, @"\s+", " ").Trim().ToLowerInvariant();
+        // The reference normalizer (tokenizer.json): NFC, whitespace runs to one space, lowercase.
+        text = Regex.Replace(text.Normalize(NormalizationForm.FormC), @"\s+", " ").Trim().ToLowerInvariant();
 
         var ids = new List<long> { StartToken };
         foreach (Match match in Pattern.Matches(text))
@@ -60,6 +64,7 @@ public sealed class ClipTokenizer
         ids.Add(EndToken);
 
         var result = new long[Length];
+        Array.Fill(result, EndToken);
         for (var i = 0; i < ids.Count; i++) result[i] = ids[i];
         return result;
     }

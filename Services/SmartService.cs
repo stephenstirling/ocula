@@ -4,11 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.ML.OnnxRuntime;
-using Microsoft.ML.OnnxRuntime.Tensors;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing;
 
 namespace Ocula.Services;
 
@@ -27,17 +22,11 @@ public sealed record SmartMatch(string Path, float Score);
 /// </summary>
 public sealed class SmartService : IDisposable
 {
-    private static readonly float[] Mean = { 0.48145466f, 0.4578275f, 0.40821073f };
-    private static readonly float[] Std = { 0.26862954f, 0.26130258f, 0.27577711f };
-    private const int ImageSize = 224;
-
     /// <summary>CLIP's learned temperature: turns cosine similarity into a sharper probability.</summary>
     private const float LogitScale = 100f;
 
     private readonly SemaphoreSlim _loadLock = new(1, 1);
-    private InferenceSession? _vision;
-    private InferenceSession? _text;
-    private ClipTokenizer? _tokenizer;
+    private ClipModel? _model;
     private SmartTier _loadedTier;
     private float[][]? _labelVectors;
 
@@ -60,21 +49,14 @@ public sealed class SmartService : IDisposable
         await _loadLock.WaitAsync();
         try
         {
-            if (_vision != null && _text != null && _tokenizer != null && _loadedTier == tier) return true;
+            if (_model != null && _loadedTier == tier) return true;
             if (!SmartModels.IsInstalled(tier)) return false;
 
             return await Task.Run(() =>
             {
                 Unload();
                 // Leave some cores free so the app stays responsive while photos are analysed.
-                var options = new SessionOptions
-                {
-                    GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL,
-                    IntraOpNumThreads = Math.Max(1, Environment.ProcessorCount / 2)
-                };
-                _vision = new InferenceSession(SmartModels.PathOf(tier, "vision.onnx"), options);
-                _text = new InferenceSession(SmartModels.PathOf(tier, "text.onnx"), options);
-                _tokenizer = new ClipTokenizer(SmartModels.PathOf(tier, "vocab.json"), SmartModels.PathOf(tier, "merges.txt"));
+                _model = ClipModel.Load(SmartModels.Folder(tier), Environment.ProcessorCount / 2);
                 _loadedTier = tier;
                 _labelVectors = null;
                 return true;
@@ -93,11 +75,8 @@ public sealed class SmartService : IDisposable
 
     private void Unload()
     {
-        _vision?.Dispose();
-        _text?.Dispose();
-        _vision = null;
-        _text = null;
-        _tokenizer = null;
+        _model?.Dispose();
+        _model = null;
         _labelVectors = null;
         _library = null;
     }
@@ -105,78 +84,11 @@ public sealed class SmartService : IDisposable
     // ================= Encoding =================
 
     /// <summary>Turns a JPEG/PNG (a thumbnail is plenty) into a normalised embedding. Call from a background thread.</summary>
-    public float[] EncodeImage(byte[] imageBytes)
-    {
-        var session = _vision ?? throw new InvalidOperationException("Smart recognition isn't loaded.");
+    public float[] EncodeImage(byte[] imageBytes) =>
+        (_model ?? throw new InvalidOperationException("Smart recognition isn't loaded.")).EncodeImage(imageBytes);
 
-        using var image = Image.Load<Rgb24>(imageBytes);
-        // Scale so the short side is 224, then cut the centre square: what CLIP was trained on.
-        image.Mutate(x => x.Resize(new ResizeOptions
-        {
-            Size = new Size(ImageSize, ImageSize),
-            Mode = ResizeMode.Crop,
-            Sampler = KnownResamplers.Bicubic
-        }));
-
-        var tensor = new DenseTensor<float>(new[] { 1, 3, ImageSize, ImageSize });
-        image.ProcessPixelRows(accessor =>
-        {
-            for (var y = 0; y < accessor.Height; y++)
-            {
-                var row = accessor.GetRowSpan(y);
-                for (var x = 0; x < row.Length; x++)
-                {
-                    var p = row[x];
-                    tensor[0, 0, y, x] = (p.R / 255f - Mean[0]) / Std[0];
-                    tensor[0, 1, y, x] = (p.G / 255f - Mean[1]) / Std[1];
-                    tensor[0, 2, y, x] = (p.B / 255f - Mean[2]) / Std[2];
-                }
-            }
-        });
-
-        var inputName = session.InputMetadata.Keys.First();
-        return RunAndNormalise(session, new[] { NamedOnnxValue.CreateFromTensor(inputName, tensor) });
-    }
-
-    public float[] EncodeText(string text)
-    {
-        var session = _text ?? throw new InvalidOperationException("Smart recognition isn't loaded.");
-        var tokenizer = _tokenizer!;
-
-        var ids = tokenizer.Encode(text);
-        var inputs = new List<NamedOnnxValue>();
-        foreach (var name in session.InputMetadata.Keys)
-        {
-            if (name.Contains("mask", StringComparison.OrdinalIgnoreCase))
-            {
-                var used = ClipTokenizer.UsedLength(ids);
-                var mask = new DenseTensor<long>(new[] { 1, ClipTokenizer.Length });
-                for (var i = 0; i < used; i++) mask[0, i] = 1;
-                inputs.Add(NamedOnnxValue.CreateFromTensor(name, mask));
-            }
-            else
-            {
-                var tensor = new DenseTensor<long>(new[] { 1, ClipTokenizer.Length });
-                for (var i = 0; i < ids.Length; i++) tensor[0, i] = ids[i];
-                inputs.Add(NamedOnnxValue.CreateFromTensor(name, tensor));
-            }
-        }
-        return RunAndNormalise(session, inputs);
-    }
-
-    private static float[] RunAndNormalise(InferenceSession session, IReadOnlyCollection<NamedOnnxValue> inputs)
-    {
-        using var results = session.Run(inputs);
-
-        // The embedding is the output shaped [1, N]; others (like per-token states) have more dimensions.
-        var output = results.FirstOrDefault(r => r.Name is "image_embeds" or "text_embeds")
-                     ?? results.First(r => r.AsTensor<float>().Dimensions.Length == 2);
-        var vector = output.AsTensor<float>().ToArray();
-
-        var norm = MathF.Sqrt(vector.Sum(v => v * v));
-        if (norm > 0) for (var i = 0; i < vector.Length; i++) vector[i] /= norm;
-        return vector;
-    }
+    public float[] EncodeText(string text) =>
+        (_model ?? throw new InvalidOperationException("Smart recognition isn't loaded.")).EncodeText(text);
 
     // ================= Tag suggestions =================
 

@@ -7,9 +7,13 @@
     <Platform Solution="*|x64" Project="x64" />
     <Deploy />
   </Project>
+  <Project Path="tests/Ocula.Tests/Ocula.Tests.csproj">
+    <Platform Solution="*|x64" Project="x64" />
+  </Project>
   <Folder Name="/Solution Items/">
     <File Path="Directory.Build.props" />
     <File Path="Directory.Packages.props" />
+    <File Path="global.json" />
     <File Path="BUILDING.md" />
   </Folder>
 </Solution>

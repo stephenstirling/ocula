@@ -33,9 +33,9 @@
 
   <ItemGroup>
     <!-- Not part of the app: the C++ shell extension, the spare icon folder and design docs. -->
-    <Compile Remove="OculaShell\**;Ocula-Assets\**;docs\**" />
-    <None Remove="OculaShell\**;Ocula-Assets\**;docs\**" />
-    <Page Remove="OculaShell\**;Ocula-Assets\**;docs\**" />
+    <Compile Remove="OculaShell\**;Ocula-Assets\**;docs\**;tests\**" />
+    <None Remove="OculaShell\**;Ocula-Assets\**;docs\**;tests\**" />
+    <Page Remove="OculaShell\**;Ocula-Assets\**;docs\**;tests\**" />
     <!-- The Windows App SDK packages everything under Assets\ by default; leave out sources and notes. -->
     <Content Remove="Assets\AppIcon*.svg;Assets\**\README.md" />
   </ItemGroup>
