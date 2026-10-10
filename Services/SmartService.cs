@@ -172,13 +172,16 @@ public sealed class SmartService : IDisposable
     private float[] NeutralVector() =>
         _neutralVector ??= SmartScoring.Average(SmartScoring.NeutralPrompts.Select(EncodeText).ToList());
 
-    /// <summary>A hash of the label list that is the same every run (string.GetHashCode isn't).</summary>
+    /// <summary>
+    /// A hash of the label list and the encoding version that is the same every run
+    /// (string.GetHashCode isn't), so the cache is rebuilt when either changes.
+    /// </summary>
     private static int LabelHash()
     {
         unchecked
         {
             var hash = (int)2166136261;
-            foreach (var c in string.Join('|', SmartLabels.All)) hash = (hash ^ c) * 16777619;
+            foreach (var c in SmartModels.EncodingVersion + "|" + string.Join('|', SmartLabels.All)) hash = (hash ^ c) * 16777619;
             return hash;
         }
     }

@@ -38,7 +38,15 @@ public static class SmartModels
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "Ocula", "Models", "clip-b32-" + tier.ToString().ToLowerInvariant());
 
-    public static string ModelId(SmartTier tier) => "clip-b32-" + tier.ToString().ToLowerInvariant();
+    /// <summary>
+    /// Bump when a change to ClipModel or ClipTokenizer changes the vectors they produce, so stored
+    /// photo embeddings and the cached label vectors are made again. v2: the reference-matching
+    /// tokenizer padding and image preprocessing (dbfe037).
+    /// </summary>
+    public const string EncodingVersion = "v2";
+
+    /// <summary>The key stored with each photo's embedding; photos analysed under an older one are analysed again.</summary>
+    public static string ModelId(SmartTier tier) => "clip-b32-" + tier.ToString().ToLowerInvariant() + "-" + EncodingVersion;
 
     public static string SizeText(SmartTier tier) => tier == SmartTier.Compact ? "about 155 MB" : "about 610 MB";
 
