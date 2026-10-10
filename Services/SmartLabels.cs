@@ -23,11 +23,11 @@ public static class SmartLabels
         "rainbow", "fog", "rain", "lightning", "moon", "silhouette", "reflection", "city lights", "fireworks",
         // Nature and animals
         "flower", "tree", "autumn leaves", "grass", "cactus", "mushroom", "dog", "cat", "horse", "cow", "sheep",
-        "bird", "owl", "eagle", "duck", "fish", "butterfly", "insect", "bee", "squirrel", "deer", "bear",
+        "goat", "bird", "owl", "eagle", "duck", "fish", "butterfly", "insect", "bee", "squirrel", "deer", "bear",
         "lion", "elephant", "monkey", "turtle", "whale", "dolphin",
         // People and events
         "portrait", "group photo", "selfie", "baby", "child", "couple", "family", "crowd", "wedding", "birthday party",
-        "graduation", "concert", "festival", "parade",
+        "graduation", "concert", "festival", "parade", "protest", "speech",
         // Sports and activities (CLIP can tell these apart well; add your own)
         "sports", "volleyball", "beach volleyball", "soccer", "american football", "basketball", "baseball", "softball",
         "tennis", "badminton", "table tennis", "golf", "hockey", "ice skating", "rugby", "cricket", "boxing",

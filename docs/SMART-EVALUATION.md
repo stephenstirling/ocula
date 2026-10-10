@@ -159,6 +159,62 @@ were right, which set the threshold. Examples, Compact:
 The last three show the limits: the best guess can be wrong, one strong label can crowd out the
 right one, and labels that aren't in the list (goat) can't be suggested.
 
+### New labels: goat, protest, speech
+
+The tables above were measured before these three labels were added. Most remaining tag errors
+on the owner's photos were things the list had no word for: a goat at a farm, rallies that only
+got "flag" or "sign", people speaking or reading at a microphone. Candidate labels were scored
+with `--dump`, and the tag rule was re-run on the dumped scores with each candidate set before any
+was added. Three were kept:
+
+- **goat**, with the other animals.
+- **protest**: it wins clearly on all three rally photos with placards (56–91%) and nowhere else.
+- **speech**: right on four photos of people talking or reading at a microphone, on Accurate.
+
+Tried and left out:
+
+- "rally" tags an ice-rink photo (as in a car rally); "demonstration" tags an independence-day
+  speech and a poetry reading. "protest" alone does the job.
+- "singer" turns up on about ten ordinary portraits on Accurate ("a photo of singer" reads like a
+  celebrity portrait), even grouped with "concert".
+- "microphone" pushes "concert" off two concert photos on Compact; grouped with "concert", three
+  concerts show "microphone" instead. "musician" and "band" grouped with "concert" do the same.
+  "public speaking" takes "concert" from a singer with a guitar on Compact.
+- "stage" and "audience" hardly change anything. "pig", "chicken", "rabbit", "donkey" and "llama"
+  cause no wrong tags, but the set has no photos to show they help, so they wait.
+
+None of the three is a near-duplicate of an existing label, so `SmartLabels.Groups` is unchanged
+("protest" is not a kind of "parade"; grouping them would hide parades behind it).
+
+Before = the list without the three labels, after = with them; both use the current rule.
+
+| | Compact: no tags | tags per photo | expected tag | Accurate: no tags | tags per photo | expected tag |
+|---|--:|--:|--:|--:|--:|--:|
+| Before | 11 of 178 | 1.4 | 63 of 73 | 0 of 178 | 1.8 | 63 of 73 |
+| After | 10 of 178 | 1.4 | 63 of 73 | 0 of 178 | 1.8 | 63 of 73 |
+
+Every own/ photo whose tags changed:
+
+| Photo | Compact before | Compact after | Accurate before | Accurate after |
+|---|---|---|---|---|
+| 007 speaker at a microphone | portrait | portrait | portrait | speech, portrait |
+| 010 woman talking into a microphone, seated | – | – | concert | speech |
+| 016 the same speaker as 007 | posed portrait | posed portrait | portrait | speech, portrait |
+| 018 singer with a guitar | concert | concert | concert | speech, concert |
+| 020 placards at a night protest | – | protest | poster, crowd | protest |
+| 049 reading from a book at a microphone | book | speech | book, jacket | speech |
+| 091 rally with placards and flags | flag | protest | parade, crowd, poster | protest |
+| 092 rally placard | sign | protest | crowd, parade, text, book, poster | protest, speech |
+| 104 women feeding a goat | horse, cow, horse riding, farm | goat, horse, cow | horse, cow | horse, cow, goat |
+
+New wrong tags: "speech" on the singer (018, next to "concert", which stays) and on the rally
+placard (092). Lost along the way: "farm" for the goat (right) and "horse riding" (wrong) on
+Compact, and on the Commons photos three tags that sat just above 10% and now fall just below it:
+"kitchen" on dishes at a counter (doubtful), "restaurant" on a plated steak (fair) and
+"restaurant" on a 1940s dining room (right; it keeps "birthday party", which still counts as an
+expected tag). Each new label takes a little confidence from all the others, so the list should
+only grow where photos need it.
+
 ## Caveats
 
 - 178 photos is a small set, and the thresholds were chosen on it. The search margin sits in a
