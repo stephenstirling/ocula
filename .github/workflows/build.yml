@@ -69,7 +69,23 @@ jobs:
           }
 
       - name: Build
-        run: dotnet build -p:Platform=x64
+        run: dotnet build -p:Platform=x64 -bl:build.binlog
+
+      # Inspect with https://msbuildlog.com when a build fails here but not on a PC.
+      - name: Upload the build log
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: build-binlog
+          path: build.binlog
+          retention-days: 7
+
+      - name: Show the app's references (diagnostics)
+        if: failure()
+        shell: pwsh
+        run: |
+          dotnet msbuild Ocula.csproj -p:Platform=x64 -t:ResolveReferences -getItem:ReferencePath | Select-String -Pattern '"Identity"' | Select-String -Pattern 'Ocula|stirling|Models' 
+          dotnet msbuild Ocula.csproj -p:Platform=x64 -getItem:Compile | Select-String -Pattern 'Models|Captures|OculaLink'
 
       - name: Test
         run: dotnet test -p:Platform=x64
