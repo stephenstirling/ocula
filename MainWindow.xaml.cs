@@ -1023,17 +1023,17 @@ public sealed partial class MainWindow : Window
 
     // ================= Opening a file or folder (File Explorer, command line) =================
 
-    /// <summary>Shows a folder, or a file's folder with that file selected.</summary>
-    public async Task OpenPathAsync(string path)
+    /// <summary>Shows a folder, or a file's folder with that file selected. Returns the selected file's item.</summary>
+    public async Task<ImageItem?> OpenPathAsync(string path)
     {
         string folder;
         string? file = null;
         if (Directory.Exists(path)) folder = path;
         else if (File.Exists(path)) { folder = Path.GetDirectoryName(path)!; file = path; }
-        else return;
+        else return null;
 
         await LoadFolderAsync(new FolderNode(folder), keepSelection: false);
-        if (file == null) return;
+        if (file == null) return null;
 
         var match = _images.FirstOrDefault(i => i.AllPaths.Any(p => string.Equals(p, file, StringComparison.OrdinalIgnoreCase)));
         if (match != null)
@@ -1041,6 +1041,7 @@ public sealed partial class MainWindow : Window
             Thumbs.SelectedItem = match;
             Thumbs.ScrollIntoView(match);
         }
+        return match;
     }
 
     private List<ImageItem> SelectedOrCurrent()

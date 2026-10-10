@@ -23,7 +23,7 @@ public sealed record GeoPhoto(string Path, string Name, double Latitude, double 
 public sealed class IndexService : IDisposable
 {
     private const string Columns =
-        "path, folder, modified, camera, exposure, taken, rating, label, tags, hdr, thumb, raw, lat, lon, sharp, flag, duration";
+        "path, folder, modified, camera, exposure, taken, rating, label, tags, hdr, thumb, raw, lat, lon, sharp, flag, duration, capture, ocr";
 
     private readonly SqliteConnection _db;
     private readonly SemaphoreSlim _lock = new(1, 1);
@@ -66,6 +66,10 @@ public sealed class IndexService : IDisposable
         AddColumn("sharp INTEGER", rereadAll: false);              // measured by the crawler as it goes
         AddColumn("flag INTEGER NOT NULL DEFAULT 0", rereadAll: false); // pick / reject
         AddColumn("duration INTEGER", rereadAll: false);           // video length in ticks
+        // Capta captures: mode, source app and window title, and the text in the image. Only
+        // PNGs can hold them, so only those are read again.
+        if (AddColumn("capture TEXT", rereadAll: false) | AddColumn("ocr TEXT", rereadAll: false))
+            Execute("UPDATE images SET modified = 0 WHERE path LIKE '%.png';");
         Execute(@"
             CREATE TABLE IF NOT EXISTS collections (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS collection_items (
@@ -163,7 +167,7 @@ public sealed class IndexService : IDisposable
         using var cmd = _db.CreateCommand();
         var where = query.ToSql(cmd);
         cmd.CommandText =
-            $"SELECT path, folder, modified, camera, exposure, taken, rating, label, tags, hdr, NULL, raw, lat, lon, sharp, flag, duration " +
+            $"SELECT path, folder, modified, camera, exposure, taken, rating, label, tags, hdr, NULL, raw, lat, lon, sharp, flag, duration, capture, ocr " +
             $"FROM images WHERE {where} ORDER BY taken DESC, path LIMIT {limit}";
         var rows = new List<IndexRow>();
         using var reader = cmd.ExecuteReader();
@@ -219,13 +223,14 @@ public sealed class IndexService : IDisposable
     {
         using var cmd = _db.CreateCommand();
         cmd.CommandText = @"
-            INSERT INTO images (path, folder, modified, camera, exposure, taken, rating, label, tags, hdr, thumb, raw, lat, lon, sharp, flag, duration)
-            VALUES ($path, $folder, $modified, $camera, $exposure, $taken, $rating, $label, $tags, $hdr, $thumb, $raw, $lat, $lon, $sharp, $flag, $duration)
+            INSERT INTO images (path, folder, modified, camera, exposure, taken, rating, label, tags, hdr, thumb, raw, lat, lon, sharp, flag, duration, capture, ocr)
+            VALUES ($path, $folder, $modified, $camera, $exposure, $taken, $rating, $label, $tags, $hdr, $thumb, $raw, $lat, $lon, $sharp, $flag, $duration, $capture, $ocr)
             ON CONFLICT(path) DO UPDATE SET
                 folder = excluded.folder, modified = excluded.modified, camera = excluded.camera,
                 exposure = excluded.exposure, taken = excluded.taken, rating = excluded.rating,
                 label = excluded.label, tags = excluded.tags, hdr = excluded.hdr, raw = excluded.raw,
                 lat = excluded.lat, lon = excluded.lon, duration = excluded.duration,
+                capture = excluded.capture, ocr = excluded.ocr,
                 sharp = CASE WHEN $clear THEN excluded.sharp ELSE COALESCE(excluded.sharp, images.sharp) END,
                 thumb = CASE WHEN $clear THEN excluded.thumb ELSE COALESCE(excluded.thumb, images.thumb) END,
                 phash = CASE WHEN $clear THEN NULL ELSE images.phash END,
@@ -247,6 +252,8 @@ public sealed class IndexService : IDisposable
         cmd.Parameters.AddWithValue("$sharp", (object?)row.Sharpness ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$flag", row.Flag); // only used for a brand-new row; updates keep the stored flag
         cmd.Parameters.AddWithValue("$duration", (object?)row.DurationTicks ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$capture", (object?)row.Capture ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$ocr", (object?)row.CaptureText ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$clear", clearThumb ? 1 : 0);
         cmd.ExecuteNonQuery();
         return true;
@@ -362,7 +369,7 @@ public sealed class IndexService : IDisposable
     {
         using var cmd = _db.CreateCommand();
         cmd.CommandText = @"SELECT i.path, i.folder, i.modified, i.camera, i.exposure, i.taken, i.rating, i.label, i.tags,
-                                   i.hdr, NULL, i.raw, i.lat, i.lon, i.sharp, i.flag, i.duration
+                                   i.hdr, NULL, i.raw, i.lat, i.lon, i.sharp, i.flag, i.duration, i.capture, i.ocr
                             FROM collection_items c JOIN images i ON i.path = c.path
                             WHERE c.collection_id = $id ORDER BY i.taken, i.path";
         cmd.Parameters.AddWithValue("$id", id);
@@ -520,7 +527,7 @@ public sealed class IndexService : IDisposable
             var names = part.Select((p, i) => "$p" + i).ToList();
             for (var i = 0; i < part.Count; i++) cmd.Parameters.AddWithValue(names[i], part[i]);
             cmd.CommandText =
-                "SELECT path, folder, modified, camera, exposure, taken, rating, label, tags, hdr, NULL, raw, lat, lon, sharp, flag, duration " +
+                "SELECT path, folder, modified, camera, exposure, taken, rating, label, tags, hdr, NULL, raw, lat, lon, sharp, flag, duration, capture, ocr " +
                 $"FROM images WHERE path IN ({string.Join(',', names)})";
             using var reader = cmd.ExecuteReader();
             while (reader.Read())
@@ -824,7 +831,9 @@ public sealed class IndexService : IDisposable
         Longitude: r.IsDBNull(13) ? null : r.GetDouble(13),
         Sharpness: r.IsDBNull(14) ? null : r.GetInt32(14),
         Flag: r.IsDBNull(15) ? 0 : r.GetInt32(15),
-        DurationTicks: r.IsDBNull(16) ? null : r.GetInt64(16));
+        DurationTicks: r.IsDBNull(16) ? null : r.GetInt64(16),
+        Capture: r.FieldCount > 17 && !r.IsDBNull(17) ? r.GetString(17) : null,
+        CaptureText: r.FieldCount > 18 && !r.IsDBNull(18) ? r.GetString(18) : null);
 
     private static DateTime ParseDate(string text) =>
         DateTime.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
@@ -836,16 +845,19 @@ public sealed class IndexService : IDisposable
         cmd.ExecuteNonQuery();
     }
 
-    private void AddColumn(string definition, bool rereadAll)
+    /// <summary>Adds a column to an older library; true if it was added (false if it existed).</summary>
+    private bool AddColumn(string definition, bool rereadAll)
     {
         try
         {
             Execute($"ALTER TABLE images ADD COLUMN {definition};");
             if (rereadAll) Execute("UPDATE images SET modified = 0;");
+            return true;
         }
         catch (SqliteException)
         {
             // Column already exists.
+            return false;
         }
     }
 

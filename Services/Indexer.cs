@@ -55,6 +55,7 @@ public static class Indexer
                 var info = await Task.Run(() => ExifService.Read(item.Path));
                 var user = await MetadataStore.ReadAsync(item);
                 var hdr = await Task.Run(() => HdrDetector.Detect(item.Path, info));
+                var capture = await Task.Run(() => CaptaCapture.Read(item.Path));
                 if (item.Indexed) return; // indexed another way meanwhile
 
                 item.Camera = ExifService.DisplayName(info);
@@ -66,6 +67,10 @@ public static class Indexer
                 item.Tags = user.Tags;
                 item.Rating = user.Rating;
                 item.Label = user.Label;
+                item.Capture = capture?.Summary;
+                item.CaptureText = capture?.Text;
+                // Screenshots have no camera date; when Capta took it is the closest thing.
+                if (item.Taken == null && capture?.CapturedAt is { } capturedAt) item.Taken = capturedAt.LocalDateTime;
 
                 if (withThumbnail && item.CachedThumb == null)
                     item.CachedThumb = await ThumbnailService.GetBytesAsync(item.Path, 384);

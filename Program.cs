@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
+using Ocula.Services;
 
 namespace Ocula;
 
@@ -27,6 +28,7 @@ public static class Program
         WinRT.ComWrappersSupport.InitializeComWrappers();
 
         if (RedirectToRunningInstance()) return 0;
+        if (ImportInBackground()) return 0;
 
         Application.Start(p =>
         {
@@ -60,6 +62,9 @@ public static class Program
         });
         _ = CoWaitForMultipleObjects(0, 0xFFFFFFFF, 1, new[] { done }, out _);
 
+        // A capture sent from Capta mustn't pull Ocula in front of what you're doing.
+        if (App.GetLink(activation) is { InBackground: true }) return true;
+
         // We were just launched by the user, so Windows lets us bring the other window forward.
         try
         {
@@ -68,6 +73,35 @@ public static class Program
         catch
         {
             // The other instance may have closed in the meantime.
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// A capture sent from Capta while Ocula isn't open: copy it into the capture folder and make
+    /// sure that folder is in the library, without opening a window. Ocula indexes it the next
+    /// time it runs.
+    /// </summary>
+    private static bool ImportInBackground()
+    {
+        if (App.GetLink(AppInstance.GetCurrent().GetActivatedEventArgs()) is not { InBackground: true, File: { } file } link)
+            return false;
+        try
+        {
+            var folder = OculaLink.CaptureFolderOrDefault(link.Folder ?? AppSettings.CapturesFolder);
+            AppSettings.CapturesFolder = folder;
+            var path = OculaLink.Adopt(file, folder);
+            var roots = AppSettings.Folders;
+            var parent = System.IO.Path.GetDirectoryName(path)!;
+            if (!OculaLink.IsInside(parent, roots))
+            {
+                roots.Add(parent);
+                AppSettings.Folders = roots;
+            }
+        }
+        catch (Exception e) when (e is System.IO.IOException or UnauthorizedAccessException)
+        {
+            // Nothing to show it in; Capta still has the capture.
         }
         return true;
     }

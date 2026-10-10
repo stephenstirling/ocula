@@ -17,6 +17,8 @@
     <Compile Include="..\..\Services\ClipModel.cs" Link="App\ClipModel.cs" />
     <Compile Include="..\..\Services\SmartLabels.cs" Link="App\SmartLabels.cs" />
     <Compile Include="..\..\Services\SmartScoring.cs" Link="App\SmartScoring.cs" />
+    <Compile Include="..\..\Services\OculaLink.cs" Link="App\OculaLink.cs" />
+    <Compile Include="..\..\Services\CaptaCapture.cs" Link="App\CaptaCapture.cs" />
     <None Include="TestData\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

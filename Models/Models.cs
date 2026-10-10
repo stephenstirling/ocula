@@ -107,6 +107,12 @@ public sealed class ImageItem : INotifyPropertyChanged
     public double? Longitude { get; set; }
     public List<string> Tags { get; set; } = new();
 
+    /// <summary>For a Capta capture: mode, source app and window title (CaptaCapture.Summary), else null.</summary>
+    public string? Capture { get; set; }
+
+    /// <summary>For a Capta capture: the text Capta recognised in it, if any.</summary>
+    public string? CaptureText { get; set; }
+
     public BitmapImage? Thumbnail
     {
         get => _thumbnail;
@@ -196,7 +202,7 @@ public sealed class ImageItem : INotifyPropertyChanged
 
     public IndexRow ToRow() => new(Path, Folder, Modified, Camera, Exposure, Taken, Rating, Label,
                                    string.Join('\n', Tags), Hdr, CachedThumb, RawPath, Latitude, Longitude,
-                                   Sharpness, Flag, Duration?.Ticks);
+                                   Sharpness, Flag, Duration?.Ticks, Capture, CaptureText);
 
     public void ApplyIndex(IndexRow row)
     {
@@ -212,6 +218,8 @@ public sealed class ImageItem : INotifyPropertyChanged
         Sharpness = row.Sharpness;
         Flag = row.Flag;
         Duration = row.DurationTicks is long ticks ? TimeSpan.FromTicks(ticks) : null;
+        Capture = row.Capture;
+        CaptureText = row.CaptureText;
         CachedThumb = row.Thumb;
         Indexed = true;
     }
@@ -229,7 +237,8 @@ public sealed record IndexRow(
     string Path, string Folder, long Modified, string? Camera, string? Exposure, DateTime? Taken,
     int Rating, string? Label, string Tags, string? Hdr, byte[]? Thumb,
     string? RawPath = null, double? Latitude = null, double? Longitude = null,
-    int? Sharpness = null, int Flag = 0, long? DurationTicks = null);
+    int? Sharpness = null, int Flag = 0, long? DurationTicks = null,
+    string? Capture = null, string? CaptureText = null);
 
 /// <summary>Colour labels, using the same names Lightroom and Bridge write to XMP.</summary>
 public static class Labels

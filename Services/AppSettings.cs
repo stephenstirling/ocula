@@ -118,6 +118,16 @@ public static class AppSettings
         set => Store.Values["ImportDestination"] = value;
     }
 
+    // ---------- Capta ----------
+
+    /// <summary>Capta's capture folder, as its last ocula: link said (Capta's default until then).</summary>
+    public static string CapturesFolder
+    {
+        get => Store.Values["CapturesFolder"] as string
+               ?? System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "Captures");
+        set => Store.Values["CapturesFolder"] = value;
+    }
+
     // ---------- Download from web ----------
 
     public static string WebDestination

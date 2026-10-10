@@ -6,6 +6,7 @@ using System.Text;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
+using Ocula.Services;
 using Windows.ApplicationModel.Activation;
 
 namespace Ocula;
@@ -25,6 +26,11 @@ public partial class App : Application
         _window.Activate();
 
         var startup = AppInstance.GetCurrent().GetActivatedEventArgs();
+        if (GetLink(startup) is { } link)
+        {
+            await _window.HandleLinkAsync(link);
+            return;
+        }
         var path = GetPath(startup)
                    ?? FirstExistingPath(Environment.GetCommandLineArgs().Skip(1));
         if (path != null) await _window.OpenPathAsync(path);
@@ -38,15 +44,27 @@ public partial class App : Application
     {
         if (Current is not App { _window: { } window }) return;
         var path = GetPath(args);
+        var link = GetLink(args);
 
         window.DispatcherQueue.TryEnqueue(async () =>
         {
-            if (window.AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized } presenter)
-                presenter.Restore();
-            window.Activate();
-            if (path != null) await window.OpenPathAsync(path);
+            // A capture sent from Capta is added without interrupting what you're doing.
+            if (link is not { InBackground: true })
+            {
+                if (window.AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized } presenter)
+                    presenter.Restore();
+                window.Activate();
+            }
+            if (link != null) await window.HandleLinkAsync(link);
+            else if (path != null) await window.OpenPathAsync(path);
         });
     }
+
+    /// <summary>An ocula: link from Capta (see OculaLink), or null for any other kind of launch.</summary>
+    internal static OculaLink? GetLink(AppActivationArguments args) =>
+        args.Kind == ExtendedActivationKind.Protocol && args.Data is IProtocolActivatedEventArgs protocol
+            ? OculaLink.Parse(protocol.Uri?.OriginalString)
+            : null;
 
     /// <summary>The file or folder a launch refers to: "Open with" or command-line arguments.</summary>
     private static string? GetPath(AppActivationArguments args)

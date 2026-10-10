@@ -10,12 +10,14 @@ namespace Ocula.Services;
 
 /// <summary>
 /// Turns what's typed in the search box into a library query. Plain words match file names,
-/// tags and camera models; filters narrow it down and can be combined freely:
+/// tags, camera models and, for Capta captures, the source app, window title and the text in
+/// the image; filters narrow it down and can be combined freely:
 ///
 ///   camera:R5          tag:wedding         tag:"smith wedding"   label:red
 ///   rating>=4          rating:5            stars:3               (also >, &lt;, &lt;=)
 ///   year:2025          date:2026-09        date:2026-09-26
 ///   hdr                raw                 gps                   folder:Lisbon
+///   capture            hastext             app:Terminal          (Capta captures)
 ///
 /// Every condition must match (AND). Values are passed as SQL parameters, never pasted in.
 /// </summary>
@@ -53,9 +55,10 @@ public sealed class SearchQuery
     }
 
     private static bool IsKnownKey(string key) =>
-        key is "camera" or "tag" or "label" or "rating" or "stars" or "year" or "date" or "folder";
+        key is "camera" or "tag" or "label" or "rating" or "stars" or "year" or "date" or "folder" or "app";
 
-    private static bool IsFlag(string key) => key is "hdr" or "raw" or "gps" or "soft" or "sharp" or "picked" or "rejected" or "video";
+    private static bool IsFlag(string key) =>
+        key is "hdr" or "raw" or "gps" or "soft" or "sharp" or "picked" or "rejected" or "video" or "capture" or "hastext";
 
     /// <summary>Builds the WHERE clause and adds its parameters to the command.</summary>
     public string ToSql(SqliteCommand cmd)
@@ -72,7 +75,7 @@ public sealed class SearchQuery
         foreach (var word in _words)
         {
             var p = Param($"%{word}%");
-            parts.Add($"(path LIKE {p} OR tags LIKE {p} OR camera LIKE {p})");
+            parts.Add($"(path LIKE {p} OR tags LIKE {p} OR camera LIKE {p} OR capture LIKE {p} OR ocr LIKE {p})");
         }
 
         foreach (var (key, op, value) in _filters)
@@ -82,6 +85,9 @@ public sealed class SearchQuery
                 case "camera": parts.Add($"camera LIKE {Param($"%{value}%")}"); break;
                 case "tag": parts.Add($"tags LIKE {Param($"%{value}%")}"); break;
                 case "folder": parts.Add($"folder LIKE {Param($"%{value}%")}"); break;
+                case "app": parts.Add($"capture LIKE {Param($"%{value}%")}"); break;
+                case "capture": parts.Add("capture IS NOT NULL"); break;
+                case "hastext": parts.Add("ocr IS NOT NULL AND ocr <> ''"); break;
                 case "label":
                     parts.Add($"label = {Param(Capitalise(value))}");
                     break;
@@ -134,6 +140,8 @@ public sealed class SearchQuery
                 "picked" => "picked",
                 "video" => "videos",
                 "rejected" => "rejected",
+                "capture" => "Capta captures",
+                "hastext" => "with text",
                 _ => $"{key} {value}"
             });
         }

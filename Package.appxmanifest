@@ -75,6 +75,14 @@
           </uap:FileTypeAssociation>
         </uap:Extension>
 
+        <!-- ocula: links from Capta (Services/OculaLink.cs). Capta treats Ocula as installed only
+             while this scheme is registered. -->
+        <uap:Extension Category="windows.protocol">
+          <uap:Protocol Name="ocula">
+            <uap:DisplayName>Ocula</uap:DisplayName>
+          </uap:Protocol>
+        </uap:Extension>
+
         <!-- ocula "D:\Photos" from a terminal or Win+R. -->
         <uap3:Extension Category="windows.appExecutionAlias" Executable="Ocula.exe" EntryPoint="Windows.FullTrustApplication">
           <uap3:AppExecutionAlias>
