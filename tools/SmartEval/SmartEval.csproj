@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Measures smart search and tag suggestions on a labelled folder of photos.
+    Shares the app's CLIP code (linked below), so it measures exactly what Ocula does.
+    Usage: see README.md next to this file.
+  -->
+  <PropertyGroup>
+    <!-- Windows TFM for StorageFile thumbnails, which is what the app analyses. -->
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\Services\ClipTokenizer.cs" Link="App\ClipTokenizer.cs" />
+    <Compile Include="..\..\Services\ClipModel.cs" Link="App\ClipModel.cs" />
+    <Compile Include="..\..\Services\SmartLabels.cs" Link="App\SmartLabels.cs" />
+    <Compile Include="..\..\Services\SmartScoring.cs" Link="App\SmartScoring.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" />
+    <PackageReference Include="SixLabors.ImageSharp" />
+  </ItemGroup>
+</Project>
