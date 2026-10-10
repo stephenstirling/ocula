@@ -7,9 +7,6 @@ using System.Threading.Tasks;
 
 namespace Ocula.Services;
 
-public sealed record SmartSuggestion(string Label, float Confidence);
-public sealed record SmartMatch(string Path, float Score);
-
 /// <summary>
 /// On-device image recognition with CLIP. One model turns a photo into a list of 512 numbers
 /// (an "embedding"); the other turns a sentence into the same kind of list. Photos and
@@ -18,17 +15,16 @@ public sealed record SmartMatch(string Path, float Score);
 ///   - natural-language search ("sunset over water"): rank photos by closeness to the sentence
 ///   - tag suggestions: compare each photo with a list of common labels (SmartLabels)
 ///
+/// The rules for which photos and labels to show are in SmartScoring.
 /// Everything runs on this PC. Models load on first use and are shared by the whole app.
 /// </summary>
 public sealed class SmartService : IDisposable
 {
-    /// <summary>CLIP's learned temperature: turns cosine similarity into a sharper probability.</summary>
-    private const float LogitScale = 100f;
-
     private readonly SemaphoreSlim _loadLock = new(1, 1);
     private ClipModel? _model;
     private SmartTier _loadedTier;
     private float[][]? _labelVectors;
+    private float[]? _neutralVector;
 
     private List<(string Path, float[] Vector)>? _library;
     private int _libraryVersion = -1;
@@ -58,7 +54,6 @@ public sealed class SmartService : IDisposable
                 // Leave some cores free so the app stays responsive while photos are analysed.
                 _model = ClipModel.Load(SmartModels.Folder(tier), Environment.ProcessorCount / 2);
                 _loadedTier = tier;
-                _labelVectors = null;
                 return true;
             });
         }
@@ -78,6 +73,7 @@ public sealed class SmartService : IDisposable
         _model?.Dispose();
         _model = null;
         _labelVectors = null;
+        _neutralVector = null;
         _library = null;
     }
 
@@ -93,25 +89,8 @@ public sealed class SmartService : IDisposable
     // ================= Tag suggestions =================
 
     /// <summary>Best-matching labels for a photo, most confident first. Call from a background thread.</summary>
-    public IReadOnlyList<SmartSuggestion> SuggestTags(float[] imageVector, int max = 6, float minConfidence = 0.10f)
-    {
-        var labels = SmartLabels.All;
-        var vectors = LabelVectors();
-        if (vectors.Length == 0) return Array.Empty<SmartSuggestion>();
-
-        // Softmax over all labels: confidence says how much better a label fits than the rest.
-        var scores = new float[labels.Count];
-        for (var i = 0; i < scores.Length; i++) scores[i] = LogitScale * Dot(imageVector, vectors[i]);
-        var top = scores.Max();
-        var exp = scores.Select(s => MathF.Exp(s - top)).ToArray();
-        var sum = exp.Sum();
-
-        return exp.Select((e, i) => new SmartSuggestion(labels[i], e / sum))
-                  .Where(s => s.Confidence >= minConfidence)
-                  .OrderByDescending(s => s.Confidence)
-                  .Take(max)
-                  .ToList();
-    }
+    public IReadOnlyList<SmartSuggestion> SuggestTags(float[] imageVector, int max = 6) =>
+        SmartScoring.SuggestTags(imageVector, SmartLabels.All, LabelVectors(), SmartLabels.Groups, max);
 
     private float[][] LabelVectors()
     {
@@ -170,15 +149,15 @@ public sealed class SmartService : IDisposable
     // ================= Search =================
 
     /// <summary>
-    /// Ranks every analysed photo against a sentence. Keeps the close matches only: anything
-    /// within a small margin of the best score (and above a floor), so a nonsense query
-    /// returns little rather than the "least bad" 3000 photos.
+    /// Ranks every analysed photo against a sentence and keeps only real matches: photos clearly
+    /// closer to "a photo of {text}" than to a neutral "a photo" (see SmartScoring.Search), so a
+    /// query that matches nothing returns nothing rather than the "least bad" 3000 photos.
     /// </summary>
     public async Task<List<SmartMatch>> SearchAsync(string text, IndexService index, int limit = 3000)
     {
         if (!await LoadAsync()) return new List<SmartMatch>();
 
-        var query = await Task.Run(() => EncodeText(text));
+        var (query, neutral) = await Task.Run(() => (EncodeText(SmartScoring.SearchPrompt(text)), NeutralVector()));
 
         if (_library == null || _libraryVersion != _version)
         {
@@ -187,19 +166,11 @@ public sealed class SmartService : IDisposable
         }
         var library = _library;
 
-        return await Task.Run(() =>
-        {
-            var scored = library.Select(item => new SmartMatch(item.Path, Dot(query, item.Vector))).ToList();
-            if (scored.Count == 0) return scored;
-
-            var best = scored.Max(s => s.Score);
-            var cutoff = Math.Max(0.19f, best - 0.07f);
-            return scored.Where(s => s.Score >= cutoff)
-                         .OrderByDescending(s => s.Score)
-                         .Take(limit)
-                         .ToList();
-        });
+        return await Task.Run(() => SmartScoring.Search(library, query, neutral, limit));
     }
+
+    private float[] NeutralVector() =>
+        _neutralVector ??= SmartScoring.Average(SmartScoring.NeutralPrompts.Select(EncodeText).ToList());
 
     /// <summary>A hash of the label list that is the same every run (string.GetHashCode isn't).</summary>
     private static int LabelHash()
@@ -210,14 +181,6 @@ public sealed class SmartService : IDisposable
             foreach (var c in string.Join('|', SmartLabels.All)) hash = (hash ^ c) * 16777619;
             return hash;
         }
-    }
-
-    private static float Dot(float[] a, float[] b)
-    {
-        var sum = 0f;
-        var n = Math.Min(a.Length, b.Length);
-        for (var i = 0; i < n; i++) sum += a[i] * b[i];
-        return sum;
     }
 
     public void Dispose()

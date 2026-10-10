@@ -16,6 +16,7 @@
     <Compile Include="..\..\Services\ClipTokenizer.cs" Link="App\ClipTokenizer.cs" />
     <Compile Include="..\..\Services\ClipModel.cs" Link="App\ClipModel.cs" />
     <Compile Include="..\..\Services\SmartLabels.cs" Link="App\SmartLabels.cs" />
+    <Compile Include="..\..\Services\SmartScoring.cs" Link="App\SmartScoring.cs" />
     <None Include="TestData\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

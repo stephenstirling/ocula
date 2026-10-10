@@ -48,4 +48,26 @@ public static class SmartLabels
         // Style
         "candid", "posed portrait", "street photography", "black and white photo", "macro", "aerial view", "panorama", "long exposure", "abstract", "minimalist",
     };
+
+    /// <summary>
+    /// Labels that mean nearly the same thing in a photo. CLIP spreads its confidence across them,
+    /// so a clear portrait could come out as two weak guesses ("portrait" 5%, "posed portrait" 4%)
+    /// and get no tag at all. A group's labels share their confidence and only the best one is
+    /// suggested. Every label here must also be in <see cref="All"/>, and in one group at most.
+    /// </summary>
+    public static readonly IReadOnlyList<string[]> Groups = new[]
+    {
+        new[] { "portrait", "posed portrait" },
+        new[] { "volleyball", "beach volleyball" },
+        new[] { "baseball", "softball" },
+        new[] { "running", "track and field" },
+        new[] { "boat", "sailboat", "sailing" },
+        new[] { "camping", "campsite" },
+        new[] { "sunset", "sunrise", "golden hour" },
+        new[] { "night sky", "stars", "milky way" },
+        new[] { "building", "apartment building" },
+        new[] { "jacket", "coat" },
+        new[] { "swimwear", "swimsuit" },
+        new[] { "cake", "dessert" },
+    };
 }
