@@ -84,8 +84,11 @@ jobs:
         if: failure()
         shell: pwsh
         run: |
-          dotnet msbuild Ocula.csproj -p:Platform=x64 -t:ResolveReferences -getItem:ReferencePath | Select-String -Pattern '"Identity"' | Select-String -Pattern 'Ocula|stirling|Models' 
-          dotnet msbuild Ocula.csproj -p:Platform=x64 -getItem:Compile | Select-String -Pattern 'Models|Captures|OculaLink'
+          Select-String -Path Models\Models.cs -Pattern 'Capture'
+          dotnet msbuild build.binlog -noconlog "-flp:verbosity=diagnostic;logfile=diag.log"
+          # The compiler command lines (sources and references) of both C# compiles of the app.
+          Select-String -Path diag.log -Pattern 'csc(\.exe|\.dll)"? ' | ForEach-Object { $_.Line -split ' (?=/)' } |
+            Select-String -Pattern 'Models|Ocula\.dll|/reference:.*Ocula|/out:' | ForEach-Object { $_.Line.Substring(0, [Math]::Min(300, $_.Line.Length)) }
 
       - name: Test
         run: dotnet test -p:Platform=x64
