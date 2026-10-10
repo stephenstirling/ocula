@@ -49,8 +49,11 @@ names for tiles and sidebar entries, a Release MSIX build, and the Map page offl
   proofing galleries, collections, smart albums, and whether settings are saved.
 - Video playback in either engine (VLC is only tested for length and thumbnails).
 - HDR preview and colour management on real HDR and wide-gamut screens.
-- Smart recognition (CLIP tokenizer, ONNX input/output names, search quality) and People
-  (YuNet/SFace decoding, grouping threshold), including the model downloads.
+- Smart recognition inside the app (search and tag chips after the library is analysed again).
+  The tokenizer, preprocessing, model names and downloads are checked against the reference, and
+  search and tag quality are measured with tools/SmartEval (docs/SMART-EVALUATION.md).
+- People (YuNet/SFace decoding, grouping threshold), including the model download.
+- Capta hand-off: ocula: links (import, edit, captures) and indexing Capta's PNG metadata.
 - Duplicate finder limits on real photos.
 - Web download on real pages.
 - Update checks and Store packaging with the Windows App Certification Kit.

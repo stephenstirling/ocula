@@ -533,29 +533,37 @@ _Still to come_
   alignment quality, and whether 0.45 groups sensibly. Confirm SFace's licence and its training
   data provenance before release.
 
-**Smart recognition** (code added, untested)
+**Smart recognition** (code added; measured with SmartEval, not yet checked in the app)
 - Settings > Smart recognition: switch on, choose Compact (about 155 MB) or Accurate (about
   610 MB), and Ocula downloads OpenAI's CLIP (ONNX export by Xenova, MIT) from Hugging Face.
+  The files are pinned to one revision and rejected unless their size and SHA-256 match
+  (`SmartModels.cs`).
 - Analysis runs in the background, one photo at a time, only while you're not using the
   computer, and results are stored in the library (`embeddings` table). Each photo is analysed
-  once per model; OneDrive online-only files and videos are skipped.
-- Search: type `? sunset over water` in the search box. Results are the closest matches, best
-  first (not a fixed number).
+  once per model and encoding version (`SmartModels.EncodingVersion`; bump it when a change
+  alters the vectors, and every photo is analysed again). OneDrive online-only files and videos
+  are skipped. It runs on the CPU; GPU acceleration isn't built (see "Not yet").
+- Search: type `? sunset over water` in the search box. Ocula asks CLIP about "a photo of
+  {query}" and shows only photos clearly closer to that than to neutral prompts such as "a photo"
+  (`SmartScoring.SearchMargin`, 0.025), best first. A query that matches nothing shows nothing.
 - Suggested tags: select a photo and tick the chips under Tags, or "Add all". Nothing is added
-  until you click. The list of possible labels is in `Services/SmartLabels.cs`.
-- Delete recognition data removes the models and all stored results.
-- Files: `ClipTokenizer.cs`, `SmartModels.cs` (download), `SmartService.cs` (model),
-  `SmartIndexer.cs` (background), `SmartLabels.cs`, `MainWindow.Smart.cs`, plus the
-  `embeddings` table in `IndexService.cs`.
-- First things to check on a PC:
-  1. Tokenizer: `new ClipTokenizer(vocab, merges).Encode("a photo of a cat")` should start
-     49406, 320, 1125, 539, 320, 2368, 49407 and then be all zeros.
-  2. The model input and output names. The code looks them up (`pixel_values`, `input_ids`,
-     `attention_mask`, `image_embeds`, `text_embeds`) rather than assuming, but confirm
-     `? dog` finds dogs and `? beach` finds beaches.
-  3. Speed: Compact on a laptop CPU should take well under a second per photo.
-- Not yet: GPU acceleration (DirectML), "find similar photos" from a selected photo, and
-  Smart search as its own sidebar view (it is a search-box prefix for now).
+  until you click. The best label is offered from 5% confidence and further ones from 10%;
+  near-duplicates in `SmartLabels.Groups` (portrait / posed portrait and so on) share their
+  confidence and show once. The labels are in `Services/SmartLabels.cs`.
+- Files: `ClipTokenizer.cs`, `ClipModel.cs` (models, preprocessing), `SmartScoring.cs` (search
+  and tag rules), `SmartModels.cs` (download), `SmartService.cs`, `SmartIndexer.cs`
+  (background), `SmartLabels.cs`, `MainWindow.Smart.cs`, plus the `embeddings` table in
+  `IndexService.cs`.
+- Checked so far: the tokenizer and image preprocessing match the reference implementation
+  (`tests/Ocula.Tests`), and both tiers' input and output names are confirmed. Search and tag
+  quality are measured on 178 labelled photos with `tools/SmartEval`: search F1 went from 0.60
+  to 0.94; details in `docs/SMART-EVALUATION.md`. Rerun SmartEval after changing a threshold or
+  a label.
+- Still to check on a PC: after updating, Ocula analyses the library again once; then confirm in
+  the app that `? dog` and `? sunset over water` and the tag chips match what SmartEval reports.
+- Not yet: GPU acceleration (Windows ML, which picks a GPU or NPU; DirectML is no longer
+  developed), "find similar photos" from a selected photo, and Smart search as its own sidebar
+  view (it is a search-box prefix for now).
 
 **Phase 7 – back up to Google Photos and iCloud Photos** (planned)
 - **Google Photos (upload only):** sign in once, choose folders or albums, and Ocula uploads new

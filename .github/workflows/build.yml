@@ -24,7 +24,8 @@ jobs:
       DOTNET_NOLOGO: true
       DOTNET_CLI_TELEMETRY_OPTOUT: true
       # ClipModelTests skip a tier whose models aren't here; Compact is downloaded below.
-      OCULA_MODELS_DIR: ${{ github.workspace }}\models
+      # Kept outside the checkout: on Windows a "models" folder there is the source folder Models.
+      OCULA_MODELS_DIR: ${{ github.workspace }}\..\clip-models
     steps:
       - uses: actions/checkout@v6
 
@@ -45,8 +46,8 @@ jobs:
       - uses: actions/cache@v5
         id: models
         with:
-          path: models
-          key: clip-b32-compact-d15189d7028b43f1d3e65039190477f6af591c2a
+          path: ${{ github.workspace }}\..\clip-models
+          key: clip-models-compact-d15189d7028b43f1d3e65039190477f6af591c2a
 
       - name: Download the Compact CLIP models
         if: steps.models.outputs.cache-hit != 'true'
@@ -79,16 +80,6 @@ jobs:
           name: build-binlog
           path: build.binlog
           retention-days: 7
-
-      - name: Show the app's references (diagnostics)
-        if: failure()
-        shell: pwsh
-        run: |
-          Select-String -Path Models\Models.cs -Pattern 'Capture'
-          dotnet msbuild build.binlog -noconlog "-flp:verbosity=diagnostic;logfile=diag.log"
-          # The compiler command lines (sources and references) of both C# compiles of the app.
-          Select-String -Path diag.log -Pattern 'csc(\.exe|\.dll)"? ' | ForEach-Object { $_.Line -split ' (?=/)' } |
-            Select-String -Pattern 'Models|Ocula\.dll|/reference:.*Ocula|/out:' | ForEach-Object { $_.Line.Substring(0, [Math]::Min(300, $_.Line.Length)) }
 
       - name: Test
         run: dotnet test -p:Platform=x64
