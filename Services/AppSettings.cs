@@ -167,13 +167,6 @@ public static class AppSettings
         set => Store.Values["PhotoWindowsLinkView"] = value;
     }
 
-    /// <summary>Closing a snapped photo window re-flows the others to fill the gap.</summary>
-    public static bool PhotoWindowsKeepTidy
-    {
-        get => Store.Values["PhotoWindowsKeepTidy"] as bool? ?? true;
-        set => Store.Values["PhotoWindowsKeepTidy"] = value;
-    }
-
     // ---------- Capta ----------
 
     /// <summary>Capta's capture folder, as its last ocula: link said (Capta's default until then).</summary>

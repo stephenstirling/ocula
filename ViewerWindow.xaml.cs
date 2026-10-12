@@ -335,8 +335,8 @@ public sealed partial class ViewerWindow : Window
             {
                 Content = (i + 1).ToString(),
                 IsChecked = spot == i,
-                Width = 30,
-                Height = 30,
+                Width = 28,
+                Height = 28,
                 Padding = new Thickness(0),
                 FontSize = 12,
             };
@@ -378,13 +378,15 @@ public sealed partial class ViewerWindow : Window
     private void TitleRow_SizeChanged(object sender, SizeChangedEventArgs e) => FitTitleRow(e.NewSize.Width);
 
     /// <summary>
-    /// The full title bar (chip, one button per spot, next display) needs about 280 px beside the
-    /// window buttons; below that, one compact menu holds the same choices.
+    /// The full title bar (chip, one button per spot, next display) fits a sixth of a 3440 px
+    /// ultrawide at 100% (573 px) beside the window buttons; narrower, one compact menu holds the
+    /// same choices.
     /// </summary>
     private void FitTitleRow(double width)
     {
         if (!_photoWindow || width <= 0) return;
-        var full = width >= 140 + 14 + 120 + SpotButtons.Children.Count * 32 + 48 + 80;
+        // Window buttons 140, padding 14, chip ~110, spot buttons 30 each, display button 44, drag 40.
+        var full = width >= 140 + 14 + 110 + SpotButtons.Children.Count * 30 + 44 + 40;
         LayoutChip.Visibility = SpotButtons.Visibility = NextDisplayButton.Visibility =
             full ? Visibility.Visible : Visibility.Collapsed;
         CompactChip.Visibility = full ? Visibility.Collapsed : Visibility.Visible;

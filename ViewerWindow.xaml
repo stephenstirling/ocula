@@ -40,7 +40,7 @@
                 </DropDownButton.Flyout>
             </DropDownButton>
             <StackPanel x:Name="SpotButtons" Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center"/>
-            <!-- Narrow windows (5 columns on a laptop screen) get one menu with the same choices. -->
+            <!-- Narrow windows (6 columns at 150% scaling) get one menu with the same choices. -->
             <DropDownButton x:Name="CompactChip" Grid.Column="2" Visibility="Collapsed" VerticalAlignment="Center"
                             FontSize="12" Padding="10,4" CornerRadius="12" AutomationProperties.Name="Spot and layout">
                 <DropDownButton.Flyout>

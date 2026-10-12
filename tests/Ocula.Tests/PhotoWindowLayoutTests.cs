@@ -5,7 +5,7 @@ namespace Ocula.Tests;
 
 /// <summary>
 /// Where photo windows go on a monitor (PhotoWindowLayout): spots tile the work area exactly,
-/// fewer windows re-flow into wider spots, and new windows take the lowest free spot.
+/// each window keeps its spot's size however many are open, and new windows take the lowest free spot.
 /// </summary>
 public class PhotoWindowLayoutTests
 {
@@ -112,16 +112,29 @@ public class PhotoWindowLayoutTests
     }
 
     [Fact]
-    public void Three_windows_in_five_columns_reflow_into_three_wider_columns_in_spot_order()
+    public void Windows_keep_their_spot_size_however_many_are_open()
     {
         var area = new SpotRect(0, 0, 1920, 1040);
 
-        // Windows hold spots 4, 0 and 2 (opened in that order).
-        var placed = PhotoWindowLayout.Place(SnapLayout.Columns, new[] { 4, 0, 2 }, area);
+        // Three windows in "5 columns", holding spots 4, 0 and 2: each is still a fifth of the screen.
+        var placed = PhotoWindowLayout.Place(SnapLayout.Columns, 5, new[] { 4, 0, 2 }, area);
 
-        Assert.Equal(new SpotRect(1280, 0, 640, 1040), placed[0]); // spot 4: rightmost
-        Assert.Equal(new SpotRect(0, 0, 640, 1040), placed[1]);    // spot 0: leftmost
-        Assert.Equal(new SpotRect(640, 0, 640, 1040), placed[2]);  // spot 2: middle
+        Assert.Equal(new SpotRect(1536, 0, 384, 1040), placed[0]); // spot 5: far right
+        Assert.Equal(new SpotRect(0, 0, 384, 1040), placed[1]);    // spot 1: far left
+        Assert.Equal(new SpotRect(768, 0, 384, 1040), placed[2]);  // spot 3: middle
+    }
+
+    [Fact]
+    public void Six_columns_on_a_3440_ultrawide_are_573_or_574_pixels_left_to_right()
+    {
+        var area = new SpotRect(0, 0, 3440, 1392);
+        var spots = PhotoWindowLayout.Spots(SnapLayout.Columns, PhotoWindowLayout.DefaultSpots, area);
+
+        Assert.Equal(6, spots.Count);
+        Assert.All(spots, s => Assert.InRange(s.Width, 573, 574));
+        Assert.Equal(0, spots[0].X);          // 1: far left
+        Assert.Equal(3440, spots[5].Right);   // 6: far right
+        Assert.Equal(3440, spots.Sum(s => s.Width));
     }
 
     [Fact]

@@ -50,7 +50,6 @@ public sealed partial class SettingsWindow : Window
         FillLayoutBox(AppSettings.PhotoWindowSpots, AppSettings.PhotoWindowLayoutKind);
         WhenFullBox.SelectedIndex = (int)AppSettings.PhotoWindowsWhenFull;
         ReuseSpotToggle.IsOn = AppSettings.PhotoWindowsReuseLastSpot;
-        TidyToggle.IsOn = AppSettings.PhotoWindowsKeepTidy;
         LinkViewToggle.IsOn = AppSettings.PhotoWindowsLinkView;
 
         // Smart recognition
@@ -182,7 +181,6 @@ public sealed partial class SettingsWindow : Window
         AppSettings.PhotoWindowLayoutKind = layout;
         AppSettings.PhotoWindowsWhenFull = (WhenSpotsFull)Math.Max(0, WhenFullBox.SelectedIndex);
         AppSettings.PhotoWindowsReuseLastSpot = ReuseSpotToggle.IsOn;
-        AppSettings.PhotoWindowsKeepTidy = TidyToggle.IsOn;
         AppSettings.PhotoWindowsLinkView = LinkViewToggle.IsOn;
 
         // Layout names depend on the number of spots ("1 large + 4").

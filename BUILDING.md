@@ -569,16 +569,18 @@ _Still to come_
 - A single click shows the photo in the main window, as before. A double-click opens it in its
   own photo window (Settings > Photo windows turns this off; double-click is then full screen).
   "Open in separate windows" (right-click on the thumbnails, or More) opens the selected photos.
-- Each window takes the next free spot on its monitor, left to right. Its title bar has a layout
-  chip (5 columns, 1 large + 4, 3 + 2, 2 + 3, Cascade) and numbered spot buttons; Alt+1 to Alt+6
+- Each window takes the next free spot on its monitor, left to right. With the default 6 columns
+  each window is a sixth of the monitor's width (573 px on a 3440 px ultrawide); spot 1 is the far
+  left, 6 the far right. Its title bar has a layout chip (6 columns, 1 large + 5, 3 + 3, Cascade
+  and so on) and numbered spot buttons; Alt+1 to Alt+6
   do the same, Alt+0 centres the window, and the display button sends it to the next monitor.
-  Narrow windows show one "Spot 3 of 5" menu instead. Choosing a taken spot swaps the two windows.
-- Fewer windows than spots: they share the monitor, so three photos in 5 columns get three wider
-  columns. Moving or resizing a window by hand takes it out of its spot.
-- Settings > Photo windows: number of spots (2 to 6, default 5), layout, what happens when every
-  spot is taken (replace the oldest, ask, or open on top), open in the spot used last, keep
-  snapped windows tidy (close gaps), link zoom and pan across windows.
-- Files: `Services/PhotoWindowLayout.cs` (spot rectangles, re-flow, next free spot; unit-tested
+  Narrow windows show one "Spot 3 of 6" menu instead. Choosing a taken spot swaps the two windows.
+- Spots are fixed: a window keeps its spot's size however many are open, and closing one leaves its
+  spot free for the next photo. Moving or resizing a window by hand takes it out of its spot.
+- Settings > Photo windows: number of spots (2 to 6, default 6), layout, what happens when every
+  spot is taken (replace the oldest, ask, or open on top), open in the spot used last, and link
+  zoom and pan across windows.
+- Files: `Services/PhotoWindowLayout.cs` (spot rectangles, next free spot; unit-tested
   in `tests/Ocula.Tests/PhotoWindowLayoutTests.cs`), `Services/WindowFrame.cs` (hides the
   invisible resize borders), `MainWindow.PhotoWindows.cs`, and the photo-window mode of
   `ViewerWindow`. Design: "Photo windows" boards from the design chat (not yet in `docs/`).

@@ -13,10 +13,11 @@ namespace Ocula;
 
 /// <summary>
 /// Photo windows: double-clicking a thumbnail opens the photo in its own window, which takes the
-/// next free spot on the monitor (5 columns by default). The numbered buttons in each window's
-/// title bar, or Alt+1 to Alt+6, move it to another spot; the windows share the monitor among
-/// themselves, so three photos in "5 columns" get three wider columns. The arithmetic is in
-/// Services/PhotoWindowLayout.cs; the settings are in Settings > Photo windows.
+/// next free spot on the monitor (6 columns by default, so each window is a sixth of the screen's
+/// width). The numbered buttons in each window's title bar, or Alt+1 to Alt+6, move it to another
+/// spot: 1 is the far left, 6 the far right. Spots are fixed, so a window keeps its size however
+/// many are open. The arithmetic is in Services/PhotoWindowLayout.cs; the settings are in
+/// Settings > Photo windows.
 /// </summary>
 public sealed partial class MainWindow
 {
@@ -142,7 +143,7 @@ public sealed partial class MainWindow
         var layout = AppSettings.PhotoWindowLayoutKind;
         var snapped = _photoWindows.Where(w => w.Spot != null && w.Display == display).ToList();
         if (snapped.Count == 0) return;
-        var rects = PhotoWindowLayout.Place(layout, snapped.Select(w => w.Spot!.Value).ToList(), WorkArea(display));
+        var rects = PhotoWindowLayout.Place(layout, AppSettings.PhotoWindowSpots, snapped.Select(w => w.Spot!.Value).ToList(), WorkArea(display));
         for (var i = 0; i < snapped.Count; i++) snapped[i].Window.PlaceAt(rects[i]);
     }
 
@@ -187,7 +188,6 @@ public sealed partial class MainWindow
         AppSettings.PhotoWindowsLastSpot = spot;
 
         ArrangeDisplay(entry.Display);
-        if (oldDisplay != entry.Display && AppSettings.PhotoWindowsKeepTidy) ArrangeDisplay(oldDisplay);
         UpdateSnapBars();
     }
 
@@ -222,7 +222,6 @@ public sealed partial class MainWindow
 
         if (entry.Spot != null) ArrangeDisplay(to);
         else entry.Window.PlaceAt(PhotoWindowLayout.Centre(WorkArea(to)));
-        if (AppSettings.PhotoWindowsKeepTidy) ArrangeDisplay(from);
         UpdateSnapBars();
     }
 
@@ -233,7 +232,7 @@ public sealed partial class MainWindow
         UpdateSnapBars();
     }
 
-    /// <summary>Dragged or resized by hand: it leaves its spot, and the others may close the gap.</summary>
+    /// <summary>Dragged or resized by hand: it leaves its spot, which is then free for the next photo.</summary>
     public void PhotoWindowMovedByUser(ViewerWindow window)
     {
         if (EntryFor(window) is not { Spot: not null } entry) return;
@@ -243,9 +242,7 @@ public sealed partial class MainWindow
 
     private void Unsnap(PhotoWindowEntry entry)
     {
-        var had = entry.Spot != null;
         entry.Spot = null;
-        if (had && AppSettings.PhotoWindowsKeepTidy) ArrangeDisplay(entry.Display);
         UpdateSnapBars();
     }
 
@@ -253,7 +250,6 @@ public sealed partial class MainWindow
     {
         if (EntryFor(window) is not { } entry) return;
         _photoWindows.Remove(entry);
-        if (entry.Spot != null && AppSettings.PhotoWindowsKeepTidy) ArrangeDisplay(entry.Display);
         UpdateSnapBars();
     }
 

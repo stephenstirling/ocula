@@ -48,7 +48,7 @@
                     <toolkit:SettingsExpander.HeaderIcon><FontIcon Glyph="&#xE737;"/></toolkit:SettingsExpander.HeaderIcon>
                     <ToggleSwitch x:Name="PhotoWindowsToggle" Toggled="PhotoWindows_Changed"/>
                     <toolkit:SettingsExpander.Items>
-                        <toolkit:SettingsCard Header="Spots" Description="How many photo windows share a screen.">
+                        <toolkit:SettingsCard Header="Spots" Description="How many photo windows fit side by side. With 6, each window is a sixth of the screen's width; spot 1 is the far left.">
                             <ComboBox x:Name="SpotsBox" SelectionChanged="PhotoWindows_Changed" MinWidth="200">
                                 <ComboBoxItem Content="2" Tag="2"/>
                                 <ComboBoxItem Content="3" Tag="3"/>
@@ -70,10 +70,6 @@
                         <toolkit:SettingsCard Header="Open in the spot used last"
                                               Description="A new photo replaces the one in the spot you picked last, instead of taking the next free spot.">
                             <ToggleSwitch x:Name="ReuseSpotToggle" Toggled="PhotoWindows_Changed"/>
-                        </toolkit:SettingsCard>
-                        <toolkit:SettingsCard Header="Keep snapped windows tidy"
-                                              Description="When a window is closed or moved out of its spot, the others widen to fill the gap.">
-                            <ToggleSwitch x:Name="TidyToggle" Toggled="PhotoWindows_Changed"/>
                         </toolkit:SettingsCard>
                         <toolkit:SettingsCard Header="Link zoom and pan"
                                               Description="Zooming or panning one photo window does the same in the others, for comparing details.">

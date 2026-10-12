@@ -37,21 +37,22 @@ public readonly record struct SpotRect(int X, int Y, int Width, int Height)
 }
 
 /// <summary>
-/// The arithmetic behind photo windows: where each spot is on a monitor, how windows re-flow when
-/// fewer are open than there are spots, and which spot a new window takes. Knows nothing about
+/// The arithmetic behind photo windows: where each spot is on a monitor and which spot a new
+/// window takes. Spots are fixed: with 6 columns each window is a sixth of the monitor's width
+/// wherever it sits, however many are open. Knows nothing about
 /// windows, so it is unit-tested (tests/Ocula.Tests/PhotoWindowLayoutTests.cs).
 /// </summary>
 public static class PhotoWindowLayout
 {
     public const int MinSpots = 2;
     public const int MaxSpots = 6;
-    public const int DefaultSpots = 5;
+    public const int DefaultSpots = 6;
 
     public static IReadOnlyList<SnapLayout> Layouts { get; } = Enum.GetValues<SnapLayout>();
 
     public static int ClampSpots(int spots) => Math.Clamp(spots, MinSpots, MaxSpots);
 
-    /// <summary>The name shown on the layout chip, e.g. "5 columns", "1 large + 4" or "3 + 2".</summary>
+    /// <summary>The name shown on the layout chip, e.g. "6 columns", "1 large + 5" or "3 + 3".</summary>
     public static string Name(SnapLayout layout, int spots) => layout switch
     {
         SnapLayout.Columns => $"{spots} columns",
@@ -101,18 +102,13 @@ public static class PhotoWindowLayout
     }
 
     /// <summary>
-    /// Where each snapped window goes, given the spot each one holds (0-based, any order, gaps
-    /// allowed). Windows keep their order by spot but share the screen among themselves, so three
-    /// photos in "5 columns" get three wider columns.
+    /// Where each snapped window goes, given the spot each one holds (0-based). Spots are fixed, so
+    /// spot 0 is always the far left and the last spot the far right, whatever else is open.
     /// </summary>
-    public static IReadOnlyList<SpotRect> Place(SnapLayout layout, IReadOnlyList<int> spotOfEachWindow, SpotRect area)
+    public static IReadOnlyList<SpotRect> Place(SnapLayout layout, int spots, IReadOnlyList<int> spotOfEachWindow, SpotRect area)
     {
-        var rects = Spots(layout, spotOfEachWindow.Count, area);
-        var rankOf = spotOfEachWindow.Select((spot, window) => (spot, window))
-                                     .OrderBy(p => p.spot).ThenBy(p => p.window)
-                                     .Select((p, rank) => (p.window, rank))
-                                     .ToDictionary(p => p.window, p => p.rank);
-        return spotOfEachWindow.Select((_, window) => rects[rankOf[window]]).ToList();
+        var rects = Spots(layout, spots, area);
+        return spotOfEachWindow.Select(spot => rects[Math.Clamp(spot, 0, rects.Count - 1)]).ToList();
     }
 
     /// <summary>The lowest free spot, or null when all <paramref name="spots"/> are taken.</summary>
