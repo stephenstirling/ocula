@@ -186,7 +186,7 @@ public sealed partial class SettingsWindow : Window
         AppSettings.PhotoWindowsLinkView = LinkViewToggle.IsOn;
 
         // Layout names depend on the number of spots ("1 large + 4").
-        if (sender == SpotsBox)
+        if (ReferenceEquals(sender, SpotsBox))
         {
             _loading = true;
             FillLayoutBox(spots, layout);

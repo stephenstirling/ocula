@@ -20,6 +20,7 @@ using Windows.Media.Core;
 using Windows.Storage;
 using Windows.System;
 using Windows.UI.Core;
+using DispatcherQueuePriority = Microsoft.UI.Dispatching.DispatcherQueuePriority;
 using DispatcherQueueTimer = Microsoft.UI.Dispatching.DispatcherQueueTimer;
 
 namespace Ocula;
