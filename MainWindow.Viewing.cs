@@ -122,9 +122,15 @@ public sealed partial class MainWindow
     private void PreviewFullScreen_Click(object sender, RoutedEventArgs e) => OpenViewer();
     private void PreviewEdit_Click(object sender, RoutedEventArgs e) => OpenEditor();
 
-    private void Thumbs_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+    /// <summary>
+    /// A single click shows the photo here; a double-click opens it in its own photo window
+    /// (MainWindow.PhotoWindows.cs), or full screen if that's switched off in Settings.
+    /// </summary>
+    private async void Thumbs_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
-        if ((e.OriginalSource as FrameworkElement)?.DataContext is ImageItem item) OpenViewer(item);
+        if ((e.OriginalSource as FrameworkElement)?.DataContext is not ImageItem item) return;
+        if (AppSettings.PhotoWindowsOnDoubleClick) await OpenPhotoWindowsAsync(new[] { item });
+        else OpenViewer(item);
     }
 
     // ================= Empty, loading and no-results states =================

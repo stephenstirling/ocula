@@ -54,6 +54,8 @@ names for tiles and sidebar entries, a Release MSIX build, and the Map page offl
   search and tag quality are measured with tools/SmartEval (docs/SMART-EVALUATION.md).
 - People (YuNet/SFace decoding, grouping threshold), including the model download.
 - Capta hand-off: ocula: links (import, edit, captures) and indexing Capta's PNG metadata.
+- Photo windows (double-click a thumbnail): spot placement, swapping, re-flow, Alt+number, next
+  display, linked zoom, and mixed-DPI monitors. The layout maths is unit-tested.
 - Duplicate finder limits on real photos.
 - Web download on real pages.
 - Update checks and Store packaging with the Windows App Certification Kit.

@@ -1,18 +1,25 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.UI;
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Ocula.Models;
 using Ocula.Services;
+using Windows.Graphics;
 using Windows.Media.Core;
 using Windows.Storage;
 using Windows.System;
+using Windows.UI.Core;
 using DispatcherQueueTimer = Microsoft.UI.Dispatching.DispatcherQueueTimer;
 
 namespace Ocula;
@@ -20,6 +27,9 @@ namespace Ocula;
 /// <summary>
 /// Full-screen viewer: photos zoom and pan (mouse wheel, pinch, double-click), videos play,
 /// and the controls fade away while you look. Esc returns to the library on the same photo.
+///
+/// As a photo window (double-click a thumbnail) it is an ordinary window instead, with a layout
+/// chip and numbered spot buttons in its title bar; MainWindow.PhotoWindows.cs places it.
 /// </summary>
 public sealed partial class ViewerWindow : Window
 {
@@ -28,17 +38,22 @@ public sealed partial class ViewerWindow : Window
     private readonly MainWindow _main;
     private readonly List<ImageItem> _items;
     private readonly DispatcherQueueTimer _hide;
+    private readonly bool _photoWindow;
+    private int _placing;
+    private bool _applyingLinkedView;
     private int _index;
     private int _version;
     private BitmapImage? _bitmap;
 
-    public ViewerWindow(MainWindow main, List<ImageItem> items, int index)
+    public ViewerWindow(MainWindow main, List<ImageItem> items, int index, bool photoWindow = false)
     {
         InitializeComponent();
         _main = main;
         _items = items;
+        _photoWindow = photoWindow;
 
-        AppWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
+        if (_photoWindow) SetUpPhotoWindow();
+        else AppWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
         Overlay.OpacityTransition = new ScalarTransition { Duration = TimeSpan.FromMilliseconds(250) };
         _hide = DispatcherQueue.CreateTimer();
         _hide.Interval = TimeSpan.FromSeconds(2.5);
@@ -51,7 +66,8 @@ public sealed partial class ViewerWindow : Window
         {
             _hide.Stop();
             Video.Unload();
-            if (_items.ElementAtOrDefault(_index) is { } current) _main.SelectItem(current);
+            if (_photoWindow) _main.PhotoWindowClosed(this);
+            else if (_items.ElementAtOrDefault(_index) is { } current) _main.SelectItem(current);
         };
         _ = ShowAsync(index);
         ShowOverlay();
@@ -65,6 +81,11 @@ public sealed partial class ViewerWindow : Window
         var version = ++_version;
 
         NameText.Text = item.Name;
+        if (_photoWindow)
+        {
+            TitleText.Text = item.Name;
+            Title = $"{item.Name} – Ocula";
+        }
         var info = new List<string> { $"{_index + 1} of {_items.Count}" };
         if (item.Taken is { } taken) info.Add(taken.ToString("d MMMM yyyy, HH:mm"));
         if (item.Camera != null) info.Add(item.Camera);
@@ -114,7 +135,26 @@ public sealed partial class ViewerWindow : Window
         Photo.Height = e.NewSize.Height;
     }
 
-    private void Scroller_ViewChanged(object? sender, ScrollViewerViewChangedEventArgs e) => UpdateZoomText();
+    private void Scroller_ViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
+    {
+        UpdateZoomText();
+        // Tell the other photo windows, for "Link zoom and pan" (centre as a fraction of the photo).
+        if (_photoWindow && !_applyingLinkedView && Scroller.ExtentWidth > 0 && Scroller.ExtentHeight > 0)
+            _main.PhotoWindowViewChanged(this, Scroller.ZoomFactor,
+                (Scroller.HorizontalOffset + Scroller.ViewportWidth / 2) / Scroller.ExtentWidth,
+                (Scroller.VerticalOffset + Scroller.ViewportHeight / 2) / Scroller.ExtentHeight);
+    }
+
+    /// <summary>Shows the same part of the photo at the same zoom as another photo window.</summary>
+    public void ApplyLinkedView(float zoom, double centreX, double centreY)
+    {
+        if (Scroller.Visibility != Visibility.Visible || double.IsNaN(Photo.Width) || Photo.Width <= 0) return;
+        _applyingLinkedView = true;
+        var x = centreX * Photo.Width * zoom - Scroller.ViewportWidth / 2;
+        var y = centreY * Photo.Height * zoom - Scroller.ViewportHeight / 2;
+        Scroller.ChangeView(Math.Max(0, x), Math.Max(0, y), zoom, disableAnimation: true);
+        DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () => _applyingLinkedView = false);
+    }
 
     private void UpdateZoomText() =>
         ZoomText.Text = Scroller.ZoomFactor <= 1.01 ? "Fit" : $"{ActualPercent():0}%";
@@ -200,6 +240,9 @@ public sealed partial class ViewerWindow : Window
 
     private async void Root_KeyDown(object sender, KeyRoutedEventArgs e)
     {
+        // Alt+number belongs to the spot shortcuts (keyboard accelerators), not to zoom.
+        if (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Menu).HasFlag(CoreVirtualKeyStates.Down)) return;
+
         switch (e.Key)
         {
             case VirtualKey.Escape: Close(); break;
@@ -218,4 +261,155 @@ public sealed partial class ViewerWindow : Window
         e.Handled = true;
         ShowOverlay();
     }
+
+    // ================= Photo window (double-click a thumbnail) =================
+
+    /// <summary>The monitor the window is on, for placing it among the others there.</summary>
+    public ulong DisplayId => DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest).DisplayId.Value;
+
+    private void SetUpPhotoWindow()
+    {
+        ExtendsContentIntoTitleBar = true;
+        SetTitleBar(DragArea);
+        var bar = AppWindow.TitleBar;
+        bar.PreferredHeightOption = TitleBarHeightOption.Tall;
+        bar.ButtonBackgroundColor = Colors.Transparent;
+        bar.ButtonInactiveBackgroundColor = Colors.Transparent;
+        bar.ButtonForegroundColor = Colors.White;
+        bar.ButtonHoverForegroundColor = Colors.White;
+        bar.ButtonHoverBackgroundColor = Windows.UI.Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF);
+        AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
+        TitleRow.Visibility = Visibility.Visible;
+
+        // Moving or resizing it yourself takes it out of its spot.
+        AppWindow.Changed += (_, e) =>
+        {
+            if (_placing > 0 || !(e.DidPositionChange || e.DidSizeChange)) return;
+            if (AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized }) return;
+            _main.PhotoWindowMovedByUser(this);
+        };
+
+        // Alt+1 to Alt+6 put the window in that spot; Alt+0 centres it.
+        for (var n = 0; n <= 9; n++)
+        {
+            var number = n;
+            foreach (var key in new[] { (VirtualKey)((int)VirtualKey.Number0 + n), (VirtualKey)((int)VirtualKey.NumberPad0 + n) })
+            {
+                var accelerator = new KeyboardAccelerator { Key = key, Modifiers = VirtualKeyModifiers.Menu };
+                accelerator.Invoked += (_, args) =>
+                {
+                    args.Handled = true;
+                    if (number == 0) _main.CentrePhotoWindow(this);
+                    else _main.SnapPhotoWindow(this, number - 1);
+                };
+                Root.KeyboardAccelerators.Add(accelerator);
+            }
+        }
+        Root.KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden;
+    }
+
+    /// <summary>Shows the layout chip and spot buttons for the current settings and this window's spot.</summary>
+    public void UpdateSnapBar(SnapLayout layout, int spots, int? spot)
+    {
+        if (!_photoWindow) return;
+        LayoutChip.Content = PhotoWindowLayout.Name(layout, spots);
+        LayoutMenu.Items.Clear();
+        foreach (var option in PhotoWindowLayout.Layouts)
+        {
+            var item = new RadioMenuFlyoutItem
+            {
+                Text = PhotoWindowLayout.Name(option, spots),
+                GroupName = "Layout",
+                IsChecked = option == layout,
+            };
+            item.Click += (_, _) => _main.SetPhotoWindowLayout(option);
+            LayoutMenu.Items.Add(item);
+        }
+
+        SpotButtons.Children.Clear();
+        for (var i = 0; i < spots; i++)
+        {
+            var index = i;
+            var button = new ToggleButton
+            {
+                Content = (i + 1).ToString(),
+                IsChecked = spot == i,
+                Width = 30,
+                Height = 30,
+                Padding = new Thickness(0),
+                FontSize = 12,
+            };
+            ToolTipService.SetToolTip(button, $"Spot {i + 1} (Alt+{i + 1})");
+            AutomationProperties.SetName(button, $"Spot {i + 1}");
+            button.Click += (_, _) => _main.SnapPhotoWindow(this, index);
+            SpotButtons.Children.Add(button);
+        }
+        SpotText.Text = spot is int s ? $"Spot {s + 1} of {spots}" : string.Empty;
+
+        // The compact menu: spots, then layouts, then moving the window.
+        CompactChip.Content = spot is int c ? $"Spot {c + 1} of {spots}" : "Spots";
+        CompactMenu.Items.Clear();
+        for (var i = 0; i < spots; i++)
+        {
+            var index = i;
+            var item = new RadioMenuFlyoutItem { Text = $"Spot {i + 1}", GroupName = "Spot", IsChecked = spot == i };
+            item.KeyboardAcceleratorTextOverride = $"Alt+{i + 1}";
+            item.Click += (_, _) => _main.SnapPhotoWindow(this, index);
+            CompactMenu.Items.Add(item);
+        }
+        CompactMenu.Items.Add(new MenuFlyoutSeparator());
+        foreach (var option in PhotoWindowLayout.Layouts)
+        {
+            var item = new RadioMenuFlyoutItem { Text = PhotoWindowLayout.Name(option, spots), GroupName = "Layout", IsChecked = option == layout };
+            item.Click += (_, _) => _main.SetPhotoWindowLayout(option);
+            CompactMenu.Items.Add(item);
+        }
+        CompactMenu.Items.Add(new MenuFlyoutSeparator());
+        var centre = new MenuFlyoutItem { Text = "Centre", KeyboardAcceleratorTextOverride = "Alt+0" };
+        centre.Click += (_, _) => _main.CentrePhotoWindow(this);
+        CompactMenu.Items.Add(centre);
+        var next = new MenuFlyoutItem { Text = "Send to the next display" };
+        next.Click += (_, _) => _main.SendPhotoWindowToNextDisplay(this);
+        CompactMenu.Items.Add(next);
+        FitTitleRow(TitleRow.ActualWidth);
+    }
+
+    private void TitleRow_SizeChanged(object sender, SizeChangedEventArgs e) => FitTitleRow(e.NewSize.Width);
+
+    /// <summary>
+    /// The full title bar (chip, one button per spot, next display) needs about 280 px beside the
+    /// window buttons; below that, one compact menu holds the same choices.
+    /// </summary>
+    private void FitTitleRow(double width)
+    {
+        if (!_photoWindow || width <= 0) return;
+        var full = width >= 140 + 14 + 120 + SpotButtons.Children.Count * 32 + 48 + 80;
+        LayoutChip.Visibility = SpotButtons.Visibility = NextDisplayButton.Visibility =
+            full ? Visibility.Visible : Visibility.Collapsed;
+        CompactChip.Visibility = full ? Visibility.Collapsed : Visibility.Visible;
+        TitleText.Visibility = SpotText.Visibility = width >= 420 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Moves and resizes the window so its visible frame fills <paramref name="spot"/> (physical
+    /// pixels). A second pass, once Windows has settled the move, corrects the size after a change
+    /// of display scaling and hides the invisible resize borders.
+    /// </summary>
+    public void PlaceAt(SpotRect spot)
+    {
+        _placing++;
+        if (AppWindow.Presenter is OverlappedPresenter { State: not OverlappedPresenterState.Restored } presenter)
+            presenter.Restore();
+        AppWindow.MoveAndResize(ToRect(spot));
+        DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
+        {
+            var borders = WindowFrame.InvisibleBorders(WinRT.Interop.WindowNative.GetWindowHandle(this));
+            AppWindow.MoveAndResize(ToRect(WindowFrame.Expand(spot, borders)));
+            DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () => _placing--);
+        });
+    }
+
+    private static RectInt32 ToRect(SpotRect r) => new(r.X, r.Y, r.Width, r.Height);
+
+    private void NextDisplay_Click(object sender, RoutedEventArgs e) => _main.SendPhotoWindowToNextDisplay(this);
 }

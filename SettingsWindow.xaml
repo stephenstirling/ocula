@@ -40,6 +40,48 @@
                     <ToggleSwitch x:Name="ColourToggle" Toggled="ColourToggle_Toggled"/>
                 </toolkit:SettingsCard>
 
+                <!-- Photo windows (MainWindow.PhotoWindows.cs) -->
+                <TextBlock Text="Photo windows" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,20,0,4"/>
+                <toolkit:SettingsExpander Header="Double-click opens a photo in its own window"
+                                          Description="A single click shows the photo here. A double-click opens it in a window you can put in a spot on the screen with the numbered buttons in its title bar, or Alt+1 to Alt+6 (Alt+0 centres it). Off: double-click shows the photo full screen."
+                                          IsExpanded="True">
+                    <toolkit:SettingsExpander.HeaderIcon><FontIcon Glyph="&#xE737;"/></toolkit:SettingsExpander.HeaderIcon>
+                    <ToggleSwitch x:Name="PhotoWindowsToggle" Toggled="PhotoWindows_Changed"/>
+                    <toolkit:SettingsExpander.Items>
+                        <toolkit:SettingsCard Header="Spots" Description="How many photo windows share a screen.">
+                            <ComboBox x:Name="SpotsBox" SelectionChanged="PhotoWindows_Changed" MinWidth="200">
+                                <ComboBoxItem Content="2" Tag="2"/>
+                                <ComboBoxItem Content="3" Tag="3"/>
+                                <ComboBoxItem Content="4" Tag="4"/>
+                                <ComboBoxItem Content="5" Tag="5"/>
+                                <ComboBoxItem Content="6" Tag="6"/>
+                            </ComboBox>
+                        </toolkit:SettingsCard>
+                        <toolkit:SettingsCard Header="Layout" Description="How the spots are arranged. Each window's layout chip changes it too.">
+                            <ComboBox x:Name="LayoutBox" SelectionChanged="PhotoWindows_Changed" MinWidth="200"/>
+                        </toolkit:SettingsCard>
+                        <toolkit:SettingsCard Header="When every spot has a photo">
+                            <ComboBox x:Name="WhenFullBox" SelectionChanged="PhotoWindows_Changed" MinWidth="200">
+                                <ComboBoxItem Content="Replace the oldest" Tag="ReplaceOldest"/>
+                                <ComboBoxItem Content="Ask" Tag="Ask"/>
+                                <ComboBoxItem Content="Open on top" Tag="Cascade"/>
+                            </ComboBox>
+                        </toolkit:SettingsCard>
+                        <toolkit:SettingsCard Header="Open in the spot used last"
+                                              Description="A new photo replaces the one in the spot you picked last, instead of taking the next free spot.">
+                            <ToggleSwitch x:Name="ReuseSpotToggle" Toggled="PhotoWindows_Changed"/>
+                        </toolkit:SettingsCard>
+                        <toolkit:SettingsCard Header="Keep snapped windows tidy"
+                                              Description="When a window is closed or moved out of its spot, the others widen to fill the gap.">
+                            <ToggleSwitch x:Name="TidyToggle" Toggled="PhotoWindows_Changed"/>
+                        </toolkit:SettingsCard>
+                        <toolkit:SettingsCard Header="Link zoom and pan"
+                                              Description="Zooming or panning one photo window does the same in the others, for comparing details.">
+                            <ToggleSwitch x:Name="LinkViewToggle" Toggled="PhotoWindows_Changed"/>
+                        </toolkit:SettingsCard>
+                    </toolkit:SettingsExpander.Items>
+                </toolkit:SettingsExpander>
+
                 <!-- Folders -->
                 <TextBlock Text="Library" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,20,0,4"/>
                 <toolkit:SettingsExpander x:Name="FoldersExpander" Header="Folders"

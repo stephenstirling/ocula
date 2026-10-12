@@ -118,6 +118,62 @@ public static class AppSettings
         set => Store.Values["ImportDestination"] = value;
     }
 
+    // ---------- Photo windows (Settings > Photo windows) ----------
+
+    /// <summary>Double-clicking a thumbnail opens the photo in its own window (otherwise: full screen).</summary>
+    public static bool PhotoWindowsOnDoubleClick
+    {
+        get => Store.Values["PhotoWindowsOnDoubleClick"] as bool? ?? true;
+        set => Store.Values["PhotoWindowsOnDoubleClick"] = value;
+    }
+
+    /// <summary>How many spots photo windows share a monitor with (2 to 6).</summary>
+    public static int PhotoWindowSpots
+    {
+        get => PhotoWindowLayout.ClampSpots(Store.Values["PhotoWindowSpots"] as int? ?? PhotoWindowLayout.DefaultSpots);
+        set => Store.Values["PhotoWindowSpots"] = PhotoWindowLayout.ClampSpots(value);
+    }
+
+    public static SnapLayout PhotoWindowLayoutKind
+    {
+        get => Enum.TryParse<SnapLayout>(Store.Values["PhotoWindowLayout"] as string, out var layout) ? layout : SnapLayout.Columns;
+        set => Store.Values["PhotoWindowLayout"] = value.ToString();
+    }
+
+    public static WhenSpotsFull PhotoWindowsWhenFull
+    {
+        get => Enum.TryParse<WhenSpotsFull>(Store.Values["PhotoWindowsWhenFull"] as string, out var full) ? full : WhenSpotsFull.ReplaceOldest;
+        set => Store.Values["PhotoWindowsWhenFull"] = value.ToString();
+    }
+
+    /// <summary>New photo windows open in the spot used last, replacing the photo there.</summary>
+    public static bool PhotoWindowsReuseLastSpot
+    {
+        get => Store.Values["PhotoWindowsReuseLastSpot"] as bool? ?? false;
+        set => Store.Values["PhotoWindowsReuseLastSpot"] = value;
+    }
+
+    /// <summary>The spot (0-based) last chosen with a spot button or Alt+number.</summary>
+    public static int PhotoWindowsLastSpot
+    {
+        get => Store.Values["PhotoWindowsLastSpot"] as int? ?? 0;
+        set => Store.Values["PhotoWindowsLastSpot"] = value;
+    }
+
+    /// <summary>Zooming or panning one photo window does the same in the others.</summary>
+    public static bool PhotoWindowsLinkView
+    {
+        get => Store.Values["PhotoWindowsLinkView"] as bool? ?? false;
+        set => Store.Values["PhotoWindowsLinkView"] = value;
+    }
+
+    /// <summary>Closing a snapped photo window re-flows the others to fill the gap.</summary>
+    public static bool PhotoWindowsKeepTidy
+    {
+        get => Store.Values["PhotoWindowsKeepTidy"] as bool? ?? true;
+        set => Store.Values["PhotoWindowsKeepTidy"] = value;
+    }
+
     // ---------- Capta ----------
 
     /// <summary>Capta's capture folder, as its last ocula: link said (Capta's default until then).</summary>

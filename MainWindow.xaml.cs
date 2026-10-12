@@ -148,6 +148,7 @@ public sealed partial class MainWindow : Window
             _import?.Close();
             _slideshow?.Close();
             _viewer?.Close();
+            ClosePhotoWindows();
             _editor?.Close();
             VideoPlayer.Unload();
             _presenter?.Close();

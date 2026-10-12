@@ -565,6 +565,28 @@ _Still to come_
   developed), "find similar photos" from a selected photo, and Smart search as its own sidebar
   view (it is a search-box prefix for now).
 
+**Photo windows with snap spots** (code added, untested on a PC)
+- A single click shows the photo in the main window, as before. A double-click opens it in its
+  own photo window (Settings > Photo windows turns this off; double-click is then full screen).
+  "Open in separate windows" (right-click on the thumbnails, or More) opens the selected photos.
+- Each window takes the next free spot on its monitor, left to right. Its title bar has a layout
+  chip (5 columns, 1 large + 4, 3 + 2, 2 + 3, Cascade) and numbered spot buttons; Alt+1 to Alt+6
+  do the same, Alt+0 centres the window, and the display button sends it to the next monitor.
+  Narrow windows show one "Spot 3 of 5" menu instead. Choosing a taken spot swaps the two windows.
+- Fewer windows than spots: they share the monitor, so three photos in 5 columns get three wider
+  columns. Moving or resizing a window by hand takes it out of its spot.
+- Settings > Photo windows: number of spots (2 to 6, default 5), layout, what happens when every
+  spot is taken (replace the oldest, ask, or open on top), open in the spot used last, keep
+  snapped windows tidy (close gaps), link zoom and pan across windows.
+- Files: `Services/PhotoWindowLayout.cs` (spot rectangles, re-flow, next free spot; unit-tested
+  in `tests/Ocula.Tests/PhotoWindowLayoutTests.cs`), `Services/WindowFrame.cs` (hides the
+  invisible resize borders), `MainWindow.PhotoWindows.cs`, and the photo-window mode of
+  `ViewerWindow`. Design: "Photo windows" boards from the design chat (not yet in `docs/`).
+- First things to check on a PC: windows land in their spots without gaps on each monitor,
+  including one with different scaling; dragging a window takes it out of its spot (and only
+  then); the 200 ms single-click delay from the design wasn't added, because a single click only
+  updates the side panel here.
+
 **Phase 7 – back up to Google Photos and iCloud Photos** (planned)
 - **Google Photos (upload only):** sign in once, choose folders or albums, and Ocula uploads new
   photos and videos, skipping ones already sent. Uses the Google Photos Library API's

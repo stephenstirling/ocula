@@ -44,6 +44,15 @@ public sealed partial class SettingsWindow : Window
         ColourToggle.IsOn = AppSettings.ColourManaged;
         MapToggle.IsOn = AppSettings.OnlineMaps;
 
+        // Photo windows
+        PhotoWindowsToggle.IsOn = AppSettings.PhotoWindowsOnDoubleClick;
+        SpotsBox.SelectedIndex = AppSettings.PhotoWindowSpots - PhotoWindowLayout.MinSpots;
+        FillLayoutBox(AppSettings.PhotoWindowSpots, AppSettings.PhotoWindowLayoutKind);
+        WhenFullBox.SelectedIndex = (int)AppSettings.PhotoWindowsWhenFull;
+        ReuseSpotToggle.IsOn = AppSettings.PhotoWindowsReuseLastSpot;
+        TidyToggle.IsOn = AppSettings.PhotoWindowsKeepTidy;
+        LinkViewToggle.IsOn = AppSettings.PhotoWindowsLinkView;
+
         // Smart recognition
         SmartToggle.IsOn = AppSettings.SmartEnabled;
         SmartTierBox.SelectedIndex = AppSettings.SmartTier == SmartTier.Accurate ? 1 : 0;
@@ -158,6 +167,40 @@ public sealed partial class SettingsWindow : Window
         await _main.Index.ClearAsync();
         await _main.RefreshAsync();
         UpdateCacheSize();
+    }
+
+    // ---------- Photo windows ----------
+
+    private void PhotoWindows_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        var spots = PhotoWindowLayout.MinSpots + Math.Max(0, SpotsBox.SelectedIndex);
+        var layout = (LayoutBox.SelectedItem as ComboBoxItem)?.Tag is SnapLayout chosen ? chosen : AppSettings.PhotoWindowLayoutKind;
+
+        AppSettings.PhotoWindowsOnDoubleClick = PhotoWindowsToggle.IsOn;
+        AppSettings.PhotoWindowSpots = spots;
+        AppSettings.PhotoWindowLayoutKind = layout;
+        AppSettings.PhotoWindowsWhenFull = (WhenSpotsFull)Math.Max(0, WhenFullBox.SelectedIndex);
+        AppSettings.PhotoWindowsReuseLastSpot = ReuseSpotToggle.IsOn;
+        AppSettings.PhotoWindowsKeepTidy = TidyToggle.IsOn;
+        AppSettings.PhotoWindowsLinkView = LinkViewToggle.IsOn;
+
+        // Layout names depend on the number of spots ("1 large + 4").
+        if (sender == SpotsBox)
+        {
+            _loading = true;
+            FillLayoutBox(spots, layout);
+            _loading = false;
+        }
+        _main.PhotoWindowSettingsChanged();
+    }
+
+    private void FillLayoutBox(int spots, SnapLayout selected)
+    {
+        LayoutBox.Items.Clear();
+        foreach (var layout in PhotoWindowLayout.Layouts)
+            LayoutBox.Items.Add(new ComboBoxItem { Content = PhotoWindowLayout.Name(layout, spots), Tag = layout });
+        LayoutBox.SelectedIndex = PhotoWindowLayout.Layouts.ToList().IndexOf(selected);
     }
 
     // ---------- Privacy ----------
