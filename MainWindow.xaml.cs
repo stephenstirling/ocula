@@ -623,7 +623,7 @@ public sealed partial class MainWindow : Window
 
             DateTaken.Text = item.Taken?.ToString("f") ?? (item.IsCloudOnly ? "Online-only file" : "Date unknown");
             CameraName.Text = item.Camera ?? (item.IsCloudOnly ? "Download the file to see camera details" : "Unknown camera");
-            Exposure.Text = item.Exposure ?? string.Empty;
+            Exposure.Text = item.Exposure is { } exposure ? CameraText.TidyExposure(exposure) : string.Empty;
             UpdateHdrCard(item.IsCloudOnly ? null : item.Hdr, item.IsCloudOnly);
             UpdateUserDataUI(item);
             UpdateCullingUI(item);

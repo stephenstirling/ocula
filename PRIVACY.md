@@ -18,9 +18,9 @@ Ocula has no accounts, no advertising, and no analytics or tracking.
 
 ## What Ocula sends over the internet
 
-**Camera photos (optional).** To show a picture of the camera that took a photo, Ocula sends
-the camera's model name (for example "Canon EOS R5") to Wikidata and downloads a matching
-image from Wikimedia Commons. Nothing else is sent: no photos, file names, locations or other
+**Camera photos (optional).** To show a picture of the camera or phone that took a photo, Ocula
+sends the camera's model name (for example "Canon EOS R5" or "Google Pixel 10 Pro XL") to
+Wikidata and Wikipedia and downloads a matching image from Wikimedia Commons. Nothing else is sent: no photos, file names, locations or other
 metadata. Downloaded camera images are cached on your PC. These services are run by the
 Wikimedia Foundation under its own privacy policy: https://foundation.wikimedia.org/wiki/Policy:Privacy_policy
 

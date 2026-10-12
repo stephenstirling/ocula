@@ -32,7 +32,12 @@ public static class ExifService
             }
             Add(ExifDirectoryBase.TagFocalLength);
             Add(ExifDirectoryBase.TagFNumber);
-            Add(ExifDirectoryBase.TagExposureTime);
+            // Formatted here: some phones store fractions like 9539/1000000 that the library prints as they are.
+            if (sub != null && sub.TryGetRational(ExifDirectoryBase.TagExposureTime, out var shutter) &&
+                CameraText.Shutter(shutter.ToDouble()) is { } speed)
+                parts.Add(speed);
+            else
+                Add(ExifDirectoryBase.TagExposureTime);
             Add(ExifDirectoryBase.TagIsoEquivalent, "ISO ");
 
             DateTime? taken = null;

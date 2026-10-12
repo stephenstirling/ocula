@@ -170,7 +170,9 @@ file details.
 The gear button in the title bar opens Settings:
 - **Appearance**: theme (also available from the pill in the title bar).
 - **Library**: add or remove folders from the tree, and see or clear the library cache.
-- **Privacy**: turn online camera photos (Wikidata / Wikimedia Commons) on or off.
+- **Privacy**: turn online camera photos (Wikidata, Wikipedia / Wikimedia Commons) on or off.
+  Phones count as cameras; a new model falls back to its base model ("Pixel 10 Pro XL", then
+  "Pixel 10"). See `Services/CameraImageService.cs` and `Services/CameraText.cs`.
 - **About**: version, "Support Ocula" donation button, source and feedback links (hidden
   until set in `AppInfo.cs`), and third-party notices.
 
