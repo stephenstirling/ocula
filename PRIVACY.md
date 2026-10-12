@@ -20,9 +20,18 @@ Ocula has no accounts, no advertising, and no analytics or tracking.
 
 **Camera photos (optional).** To show a picture of the camera or phone that took a photo, Ocula
 sends the camera's model name (for example "Canon EOS R5" or "Google Pixel 10 Pro XL") to
-Wikidata and Wikipedia and downloads a matching image from Wikimedia Commons. Nothing else is sent: no photos, file names, locations or other
-metadata. Downloaded camera images are cached on your PC. These services are run by the
-Wikimedia Foundation under its own privacy policy: https://foundation.wikimedia.org/wiki/Policy:Privacy_policy
+Wikidata and Wikipedia and downloads a matching image from Wikimedia Commons. Nothing else is
+sent: no photos, file names, locations or other metadata. Downloaded camera images are cached on
+your PC. These services are run by the Wikimedia Foundation under its own privacy policy:
+https://foundation.wikimedia.org/wiki/Policy:Privacy_policy
+
+**Looking up a person (only when you press "Look up").** In People, after you type a name for a
+group of faces, you can press "Look up" to find that person on Wikidata. Ocula sends only the
+name you typed, then the Wikidata id of the person you pick, to Wikidata (Wikimedia Foundation,
+policy above), and that id to DBpedia (https://www.dbpedia.org) if Wikidata has no height. No
+photo, face or file name is sent. The person card is stored in Ocula's library on your PC, is
+never written into your photos, and is removed with **Delete all face data**. Nothing is looked
+up for groups you haven't named, and nothing is looked up unless you press the button.
 
 You can turn this off in **Settings > Privacy > Show camera photos**. With this, the map and
 automatic update checks turned off, Ocula makes no internet requests of its own.

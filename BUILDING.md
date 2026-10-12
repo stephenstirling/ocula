@@ -426,6 +426,11 @@ _Still to come_
     before release.
   - Similar faces are grouped; you name a group once and Ocula offers that name as a tag on
     every matching photo, including in the web downloader's "Suggested tags".
+  - **Built (untested on a PC):** "Look up on Wikidata", the person card and the tag chips, in
+    `PeopleWindow`, `Services/PersonLookup.cs` (network) and `Services/PersonCards.cs` (reading
+    Wikidata's JSON; unit-tested with a made-up person). The card is saved as JSON in
+    `people.card`. DBpedia fills the height only; former partners from DBpedia and MusicBrainz
+    aren't built, and neither is "Search by person details" below.
   - Optional "Look up on Wikidata" when you name someone: Ocula lists matches with a short
     description (many people share a name) and you pick one. The person card (full name including
     middle names, from Wikidata's "birth name" when it has one; date and place of
@@ -451,7 +456,7 @@ _Still to come_
     (terms don't allow storing the results).
   - **Search by person details.** Once a card is saved, the normal search box understands things
     like `people taller than 5'3"`, `born before 1990`, `over 40`, `married`, `has children`,
-    `actress`, `born in Texas` or `speaks Spanish`, and they can be combined. Ocula shows how it read the query
+    `actress`, `born in Texas` or `speaks Spanish`, and they can be combined. (Not built yet.) Ocula shows how it read the query
     ("Understood as" chips you can remove) and returns photos of the matching people. It only
     searches saved cards, runs on this PC, and says what it left out ("1 person has no height on
     record, 4 named groups haven't been looked up"). It never guesses for people with no card.

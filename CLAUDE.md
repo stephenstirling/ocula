@@ -52,7 +52,8 @@ names for tiles and sidebar entries, a Release MSIX build, and the Map page offl
 - Smart recognition inside the app (search and tag chips after the library is analysed again).
   The tokenizer, preprocessing, model names and downloads are checked against the reference, and
   search and tag quality are measured with tools/SmartEval (docs/SMART-EVALUATION.md).
-- People (YuNet/SFace decoding, grouping threshold), including the model download.
+- People (YuNet/SFace decoding, grouping threshold), including the model download, and "Look up
+  on Wikidata" (person card, tag chips; the Wikidata JSON reading is unit-tested).
 - Capta hand-off: ocula: links (import, edit, captures) and indexing Capta's PNG metadata.
 - Photo windows (double-click a thumbnail): spot placement (6 fixed columns), swapping,
   Alt+number, next display, linked zoom, and mixed-DPI monitors. The layout maths is unit-tested.

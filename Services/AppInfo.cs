@@ -73,6 +73,7 @@ public static class AppInfo
         new ThirdPartyNotice("SixLabors.ImageSharp 2.1", "Apache-2.0", "https://github.com/SixLabors/ImageSharp", "Used by ImageHash"),
         new ThirdPartyNotice("MapLibre GL JS 4.7.1", "BSD-3-Clause", "https://github.com/maplibre/maplibre-gl-js", "Map view"),
         new ThirdPartyNotice("OpenFreeMap, OpenMapTiles and OpenStreetMap", "Map data © OpenStreetMap contributors (ODbL)", "https://openfreemap.org", "Map tiles (credited on the map)"),
-        new ThirdPartyNotice("Wikidata and Wikimedia Commons", "CC0 data; photos under their own free licences", "https://commons.wikimedia.org", "Camera photos (credited per photo)"),
+        new ThirdPartyNotice("Wikidata and Wikimedia Commons", "CC0 data; photos under their own free licences", "https://commons.wikimedia.org", "Camera photos (credited per photo), person cards"),
+        new ThirdPartyNotice("DBpedia", "CC BY-SA 3.0", "https://www.dbpedia.org", "Person cards: heights Wikidata lacks (credited on the card)"),
     };
 }

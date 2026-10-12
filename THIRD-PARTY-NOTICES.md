@@ -34,6 +34,10 @@ Camera photos are downloaded at run time from Wikimedia Commons, found through W
 (data available under CC0). Each photo is under its own free licence and is credited in the
 app with a link to its Commons page.
 
+Person cards in People ("Look up on Wikidata") use Wikidata (CC0). A height Wikidata doesn't
+have may come from DBpedia (https://www.dbpedia.org), whose data is under CC BY-SA 3.0 and GFDL;
+the card then credits "Wikidata and DBpedia (CC BY-SA)" with the date it was retrieved.
+
 ---
 
 ## Licence texts

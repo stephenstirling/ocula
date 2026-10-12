@@ -27,7 +27,7 @@ public sealed record CameraImage(string LocalPath, string SourcePageUrl);
 /// </summary>
 public sealed class CameraImageService
 {
-    private static readonly HttpClient Http = CreateClient();
+    private static HttpClient Http => Wikimedia.Http;
 
     private readonly string _cacheDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Ocula", "CameraCache");
@@ -149,14 +149,6 @@ public sealed class CameraImageService
 
     private static string? Text(JsonElement element, string property) =>
         element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
-
-    private static HttpClient CreateClient()
-    {
-        var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
-        // Wikimedia asks every app to identify itself with a way to reach its developer.
-        client.DefaultRequestHeaders.UserAgent.ParseAdd($"Ocula/1.0 (https://github.com/{AppInfo.GitHubRepository})");
-        return client;
-    }
 
     private static string Slug(string text) =>
         string.Concat(text.Select(c => char.IsLetterOrDigit(c) ? char.ToLowerInvariant(c) : '-'));

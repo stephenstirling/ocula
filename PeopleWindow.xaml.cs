@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Ocula.Services;
 using Microsoft.UI;
@@ -22,6 +24,8 @@ public sealed class PersonCard
     public string? Name { get; init; }
     public int FaceCount { get; init; }
     public BitmapImage? Avatar { get; init; }
+    /// <summary>The saved person card (JSON), if this person was looked up on Wikidata.</summary>
+    public string? CardJson { get; init; }
     public string Title => Name ?? "Name this person";
     public FontStyle TitleStyle => Name == null ? FontStyle.Italic : FontStyle.Normal;
     public string CountText => FaceCount == 1 ? "1 photo" : $"{FaceCount:N0} photos";
@@ -45,6 +49,13 @@ public sealed partial class PeopleWindow : Window
     private readonly MainWindow _main;
     private readonly ObservableCollection<PersonCard> _cards = new();
     private readonly ObservableCollection<FaceCard> _faces = new();
+    private readonly ObservableCollection<TagChip> _tagChips = new();
+
+    // The person card shown on the right: the saved one, or the one just looked up.
+    private PersonCardData? _card;
+    // True once a lookup result (or "None of these") was chosen for the selected group; Save then stores that choice.
+    private bool _cardChosen;
+    private CancellationTokenSource? _lookup;
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _refreshTimer;
     private bool _refreshing;
 
@@ -65,6 +76,7 @@ public sealed partial class PeopleWindow : Window
 
         Groups.ItemsSource = _cards;
         FaceGrid.ItemsSource = _faces;
+        TagChips.ItemsSource = _tagChips;
 
         _refreshTimer = DispatcherQueue.CreateTimer();
         _refreshTimer.Interval = TimeSpan.FromSeconds(3);
@@ -113,7 +125,8 @@ public sealed partial class PeopleWindow : Window
                     Id = person.Id,
                     Name = person.Name,
                     FaceCount = person.FaceCount,
-                    Avatar = person.Avatar == null ? null : await ThumbnailService.ToBitmapAsync(person.Avatar)
+                    Avatar = person.Avatar == null ? null : await ThumbnailService.ToBitmapAsync(person.Avatar),
+                    CardJson = person.Card,
                 });
             }
             var unnamed = people.Count(p => p.Name == null);
@@ -139,7 +152,16 @@ public sealed partial class PeopleWindow : Window
 
         Detail.Visibility = Visibility.Visible;
         DetailTitle.Text = person.Name ?? "Unnamed group";
+        CancelLookup();
+        _card = PersonCardData.FromJson(person.CardJson);
+        _cardChosen = false;
+        MatchList.Children.Clear();
+        MatchBorder.Visibility = Visibility.Collapsed;
+        ShowLookupNote(null);
+        _tagChips.Clear();
         NameBox.Text = person.Name ?? string.Empty;
+        UpdateNameUI();
+        ShowCard();
         SaveNote.Text = string.Empty;
 
         var faces = await _main.Library.GetFacesAsync(person.Id);
@@ -171,15 +193,24 @@ public sealed partial class PeopleWindow : Window
         if (person == null) return;
 
         var name = NameBox.Text.Trim();
+        var renamed = !string.Equals(name, person.Name ?? string.Empty, StringComparison.OrdinalIgnoreCase);
         var survivor = await _main.Library.NamePersonAsync(person.Id, name);
         var merged = survivor != person.Id;
 
-        if (name.Length > 0 && TagToggle.IsOn)
+        // The card goes with the name: a looked-up card (or "None of these") is saved; a new name
+        // without a lookup drops the old card, since it was about someone else.
+        if (_cardChosen || name.Length == 0)
+            await _main.Library.SetPersonCardAsync(survivor, name.Length == 0 ? null : _card?.ToJson());
+        else if (renamed && !merged)
+            await _main.Library.SetPersonCardAsync(survivor, null);
+
+        var tags = name.Length == 0 ? new List<string>() : _tagChips.Where(c => c.On).Select(c => c.Label).ToList();
+        if (tags.Count > 0)
         {
             var paths = await _main.Library.GetPersonPhotoPathsAsync(survivor);
             var rows = await _main.Library.GetRowsAsync(paths);
-            SaveNote.Text = $"Adding “{name}” to {rows.Count:N0} photos…";
-            await _main.TagPhotosAsync(rows, name);
+            SaveNote.Text = $"Adding {string.Join(" and ", tags.Select(t => $"“{t}”"))} to {rows.Count:N0} photos…";
+            foreach (var tag in tags) await _main.TagPhotosAsync(rows, tag);
         }
 
         SaveNote.Text = name.Length == 0 ? "Name removed."
@@ -187,6 +218,170 @@ public sealed partial class PeopleWindow : Window
                       : "Saved.";
         await RefreshAsync(survivor);
     }
+
+    // ================= Look up on Wikidata =================
+
+    private void NameBox_TextChanged(object sender, TextChangedEventArgs e) => UpdateNameUI();
+
+    /// <summary>The lookup button and tag chips follow the name being typed.</summary>
+    private void UpdateNameUI()
+    {
+        var name = NameBox.Text.Trim();
+        LookupButton.Content = name.Length == 0 ? "Look up" : $"Look up “{name}”";
+        LookupButton.IsEnabled = name.Length > 0;
+
+        var ticked = _tagChips.Where(c => c.On).Select(c => c.Label).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _tagChips.Clear();
+        var names = PersonCardData.TagNames(name, _card);
+        for (var i = 0; i < names.Count; i++)
+            _tagChips.Add(new TagChip { Label = names[i], On = i == 0 || ticked.Contains(names[i]) });
+        TagsPanel.Visibility = names.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private async void Lookup_Click(object sender, RoutedEventArgs e)
+    {
+        var name = NameBox.Text.Trim();
+        if (name.Length == 0) return;
+        var cancel = StartLookup();
+        ShowLookupNote(null);
+        MatchList.Children.Clear();
+        MatchBorder.Visibility = Visibility.Collapsed;
+
+        try
+        {
+            var matches = await PersonLookup.SearchAsync(name, cancel);
+            if (cancel.IsCancellationRequested) return;
+
+            foreach (var match in matches)
+            {
+                var text = new StackPanel { Spacing = 0 };
+                text.Children.Add(new TextBlock { Text = match.Name, FontWeight = FontWeights.SemiBold });
+                if (match.Description != null)
+                    text.Children.Add(new TextBlock
+                    {
+                        Text = match.Description, TextWrapping = TextWrapping.Wrap,
+                        Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
+                        Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+                    });
+                AddMatchChoice(text, match);
+            }
+            AddMatchChoice(new TextBlock { Text = "None of these, just use the name", TextWrapping = TextWrapping.Wrap }, null);
+            MatchBorder.Visibility = Visibility.Visible;
+            if (matches.Count == 0) ShowLookupNote($"Wikidata has no person called “{name}”.");
+        }
+        catch (Exception ex)
+        {
+            // async void: nothing may escape, a cancelled lookup included.
+            if (!cancel.IsCancellationRequested)
+                ShowLookupNote($"Couldn't reach Wikidata ({ex.Message}). Check the internet connection and try again.");
+        }
+        finally
+        {
+            if (!cancel.IsCancellationRequested) LookupRing.IsActive = false;
+        }
+    }
+
+    private void AddMatchChoice(UIElement content, PersonMatch? match)
+    {
+        var choice = new RadioButton { Content = content, GroupName = "PersonMatch", Tag = match, Padding = new Thickness(8, 6, 0, 6) };
+        choice.Checked += MatchChoice_Checked;
+        MatchList.Children.Add(choice);
+    }
+
+    /// <summary>Picking a person fetches their card; "None of these" keeps just the name.</summary>
+    private async void MatchChoice_Checked(object sender, RoutedEventArgs e)
+    {
+        if (sender is not RadioButton { Tag: var tag }) return;
+        var cancel = StartLookup();
+        ShowLookupNote(null);
+
+        if (tag is not PersonMatch match)
+        {
+            LookupRing.IsActive = false;
+            _card = null;
+            _cardChosen = true;
+            ShowCard();
+            UpdateNameUI();
+            return;
+        }
+
+        try
+        {
+            var card = await PersonLookup.GetCardAsync(match, cancel);
+            if (cancel.IsCancellationRequested) return;
+            _card = card;
+            _cardChosen = true;
+            ShowCard();
+            UpdateNameUI();
+        }
+        catch (Exception ex)
+        {
+            if (!cancel.IsCancellationRequested)
+                ShowLookupNote($"Couldn't get {match.Name}'s details from Wikidata ({ex.Message}).");
+        }
+        finally
+        {
+            if (!cancel.IsCancellationRequested) LookupRing.IsActive = false;
+        }
+    }
+
+    /// <summary>Starts a lookup, cancelling any earlier one so a slow answer can't replace a newer one.</summary>
+    private CancellationToken StartLookup()
+    {
+        CancelLookup();
+        _lookup = new CancellationTokenSource();
+        LookupRing.IsActive = true;
+        return _lookup.Token;
+    }
+
+    private void CancelLookup()
+    {
+        _lookup?.Cancel();
+        _lookup = null;
+        LookupRing.IsActive = false;
+    }
+
+    private void ShowLookupNote(string? text)
+    {
+        LookupNote.Text = text ?? string.Empty;
+        LookupNote.Visibility = text == null ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void ShowCard()
+    {
+        CardRows.Children.Clear();
+        CardRows.RowDefinitions.Clear();
+        if (_card == null)
+        {
+            CardBorder.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var secondary = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+        var rows = _card.Rows();
+        for (var i = 0; i < rows.Count; i++)
+        {
+            CardRows.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            var label = new TextBlock { Text = rows[i].Label, Foreground = secondary, TextWrapping = TextWrapping.Wrap };
+            var value = new TextBlock { Text = rows[i].Value, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true };
+            Grid.SetRow(label, i);
+            Grid.SetRow(value, i);
+            Grid.SetColumn(value, 1);
+            CardRows.Children.Add(label);
+            CardRows.Children.Add(value);
+        }
+        if (rows.Count == 0)
+        {
+            CardRows.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            var none = new TextBlock { Text = $"Wikidata has no details for {_card.Name} yet.", TextWrapping = TextWrapping.Wrap };
+            Grid.SetColumnSpan(none, 2);
+            CardRows.Children.Add(none);
+        }
+        CardSource.Text = _card.SourceLine;
+        CardBorder.Visibility = Visibility.Visible;
+    }
+
+    // ================= Group actions =================
 
     private async void ShowPhotos_Click(object sender, RoutedEventArgs e)
     {

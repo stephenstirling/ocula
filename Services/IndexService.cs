@@ -554,7 +554,8 @@ public sealed class IndexService : IDisposable
 
     // ================= People =================
 
-    public sealed record PersonSummary(long Id, string? Name, int FaceCount, byte[]? Avatar);
+    /// <summary>A group of faces. Card is the person card's JSON (PersonCardData) when one was looked up.</summary>
+    public sealed record PersonSummary(long Id, string? Name, int FaceCount, byte[]? Avatar, string? Card);
     public sealed record FaceEntry(long Id, string Path, byte[]? Thumb);
 
     /// <summary>Photos not yet scanned for faces (or changed since), newest first.</summary>
@@ -643,7 +644,8 @@ public sealed class IndexService : IDisposable
         using var cmd = _db.CreateCommand();
         cmd.CommandText = $@"
             SELECT p.id, p.name, p.face_count,
-                   (SELECT thumb FROM faces f WHERE f.person_id = p.id ORDER BY f.score DESC LIMIT 1)
+                   (SELECT thumb FROM faces f WHERE f.person_id = p.id ORDER BY f.score DESC LIMIT 1),
+                   p.card
             FROM people p
             WHERE p.face_count > 0 {(includeHidden ? "" : "AND p.hidden = 0")}
             ORDER BY (p.name IS NULL), p.face_count DESC";
@@ -651,7 +653,8 @@ public sealed class IndexService : IDisposable
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
             list.Add(new PersonSummary(reader.GetInt64(0), reader.IsDBNull(1) ? null : reader.GetString(1),
-                                       reader.GetInt32(2), reader.IsDBNull(3) ? null : (byte[])reader[3]));
+                                       reader.GetInt32(2), reader.IsDBNull(3) ? null : (byte[])reader[3],
+                                       reader.IsDBNull(4) ? null : reader.GetString(4)));
         return list;
     });
 
@@ -709,6 +712,17 @@ public sealed class IndexService : IDisposable
         cmd.Parameters.AddWithValue("$id", personId);
         cmd.ExecuteNonQuery();
         return survivor;
+    });
+
+    /// <summary>Saves (or with null, removes) a group's person card. It stays in the library, never in photos.</summary>
+    public Task SetPersonCardAsync(long personId, string? cardJson) => RunAsync(() =>
+    {
+        using var cmd = _db.CreateCommand();
+        cmd.CommandText = "UPDATE people SET card = $c WHERE id = $id";
+        cmd.Parameters.AddWithValue("$c", (object?)cardJson ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$id", personId);
+        cmd.ExecuteNonQuery();
+        return true;
     });
 
     /// <summary>"Not this person": moves one face into a new group of its own and keeps it there.</summary>

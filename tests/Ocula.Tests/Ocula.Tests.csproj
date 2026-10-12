@@ -21,6 +21,7 @@
     <Compile Include="..\..\Services\CaptaCapture.cs" Link="App\CaptaCapture.cs" />
     <Compile Include="..\..\Services\PhotoWindowLayout.cs" Link="App\PhotoWindowLayout.cs" />
     <Compile Include="..\..\Services\CameraText.cs" Link="App\CameraText.cs" />
+    <Compile Include="..\..\Services\PersonCards.cs" Link="App\PersonCards.cs" />
     <None Include="TestData\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
