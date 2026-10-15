@@ -409,6 +409,19 @@ Test on copies of your photos first.
 
 ## Still to build
 
+**Roadmap at a glance.** Nothing here is marked done unless it has been tested on a PC.
+
+| Item | Status |
+|---|---|
+| Photo windows with snap spots | Code added, untested on a PC; differs from the design in two places (see its entry) |
+| Person card and lookup | Not built |
+| Search by person details | Not built |
+| Screenshot text search | Partly built: Capta's capture details are indexed with plain matching. FTS5, the OcrText switch and the "Remove saved text" button are not built |
+| Camera firmware (detect only) | Not built; needs a decision on how to read the camera |
+| Porta integration | Not built; blocked until the `stirling-shared` source is available |
+| Backup to Google Photos and iCloud (Phase 7) | Not built (planned) |
+| Duplicate finder extras | Not built |
+
 **Phase 4 – culling, viewing, organising and sharing**
 
 _Culling_ (done: compare view, blur detection, burst stacks, pick/reject flags; see above)
@@ -424,7 +437,7 @@ _Still to come_
     before release.
   - Similar faces are grouped; you name a group once and Ocula offers that name as a tag on
     every matching photo, including in the web downloader's "Suggested tags".
-  - Optional "Look up on Wikidata" when you name someone: Ocula lists matches with a short
+  - **Person card and lookup (not built).** Optional "Look up on Wikidata" when you name someone: Ocula lists matches with a short
     description (many people share a name) and you pick one. The person card (full name including
     middle names, from Wikidata's "birth name" when it has one; date and place of
     birth, occupation, current spouse, number of children, height and languages spoken when Wikidata has them) comes from Wikidata (CC0), is kept in the local library only, and only the
@@ -442,12 +455,13 @@ _Still to come_
   - The card doesn't label each field with its source, to keep it uncluttered. One line under the
     card credits "Wikidata and DBpedia (CC BY-SA)" with the retrieval date (the credit DBpedia
     requires), and Ocula stores the source per field internally. DBpedia is itself derived from
-    Wikipedia, so it fills gaps and is not an independent second opinion. Add DBpedia to
-    `THIRD-PARTY-NOTICES.md` / `AppInfo.Notices` when built.
+    Wikipedia, so it fills gaps and is not an independent second opinion. When this is built it
+    needs two new entries in both `THIRD-PARTY-NOTICES.md` and `AppInfo.Notices`: DBpedia
+    (CC BY-SA) and MusicBrainz (CC0). Wikidata is already listed there.
   - Skipped on purpose: TMDB (needs an API key that can't be hidden in a distributed app, and
     non-commercial terms), IMDb datasets (non-commercial, little data), Google Knowledge Graph
     (terms don't allow storing the results).
-  - **Search by person details.** Once a card is saved, the normal search box understands things
+  - **Search by person details (not built).** Once a card is saved, the normal search box understands things
     like `people taller than 5'3"`, `born before 1990`, `over 40`, `married`, `has children`,
     `actress`, `born in Texas` or `speaks Spanish`, and they can be combined. Ocula shows how it read the query
     ("Understood as" chips you can remove) and returns photos of the matching people. It only
@@ -583,13 +597,18 @@ _Still to come_
 - Files: `Services/PhotoWindowLayout.cs` (spot rectangles, next free spot; unit-tested
   in `tests/Ocula.Tests/PhotoWindowLayoutTests.cs`), `Services/WindowFrame.cs` (hides the
   invisible resize borders), `MainWindow.PhotoWindows.cs`, and the photo-window mode of
-  `ViewerWindow`. Design: "Photo windows" boards from the design chat (not yet in `docs/`).
+  `ViewerWindow`. Design: `docs/design-canvas/Windows1.dc.html` to `Windows4.dc.html` and
+  `docs/mockups/Ocula-windows-*.png`.
+- Differs from the design, not built yet:
+  - The default is 6 spots (commit d7501ae chose six fixed columns); the design's default is 5, with
+    the layouts "5 columns", "1 large + 4", "3 + 2", "2 + 3" and "Cascade".
+  - The design's setting "keep snapped windows tidy" doesn't exist yet.
 - First things to check on a PC: windows land in their spots without gaps on each monitor,
   including one with different scaling; dragging a window takes it out of its spot (and only
   then); the 200 ms single-click delay from the design wasn't added, because a single click only
   updates the side panel here.
 
-**Phase 7 – back up to Google Photos and iCloud Photos** (planned)
+**Phase 7 – back up to Google Photos and iCloud Photos** (planned, not built)
 - **Google Photos (upload only):** sign in once, choose folders or albums, and Ocula uploads new
   photos and videos, skipping ones already sent. Uses the Google Photos Library API's
   `appendonly` scope. Since 31 March 2025 Google no longer lets apps read a user's whole library,
@@ -614,6 +633,44 @@ _Still to come_
 - Read-only: tags, ratings and labels go in an `.xmp` sidecar, so the PSD is never modified.
   Export and Edit in… work from the composite.
 - Not included: browsing layers, and other layered formats (GIMP .xcf, Krita .kra, Affinity).
+
+**Screenshot text search** (partly built; the rest is not built)
+- Built, untested in the app (commit fd2ba68): Ocula reads the `Capta` tEXt chunk that Capta writes
+  into saved PNGs (one JSON object; Capta's `docs/ocula-integration.md` lists `mode`, `sourceApp`,
+  `windowTitle`, `capturedAt` and `ocrText`) into the library's `capture` and `ocr` columns. Search
+  words match them, and `capture`, `hastext` and `app:` filter by them. Files:
+  `Services/CaptaCapture.cs`, `MainWindow.Captures.cs`, `IndexService.cs`, `SearchQuery.cs`.
+- Not built:
+  - Index the `Stirling.*` PNG text chunks that Capta writes, including OcrText, with SQLite FTS5
+    (a full-text table over the OCR text, window title and source app) instead of plain matching.
+    Capta currently writes one `Capta` chunk, not `Stirling.*` chunks, so check Capta's format
+    again before building and read both if it has changed.
+  - Treat the text as untrusted: it is whatever was on screen, or in a file someone sent. Never
+    use it as markup, a file name, a path or a command; escape it in FTS queries; cap its length;
+    show it as plain text.
+  - Search matches OcrText, window title and source app.
+  - Honour Capta's switch: when it is off, stop using OcrText (don't index it, don't search it).
+    That switch isn't in Capta's `Settings.cs` yet, so decide where Ocula will read it from.
+  - A "Remove saved text from my captures" button in Settings. Decide whether it clears only
+    Ocula's index (the safe default) or also the text inside the PNG files.
+
+**Camera firmware (detect only)** (not built; needs a decision first)
+- Show the connected camera's model and firmware version, with a link to the maker's own download
+  page. Never flash or install firmware, and never download it for the user.
+- Decide first how to read the camera: Windows Portable Devices (WPD) over MTP/PTP, or something
+  else. Ocula can't read MTP cameras today (card import needs a card reader), so this is new
+  device access. Check what the cameras you care about report over WPD before choosing.
+
+**Porta integration** (not built; blocked)
+- See `docs/PORTA-INTEGRATION.md`. Don't build it until the `stirling-shared` source is
+  available in this repository.
+
+**Duplicate finder extras** (not built)
+- A "Thorough" matching level beyond Similar; what it checks is still to be decided.
+- A "looks alike" mode that compares CLIP embeddings (the ones Smart recognition already stores
+  per photo) instead of pixel hashes, so the same scene shot differently can match. Needs Smart
+  recognition turned on.
+- "Find similar photos" from a selected photo (also listed under Smart recognition, "Not yet").
 
 **Later**
 - **Own duplicate hashing, then ImageSharp 4.x.** Replace `CoenM.ImageSharp.ImageHash` with
