@@ -87,9 +87,10 @@ public sealed class SmartIndexer
         {
             // Stopped on purpose (settings changed or the app is closing).
         }
-        catch
+        catch (Exception ex)
         {
-            // A model problem shouldn't take the app down; analysis just stops.
+            // A model problem shouldn't take the app down; analysis stops, and says why in the log.
+            DiagnosticLog.Write("Smart recognition: analysis stopped", ex);
         }
         finally
         {

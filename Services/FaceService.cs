@@ -54,8 +54,9 @@ public sealed class FaceService : IDisposable
                 return true;
             });
         }
-        catch
+        catch (Exception ex)
         {
+            DiagnosticLog.Write("People: couldn't load the face models", ex);
             Unload();
             return false;
         }

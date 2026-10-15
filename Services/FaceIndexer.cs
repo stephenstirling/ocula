@@ -43,6 +43,8 @@ public sealed class FaceIndexer
 
     public void Start()
     {
+        if (AppSettings.PeopleEnabled && !FaceModels.IsInstalled)
+            DiagnosticLog.Write("People: switched on, but the face models are missing or the wrong size");
         if (!Enabled || IsRunning) return;
         _cancel = new CancellationTokenSource();
         var token = _cancel.Token;
@@ -55,11 +57,16 @@ public sealed class FaceIndexer
     {
         try
         {
-            if (!await _faces.LoadAsync()) return;
+            if (!await _faces.LoadAsync())
+            {
+                DiagnosticLog.Write("People: scanning not started, the models didn't load");
+                return;
+            }
 
             // The groups live in memory while scanning, and are saved with each photo.
             var groups = (await _index.GetCentroidsAsync()).ToDictionary(g => g.Id, g => (g.Centroid, g.Count));
             var (done, total) = await _index.GetFaceProgressAsync();
+            DiagnosticLog.Write($"People: scanning started ({done:N0} of {total:N0} photos done)");
             Report(true, false, done, total);
 
             while (!cancel.IsCancellationRequested)
@@ -104,9 +111,10 @@ public sealed class FaceIndexer
         {
             // Stopped on purpose.
         }
-        catch
+        catch (Exception ex)
         {
-            // A model or file problem shouldn't take the app down; scanning just stops.
+            // A model or file problem shouldn't take the app down; scanning stops, and says why in the log.
+            DiagnosticLog.Write("People: scanning stopped", ex);
         }
         finally
         {

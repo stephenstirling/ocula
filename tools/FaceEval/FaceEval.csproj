@@ -25,6 +25,7 @@
   <ItemGroup>
     <Compile Include="$(FaceServiceSource)" Link="App\FaceService.cs" />
     <Compile Include="..\..\Services\FaceModels.cs" Link="App\FaceModels.cs" />
+    <Compile Include="..\..\Services\DiagnosticLog.cs" Link="App\DiagnosticLog.cs" />
     <Compile Include="..\..\Services\SmartModels.cs" Link="App\SmartModels.cs" />
     <Compile Include="..\..\Services\YuNetDecoder.cs" Link="App\YuNetDecoder.cs" />
     <Compile Include="..\..\Services\FaceAlignment.cs" Link="App\FaceAlignment.cs" />

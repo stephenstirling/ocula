@@ -26,6 +26,7 @@
     <Compile Include="..\..\Services\FaceGrouping.cs" Link="App\FaceGrouping.cs" />
     <Compile Include="..\..\Services\FaceService.cs" Link="App\FaceService.cs" />
     <Compile Include="..\..\Services\FaceModels.cs" Link="App\FaceModels.cs" />
+    <Compile Include="..\..\Services\DiagnosticLog.cs" Link="App\DiagnosticLog.cs" />
     <Compile Include="..\..\Services\SmartModels.cs" Link="App\SmartModels.cs" />
     <None Include="TestData\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
