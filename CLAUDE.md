@@ -60,6 +60,8 @@ names for tiles and sidebar entries, a Release MSIX build, and the Map page offl
   Alt+number, next display, linked zoom, and mixed-DPI monitors. The layout maths is unit-tested.
 - Duplicate finder limits on real photos.
 - Web download on real pages.
+- Delete / Move to Recycle Bin: the More-menu path was tested on copies (file in the Recycle Bin, grid,
+  selection, library rows); the Delete key itself, the 10-photo confirmation and RAW pairs were not.
 - Update checks and Store packaging with the Windows App Certification Kit.
 
 ## Read first

@@ -909,6 +909,14 @@ public sealed partial class MainWindow : Window
     // Lightroom-style shortcuts: 0–5 set the rating, 6–9 toggle red/yellow/green/blue.
     private async void Thumbs_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        // Delete moves the selected photos to the Recycle Bin.
+        if (e.Key == VirtualKey.Delete)
+        {
+            e.Handled = true;
+            await TrashSelectionAsync();
+            return;
+        }
+
         // Lightroom-style flags: P pick, X reject, U clear. C opens compare.
         if (_current != null && (e.Key is VirtualKey.P or VirtualKey.X or VirtualKey.U))
         {

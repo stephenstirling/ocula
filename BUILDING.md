@@ -242,6 +242,12 @@ see them side by side, 2 or 4 at a time. Zooming or panning one photo moves them
 same spot; **100%** shows real pixels for checking focus. Each photo shows its sharpness, and
 the sharpest is tagged. Click a photo in the strip to put it in the highlighted pane.
 
+**Delete** (the Delete key in the grid, or right-click / More > Move to Recycle Bin) sends the selected photos
+to the Recycle Bin, with their RAW partner and .xmp sidecar, so they can be restored from there. Ten or more
+photos ask first; fewer don't, like File Explorer. The next photo is selected afterwards, and the library
+forgets the photos' rows, Smart and face data and collection entries. Not yet in the full-screen viewer or
+photo windows.
+
 **Pick and reject** (P, X, U to clear; also in compare). Rejected photos are dimmed. Search
 with `picked` or `rejected`, and in compare, "Move rejects to Recycle Bin" clears them out.
 Flags are kept in Ocula's library: there's no standard place for them in JPEG files.

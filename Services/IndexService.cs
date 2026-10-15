@@ -284,6 +284,47 @@ public sealed class IndexService : IDisposable
         return true;
     });
 
+    /// <summary>
+    /// Forgets photos whose files are gone (moved to the Recycle Bin): the library row, Smart recognition
+    /// and face data, and collection entries. A face group left with no faces is dropped, and the others
+    /// have their average face rebuilt.
+    /// </summary>
+    public Task RemovePhotosAsync(IReadOnlyList<string> paths) => RunAsync(() =>
+    {
+        var groups = new HashSet<long>();
+        using (var tx = _db.BeginTransaction())
+        {
+            void Run(string sql, string path)
+            {
+                using var cmd = _db.CreateCommand();
+                cmd.Transaction = tx;
+                cmd.CommandText = sql;
+                cmd.Parameters.AddWithValue("$path", path);
+                cmd.ExecuteNonQuery();
+            }
+
+            foreach (var path in paths)
+            {
+                using (var find = _db.CreateCommand())
+                {
+                    find.Transaction = tx;
+                    find.CommandText = "SELECT DISTINCT person_id FROM faces WHERE path = $path AND person_id IS NOT NULL";
+                    find.Parameters.AddWithValue("$path", path);
+                    using var reader = find.ExecuteReader();
+                    while (reader.Read()) groups.Add(reader.GetInt64(0));
+                }
+                Run("DELETE FROM faces WHERE path = $path", path);
+                Run("DELETE FROM face_scans WHERE path = $path", path);
+                Run("DELETE FROM embeddings WHERE path = $path", path);
+                Run("DELETE FROM collection_items WHERE path = $path", path);
+                Run("DELETE FROM images WHERE path = $path", path);
+            }
+            tx.Commit();
+        }
+        foreach (var id in groups) RecomputeGroup(id);
+        return true;
+    });
+
     /// <summary>Moves a photo's library row to its new name, keeping flags, sharpness and the thumbnail.</summary>
     public Task RenameAsync(string oldPath, string newPath, string? newRawPath) => RunAsync(() =>
     {
