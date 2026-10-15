@@ -28,13 +28,17 @@ public sealed partial class MainWindow
         _faceIndexer.StatusChanged += status => DispatcherQueue.TryEnqueue(() => ShowFaceStatus(status));
         _faceIndexer.GroupsChanged += () => DispatcherQueue.TryEnqueue(() => _people?.RefreshSoon());
 
-        // Start after the library crawler and Smart recognition have had a head start.
-        var timer = DispatcherQueue.CreateTimer();
-        timer.Interval = TimeSpan.FromSeconds(40);
-        timer.IsRepeating = false;
-        timer.Tick += (_, _) => _faceIndexer?.Start();
-        timer.Start();
+        // Start after the library crawler and Smart recognition have had a head start. The timer is
+        // kept in a field: a timer held only by a local variable can be collected before it fires, and
+        // then People never started after a restart.
+        _faceStartTimer = DispatcherQueue.CreateTimer();
+        _faceStartTimer.Interval = TimeSpan.FromSeconds(40);
+        _faceStartTimer.IsRepeating = false;
+        _faceStartTimer.Tick += (_, _) => _faceIndexer?.Start();
+        _faceStartTimer.Start();
     }
+
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _faceStartTimer;
 
     private void ShowFaceStatus(FaceStatus status)
     {
@@ -62,11 +66,18 @@ public sealed partial class MainWindow
         });
     }
 
-    /// <summary>Deletes every stored face and name (Settings and the People window).</summary>
+    /// <summary>
+    /// Deletes every stored face and name (Settings and the People window) and turns People off.
+    /// Off matters: the People window's dialog promises Ocula "will stop finding faces until you turn
+    /// People on again", and with People still on, the next launch scanned every photo again and
+    /// rebuilt the groups.
+    /// </summary>
     public async Task DeleteFaceDataAsync()
     {
         _faceIndexer?.Stop();
         await _index.DeleteFaceDataAsync();
+        AppSettings.PeopleEnabled = false;
+        PeopleSettingsChanged();
     }
 
     private void OpenPeople()

@@ -28,13 +28,16 @@ public sealed partial class MainWindow
         _smartIndexer = new SmartIndexer(_index, _smart);
         _smartIndexer.StatusChanged += status => DispatcherQueue.TryEnqueue(() => ShowSmartStatus(status));
 
-        // Start after the library crawler has had a head start.
-        var timer = DispatcherQueue.CreateTimer();
-        timer.Interval = TimeSpan.FromSeconds(20);
-        timer.IsRepeating = false;
-        timer.Tick += (_, _) => _smartIndexer?.Start();
-        timer.Start();
+        // Start after the library crawler has had a head start. Kept in a field so it can't be collected
+        // before it fires (see InitialisePeople).
+        _smartStartTimer = DispatcherQueue.CreateTimer();
+        _smartStartTimer.Interval = TimeSpan.FromSeconds(20);
+        _smartStartTimer.IsRepeating = false;
+        _smartStartTimer.Tick += (_, _) => _smartIndexer?.Start();
+        _smartStartTimer.Start();
     }
+
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _smartStartTimer;
 
     /// <summary>Called by Settings after Smart recognition is switched on or off, or the model changes.</summary>
     public void SmartSettingsChanged()
