@@ -25,6 +25,9 @@ public sealed class PersonCard
     public string Title => Name ?? "Name this person";
     public FontStyle TitleStyle => Name == null ? FontStyle.Italic : FontStyle.Normal;
     public string CountText => FaceCount == 1 ? "1 photo" : $"{FaceCount:N0} photos";
+
+    /// <summary>What screen readers announce for a card (list items fall back to ToString()).</summary>
+    public override string ToString() => $"{Name ?? "Unnamed group"}, {CountText}";
 }
 
 /// <summary>One face crop inside a group.</summary>
@@ -34,6 +37,8 @@ public sealed class FaceCard
     public string Path { get; init; } = string.Empty;
     public BitmapImage? Image { get; init; }
     public string FileName => System.IO.Path.GetFileName(Path);
+
+    public override string ToString() => $"Face in {FileName}";
 }
 
 /// <summary>
@@ -47,6 +52,9 @@ public sealed partial class PeopleWindow : Window
     private readonly ObservableCollection<FaceCard> _faces = new();
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _refreshTimer;
     private bool _refreshing;
+
+    /// <summary>The group whose details are showing, so a refresh that re-selects it can leave them alone.</summary>
+    private long? _detailId;
 
     public PeopleWindow(MainWindow main)
     {
@@ -102,7 +110,7 @@ public sealed partial class PeopleWindow : Window
             Banner.Title = "People is on.";
             Banner.Message = "Faces are matched on this PC only and nothing is shared. You choose every name.";
 
-            var keep = select ?? Selected?.Id;
+            var keep = select ?? _detailId ?? Selected?.Id;
             var people = await _main.Library.GetPeopleAsync();
 
             _cards.Clear();
@@ -121,6 +129,13 @@ public sealed partial class PeopleWindow : Window
                            : $"{people.Count:N0} groups · {unnamed:N0} still need a name";
 
             if (keep != null) Groups.SelectedItem = _cards.FirstOrDefault(c => c.Id == keep);
+
+            // The group in the details may have been merged away or deleted; otherwise show its current name.
+            if (_detailId is long shown)
+            {
+                if (_cards.FirstOrDefault(c => c.Id == shown) is { } card) DetailTitle.Text = card.Name ?? "Unnamed group";
+                else { Detail.Visibility = Visibility.Collapsed; _detailId = null; }
+            }
         }
         finally
         {
@@ -131,12 +146,19 @@ public sealed partial class PeopleWindow : Window
     private async void Groups_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         var person = Selected;
+
+        // While photos are being scanned the list is rebuilt every few seconds: the selection goes away
+        // and comes back. That must not reset the details, or a name being typed would be wiped.
+        if (_refreshing && (person == null || person.Id == _detailId)) return;
+
         if (person == null)
         {
             Detail.Visibility = Visibility.Collapsed;
+            _detailId = null;
             return;
         }
 
+        _detailId = person.Id;
         Detail.Visibility = Visibility.Visible;
         DetailTitle.Text = person.Name ?? "Unnamed group";
         NameBox.Text = person.Name ?? string.Empty;
@@ -203,6 +225,7 @@ public sealed partial class PeopleWindow : Window
         if (person == null) return;
         await _main.Library.HidePersonAsync(person.Id);
         Detail.Visibility = Visibility.Collapsed;
+        _detailId = null;
         await RefreshAsync();
     }
 
@@ -231,6 +254,7 @@ public sealed partial class PeopleWindow : Window
 
         await _main.DeleteFaceDataAsync();
         Detail.Visibility = Visibility.Collapsed;
+        _detailId = null;
         await RefreshAsync();
     }
 }
