@@ -20,6 +20,7 @@
     <Compile Include="..\..\Services\OculaLink.cs" Link="App\OculaLink.cs" />
     <Compile Include="..\..\Services\CaptaCapture.cs" Link="App\CaptaCapture.cs" />
     <Compile Include="..\..\Services\PhotoWindowLayout.cs" Link="App\PhotoWindowLayout.cs" />
+    <Compile Include="..\..\Services\WindowFrame.cs" Link="App\WindowFrame.cs" />
     <None Include="TestData\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
