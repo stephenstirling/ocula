@@ -534,18 +534,27 @@ _Still to come_
   (Ocula would contact sites the user chooses) and add a short "only download what you have the
   right to use" note in the dialog.
 
-**People** (code added, untested; Wikidata person card not built yet)
-- Settings > People: switch on and Ocula downloads YuNet and SFace (about 40 MB) from Hugging Face.
+**People** (checked on a PC in October 2026; see docs/PEOPLE-EVALUATION.md. The Wikidata person card is not built)
+- Settings > People: switch on and Ocula downloads YuNet and SFace (about 39 MB) from Hugging Face,
+  pinned to one revision each and rejected unless their size and SHA-256 match (`FaceModels.cs`).
 - Faces are found in the background (idle only), grouped when similarity is above 0.45, and
   stored in the library (`people`, `faces`, `face_scans` tables). Face data is never written to photos.
 - Sidebar > People…: name a group (Enter or Save name), optionally add the name as a tag to all
   its photos, show the photos, hide the group, "Not this person" on a face (right-click), or
   delete all face data. Naming a group with an existing name merges the two.
-- Files: `FaceModels.cs`, `FaceService.cs`, `FaceIndexer.cs`, `MainWindow.People.cs`,
-  `PeopleWindow.xaml(.cs)`.
-- First things to check on a PC: YuNet output names and decoding (boxes in the right place),
-  alignment quality, and whether 0.45 groups sensibly. Confirm SFace's licence and its training
-  data provenance before release.
+- Files: `FaceModels.cs`, `FaceService.cs` (runs the models), `YuNetDecoder.cs`, `FaceAlignment.cs` and
+  `FaceGrouping.cs` (the arithmetic, unit-tested), `FaceIndexer.cs`, `MainWindow.People.cs`,
+  `PeopleWindow.xaml(.cs)`. `tools/FaceEval` measures detection and grouping on real photos.
+- Checked: the downloads and hashes; the models' real tensor names and shapes; YuNet's decoding against
+  OpenCV's source; detection on 20 photos (22 of 30 visible faces kept, no wrong boxes); grouping thresholds
+  0.35 to 0.55 (0.45 stays: best precision for the same F1); naming, reopening, hiding and deleting in the
+  People window. Fixed on the way: SFace was fed BGR instead of RGB; Delete all face data left People on; a name
+  being typed was wiped by the 3-second refresh while scanning; the People and Smart start timers could be
+  collected so nothing started after a restart.
+- Known limits: groups follow pose and sunglasses as much as identity, so each person ends up in several groups
+  and crowd photos make mixed ones. Hidden groups can't be shown again from the window.
+- Still unchecked: "Not this person" in the running app, what "Add the name as a tag" writes into files, and
+  SFace's licence and training data (unclear; see docs/KNOWN-ISSUES.md). Resolve the last before release.
 
 **Smart recognition** (code added; measured with SmartEval, not yet checked in the app)
 - Settings > Smart recognition: switch on, choose Compact (about 155 MB) or Accurate (about
