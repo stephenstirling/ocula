@@ -53,6 +53,17 @@ public sealed class FaceIndexer
 
     public void Stop() => _cancel?.Cancel();
 
+    /// <summary>Stops scanning and waits until the photo in hand has been saved, so nothing is written afterwards.</summary>
+    public async Task StopAsync()
+    {
+        _cancel?.Cancel();
+        if (_task is { } task)
+        {
+            try { await task; }
+            catch { /* RunAsync reports its own failures */ }
+        }
+    }
+
     private async Task RunAsync(CancellationToken cancel)
     {
         try

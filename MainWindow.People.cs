@@ -74,7 +74,9 @@ public sealed partial class MainWindow
     /// </summary>
     public async Task DeleteFaceDataAsync()
     {
-        _faceIndexer?.Stop();
+        // Wait for the photo being scanned to finish saving first; otherwise its faces were written after
+        // the delete and left a stray face and scan record behind.
+        if (_faceIndexer != null) await _faceIndexer.StopAsync();
         await _index.DeleteFaceDataAsync();
         AppSettings.PeopleEnabled = false;
         PeopleSettingsChanged();

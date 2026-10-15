@@ -99,7 +99,7 @@ user's choice and groups can be hidden.
 | Close and reopen the window | The name is still there |
 | Type a name while scanning refreshes the list | **Was wiped every 3 seconds; fixed** (the name box now survives refreshes) |
 | Hide this group | The card and the detail panel go, and the count drops by one |
-| Delete all face data | Every face, group and name goes; the window says "People is off". **It left People switched on, so the next launch rescanned everything and rebuilt the groups. Fixed: it now turns People off, as its dialog says** |
+| Delete all face data | Every face, group and name goes; the window says "People is off". **It left People switched on, so the next launch rescanned everything and rebuilt the groups, and a scan in flight could save one face after the delete. Fixed: it now waits for the scan to stop and turns People off, as its dialog says** |
 | People after a restart | **Never started: the 40-second start timer was a local variable and could be collected before it fired. Fixed, and the same for Smart recognition** |
 
 Not checked in the running app: "Not this person" (a right-click menu on a face, which could not be driven while the
