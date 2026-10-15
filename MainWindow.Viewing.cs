@@ -1,12 +1,14 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Ocula.Models;
 using Ocula.Services;
 using Windows.System;
+using Windows.UI.Core;
 
 namespace Ocula;
 
@@ -22,6 +24,9 @@ public sealed partial class MainWindow
     private void InitialiseViewing()
     {
         Filmstrip.ItemsSource = _images;
+
+        // handledEventsToo: the grid's own selection handling marks these as handled.
+        Thumbs.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(Thumbs_PointerPressed), true);
 
         SidebarToggle.IsChecked = AppSettings.SidebarOpen;
         DetailsToggle.IsChecked = AppSettings.DetailsOpen;
@@ -128,10 +133,52 @@ public sealed partial class MainWindow
     /// </summary>
     private async void Thumbs_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
+        _clickToken++; // the single click's pending preview is no longer wanted
+        if (SelectionModifierHeld()) return; // Ctrl or Shift + click is for selecting several photos: open nothing
         if ((e.OriginalSource as FrameworkElement)?.DataContext is not ImageItem item) return;
         if (AppSettings.PhotoWindowsOnDoubleClick) await OpenPhotoWindowsAsync(new[] { item });
         else OpenViewer(item);
     }
+
+    // ---------- Telling a single click from the start of a double-click ----------
+
+    /// <summary>How long a mouse click waits before the side panel shows its photo, so that a
+    /// double-click opening a window doesn't show the photo in the panel first.</summary>
+    private const int SingleClickDelayMs = 200;
+
+    private long _pointerSelectUntil;
+    private int _clickToken;
+
+    private static bool IsDown(VirtualKey key) =>
+        InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(CoreVirtualKeyStates.Down);
+
+    private static bool SelectionModifierHeld() => IsDown(VirtualKey.Control) || IsDown(VirtualKey.Shift);
+
+    private void Thumbs_PointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        var properties = e.GetCurrentPoint(Thumbs).Properties;
+        // A mouse or pen click is about to change the selection (see Thumbs_SelectionChanged).
+        if (e.Pointer.PointerDeviceType != Microsoft.UI.Input.PointerDeviceType.Touch)
+            _pointerSelectUntil = Environment.TickCount64 + 400;
+
+        // Right-click on a photo that isn't selected selects it (and only it), like File Explorer,
+        // so "Open in separate windows" acts on what was clicked rather than the old selection.
+        if (properties.IsRightButtonPressed && !SelectionModifierHeld() &&
+            (e.OriginalSource as FrameworkElement)?.DataContext is ImageItem item &&
+            !Thumbs.SelectedItems.Contains(item))
+        {
+            Thumbs.SelectedItems.Clear();
+            Thumbs.SelectedItems.Add(item);
+        }
+    }
+
+    /// <summary>
+    /// True when this selection change came from a plain mouse click and a double-click may follow,
+    /// so showing the photo should wait a moment. Keyboard and Ctrl/Shift selections, and everything
+    /// when double-click doesn't open windows, show it at once.
+    /// </summary>
+    private bool ShouldWaitForDoubleClick() =>
+        AppSettings.PhotoWindowsOnDoubleClick && Environment.TickCount64 < _pointerSelectUntil && !SelectionModifierHeld();
 
     // ================= Empty, loading and no-results states =================
 

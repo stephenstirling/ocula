@@ -587,6 +587,13 @@ public sealed partial class MainWindow : Window
 
         var item = e.AddedItems.OfType<ImageItem>().LastOrDefault() ?? Thumbs.SelectedItem as ImageItem;
         if (item == null || item == _current) return;
+
+        var token = ++_clickToken;
+        if (ShouldWaitForDoubleClick())
+        {
+            await Task.Delay(SingleClickDelayMs);
+            if (token != _clickToken) return; // a double-click or another selection came first
+        }
         await ShowDetailsAsync(item);
     }
 
