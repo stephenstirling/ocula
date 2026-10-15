@@ -21,7 +21,7 @@ public sealed record FaceStatus(bool Running, bool Waiting, int Done, int Total)
 public sealed class FaceIndexer
 {
     /// <summary>Cosine similarity needed to join a group. SFace's own "same person" cut-off is 0.363; this is stricter.</summary>
-    private const float JoinThreshold = 0.45f;
+    private const float JoinThreshold = FaceGrouping.DefaultJoinThreshold;
 
     private readonly IndexService _index;
     private readonly FaceService _faces;
@@ -140,41 +140,18 @@ public sealed class FaceIndexer
         Dictionary<long, (float[] Centroid, int Count)> groups,
         Dictionary<long, (float[] Centroid, int Count)> changed)
     {
-        long bestId = 0;
-        var bestScore = JoinThreshold;
-        foreach (var (id, group) in groups)
-        {
-            var score = Dot(embedding, group.Centroid);
-            if (score > bestScore)
-            {
-                bestScore = score;
-                bestId = id;
-            }
-        }
-
+        var bestId = FaceGrouping.BestGroup(embedding, groups, JoinThreshold);
         if (bestId == 0)
         {
             bestId = await _index.CreatePersonAsync(embedding);
             groups[bestId] = (embedding.ToArray(), 0);
         }
 
-        // New average = old average weighted by how many faces it already holds, plus this face.
         var (centroid, count) = groups[bestId];
-        var merged = new float[embedding.Length];
-        for (var i = 0; i < merged.Length; i++) merged[i] = centroid[i] * count + embedding[i];
-        var norm = MathF.Sqrt(merged.Sum(v => v * v));
-        if (norm > 0) for (var i = 0; i < merged.Length; i++) merged[i] /= norm;
-
+        var merged = FaceGrouping.AddFace(centroid, count, embedding);
         groups[bestId] = (merged, count + 1);
         changed[bestId] = (merged, count + 1);
         return bestId;
-    }
-
-    private static float Dot(float[] a, float[] b)
-    {
-        var sum = 0f;
-        for (var i = 0; i < Math.Min(a.Length, b.Length); i++) sum += a[i] * b[i];
-        return sum;
     }
 
     private void Report(bool running, bool waiting, int done, int total) =>

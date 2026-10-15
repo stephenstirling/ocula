@@ -21,21 +21,21 @@ public sealed record FaceResult(int X, int Y, int Width, int Height, float Score
 ///   1. YuNet detects faces and five landmarks (eyes, nose, mouth corners).
 ///   2. The face is rotated, scaled and cropped to a standard 112x112 pose using those landmarks.
 ///   3. SFace turns that crop into 128 numbers; similar faces give similar numbers.
-/// It never decides who anyone is: grouping and names are in PeopleService and the user's hands.
+/// It never decides who anyone is: grouping and names are in FaceGrouping, FaceIndexer and the user's hands.
+/// The decoding and alignment arithmetic is in YuNetDecoder and FaceAlignment (unit-tested).
 /// </summary>
 public sealed class FaceService : IDisposable
 {
-    private const int MinFacePixels = 40;      // smaller faces give unreliable measurements
-    private const float ScoreThreshold = 0.8f;
-    private const float NmsThreshold = 0.3f;
-    private const int MaxFacesPerPhoto = 20;
-    private const int AlignedSize = 112;
+    // The tensors of the OpenCV Zoo models (checked against the real files by FaceModelTests).
+    public const string DetectorInput = "input";    // float32 [1, 3, 640, 640], BGR, 0 to 255
+    public const string RecogniserInput = "data";   // float32 [1, 3, 112, 112], RGB, 0 to 255
+    public const string RecogniserOutput = "fc1";   // float32 [1, 128]
 
-    // Where the five landmarks sit in a standard 112x112 face (right eye, left eye, nose, right and left mouth corner, as seen in the photo).
-    private static readonly (float X, float Y)[] Reference =
-    {
-        (38.2946f, 51.6963f), (73.5318f, 51.5014f), (56.0252f, 71.7366f), (41.5493f, 92.3655f), (70.7299f, 92.2041f)
-    };
+    /// <summary>Smaller faces give unreliable measurements.</summary>
+    public int MinFacePixels { get; init; } = 40;
+    public float ScoreThreshold { get; init; } = 0.8f;
+    public float NmsThreshold { get; init; } = 0.3f;
+    public int MaxFacesPerPhoto { get; init; } = 20;
 
     private readonly SemaphoreSlim _loadLock = new(1, 1);
     private InferenceSession? _detector;
@@ -50,13 +50,7 @@ public sealed class FaceService : IDisposable
             if (!FaceModels.IsInstalled) return false;
             return await Task.Run(() =>
             {
-                var options = new SessionOptions
-                {
-                    GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL,
-                    IntraOpNumThreads = Math.Max(1, Environment.ProcessorCount / 2)
-                };
-                _detector = new InferenceSession(FaceModels.PathOf("yunet.onnx"), options);
-                _recogniser = new InferenceSession(FaceModels.PathOf("sface.onnx"), options);
+                Load(FaceModels.Folder, Math.Max(1, Environment.ProcessorCount / 2));
                 return true;
             });
         }
@@ -69,6 +63,36 @@ public sealed class FaceService : IDisposable
         {
             _loadLock.Release();
         }
+    }
+
+    /// <summary>Loads yunet.onnx and sface.onnx from a folder, and checks they have the expected tensors.</summary>
+    public void Load(string folder, int threads)
+    {
+        var options = new SessionOptions
+        {
+            GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL,
+            IntraOpNumThreads = Math.Max(1, threads)
+        };
+        try
+        {
+            _detector = new InferenceSession(Path.Combine(folder, "yunet.onnx"), options);
+            _recogniser = new InferenceSession(Path.Combine(folder, "sface.onnx"), options);
+            Require(_detector, "yunet.onnx", new[] { DetectorInput }, YuNetDecoder.Strides.SelectMany(s => new[] { $"cls_{s}", $"obj_{s}", $"bbox_{s}", $"kps_{s}" }));
+            Require(_recogniser, "sface.onnx", new[] { RecogniserInput }, new[] { RecogniserOutput });
+        }
+        catch
+        {
+            Unload();
+            throw;
+        }
+    }
+
+    private static void Require(InferenceSession session, string file, IEnumerable<string> inputs, IEnumerable<string> outputs)
+    {
+        var missing = inputs.Where(n => !session.InputMetadata.ContainsKey(n))
+                            .Concat(outputs.Where(n => !session.OutputMetadata.ContainsKey(n))).ToList();
+        if (missing.Count > 0)
+            throw new InvalidDataException($"{file} isn't the expected OpenCV Zoo model: missing {string.Join(", ", missing)}.");
     }
 
     private void Unload()
@@ -106,15 +130,20 @@ public sealed class FaceService : IDisposable
         return results;
     }
 
+    /// <summary>Every face YuNet finds, before the size and count limits Analyse applies. For diagnostics.</summary>
+    public IReadOnlyList<FaceDetection> DetectOnly(byte[] imageBytes)
+    {
+        var detector = _detector ?? throw new InvalidOperationException("People isn't loaded.");
+        using var image = Image.Load<Rgb24>(imageBytes);
+        return Detect(detector, image);
+    }
+
     // ================= Detection (YuNet) =================
 
-    private sealed record Detection(float X, float Y, float Width, float Height, float Score, (float X, float Y)[] Landmarks);
-
-    private static List<Detection> Detect(InferenceSession session, Image<Rgb24> image)
+    private List<FaceDetection> Detect(InferenceSession session, Image<Rgb24> image)
     {
         // The model wants a fixed square. Keep the picture's shape and pad the rest with black.
-        var inputName = session.InputMetadata.Keys.First();
-        var dims = session.InputMetadata[inputName].Dimensions;
+        var dims = session.InputMetadata[DetectorInput].Dimensions;
         var side = dims.Length == 4 && dims[2] > 0 && dims[2] == dims[3] ? dims[2] : 640;
 
         var scale = side / (float)Math.Max(image.Width, image.Height);
@@ -130,7 +159,7 @@ public sealed class FaceService : IDisposable
                 var row = accessor.GetRowSpan(y);
                 for (var x = 0; x < row.Length; x++)
                 {
-                    // YuNet expects BGR, 0 to 255, no further scaling.
+                    // YuNet expects BGR, 0 to 255, no further scaling (OpenCV's blobFromImage with swapRB off).
                     tensor[0, 0, y, x] = row[x].B;
                     tensor[0, 1, y, x] = row[x].G;
                     tensor[0, 2, y, x] = row[x].R;
@@ -138,57 +167,13 @@ public sealed class FaceService : IDisposable
             }
         });
 
-        using var outputs = session.Run(new[] { NamedOnnxValue.CreateFromTensor(inputName, tensor) });
-        var byName = outputs.ToDictionary(o => o.Name, o => o.AsTensor<float>());
+        using var outputs = session.Run(new[] { NamedOnnxValue.CreateFromTensor(DetectorInput, tensor) });
+        var byName = outputs.ToDictionary(o => o.Name, o => o.AsTensor<float>().ToArray());
+        var grids = YuNetDecoder.Strides.ToDictionary(
+            s => s,
+            s => new YuNetDecoder.GridOutput(byName[$"cls_{s}"], byName[$"obj_{s}"], byName[$"bbox_{s}"], byName[$"kps_{s}"]));
 
-        var all = new List<Detection>();
-        foreach (var stride in new[] { 8, 16, 32 })
-        {
-            if (!byName.TryGetValue($"cls_{stride}", out var cls) || !byName.TryGetValue($"obj_{stride}", out var obj) ||
-                !byName.TryGetValue($"bbox_{stride}", out var bbox) || !byName.TryGetValue($"kps_{stride}", out var kps))
-                continue;
-
-            var cols = side / stride;
-            var count = cls.Dimensions[1];
-            for (var n = 0; n < count; n++)
-            {
-                var score = MathF.Sqrt(Math.Clamp(cls[0, n, 0], 0f, 1f) * Math.Clamp(obj[0, n, 0], 0f, 1f));
-                if (score < ScoreThreshold) continue;
-
-                var row = n / cols;
-                var col = n % cols;
-                var cx = (col + bbox[0, n, 0]) * stride;
-                var cy = (row + bbox[0, n, 1]) * stride;
-                var bw = MathF.Exp(bbox[0, n, 2]) * stride;
-                var bh = MathF.Exp(bbox[0, n, 3]) * stride;
-
-                var landmarks = new (float X, float Y)[5];
-                for (var k = 0; k < 5; k++)
-                    landmarks[k] = (((kps[0, n, 2 * k] + col) * stride) / scale, ((kps[0, n, 2 * k + 1] + row) * stride) / scale);
-
-                all.Add(new Detection((cx - bw / 2) / scale, (cy - bh / 2) / scale, bw / scale, bh / scale, score, landmarks));
-            }
-        }
-        return NonMaxSuppression(all);
-    }
-
-    private static List<Detection> NonMaxSuppression(List<Detection> detections)
-    {
-        var kept = new List<Detection>();
-        foreach (var d in detections.OrderByDescending(d => d.Score))
-            if (kept.All(k => IoU(k, d) < NmsThreshold)) kept.Add(d);
-        return kept;
-    }
-
-    private static float IoU(Detection a, Detection b)
-    {
-        var x1 = Math.Max(a.X, b.X);
-        var y1 = Math.Max(a.Y, b.Y);
-        var x2 = Math.Min(a.X + a.Width, b.X + b.Width);
-        var y2 = Math.Min(a.Y + a.Height, b.Y + b.Height);
-        var inter = Math.Max(0, x2 - x1) * Math.Max(0, y2 - y1);
-        var union = a.Width * a.Height + b.Width * b.Height - inter;
-        return union <= 0 ? 0 : inter / union;
+        return YuNetDecoder.NonMaxSuppression(YuNetDecoder.Decode(side, scale, grids, ScoreThreshold), NmsThreshold);
     }
 
     // ================= Alignment =================
@@ -196,40 +181,21 @@ public sealed class FaceService : IDisposable
     /// <summary>Returns a 112x112 face as BGR floats [3][112*112], rotated and scaled to the standard pose.</summary>
     private static float[][] Align(Image<Rgb24> image, (float X, float Y)[] landmarks)
     {
-        // Best similarity transform (rotation + uniform scale + shift) mapping the landmarks onto the reference.
-        float mx = landmarks.Average(p => p.X), my = landmarks.Average(p => p.Y);
-        float rx = Reference.Average(p => p.X), ry = Reference.Average(p => p.Y);
-        float den = 0, a = 0, b = 0;
-        for (var i = 0; i < 5; i++)
-        {
-            float px = landmarks[i].X - mx, py = landmarks[i].Y - my;
-            float qx = Reference[i].X - rx, qy = Reference[i].Y - ry;
-            den += px * px + py * py;
-            a += px * qx + py * qy;
-            b += px * qy - py * qx;
-        }
-        if (den < 1e-6f) den = 1e-6f;
-        a /= den;
-        b /= den;
-        var tx = rx - (a * mx - b * my);
-        var ty = ry - (b * mx + a * my);
+        var transform = FaceAlignment.Solve(landmarks);
+        const int size = FaceAlignment.Size;
 
         // For each output pixel, find where it came from in the photo (the inverse transform) and sample it.
-        var norm = a * a + b * b;
-        if (norm < 1e-9f) norm = 1e-9f;
-        var channels = new[] { new float[AlignedSize * AlignedSize], new float[AlignedSize * AlignedSize], new float[AlignedSize * AlignedSize] };
+        var channels = new[] { new float[size * size], new float[size * size], new float[size * size] };
         image.ProcessPixelRows(accessor =>
         {
-            for (var v = 0; v < AlignedSize; v++)
+            for (var v = 0; v < size; v++)
             {
-                for (var u = 0; u < AlignedSize; u++)
+                for (var u = 0; u < size; u++)
                 {
-                    float dx = u - tx, dy = v - ty;
-                    var sx = (a * dx + b * dy) / norm;
-                    var sy = (-b * dx + a * dy) / norm;
+                    var (sx, sy) = transform.Invert(u, v);
                     var (r, g, bl) = Bilinear(accessor, sx, sy);
-                    var index = v * AlignedSize + u;
-                    channels[0][index] = bl; // SFace expects BGR, 0 to 255
+                    var index = v * size + u;
+                    channels[0][index] = bl;
                     channels[1][index] = g;
                     channels[2][index] = r;
                 }
@@ -258,11 +224,12 @@ public sealed class FaceService : IDisposable
 
     private static Image<Rgb24> ToImage(float[][] bgr)
     {
-        var image = new Image<Rgb24>(AlignedSize, AlignedSize);
-        for (var y = 0; y < AlignedSize; y++)
-            for (var x = 0; x < AlignedSize; x++)
+        const int size = FaceAlignment.Size;
+        var image = new Image<Rgb24>(size, size);
+        for (var y = 0; y < size; y++)
+            for (var x = 0; x < size; x++)
             {
-                var i = y * AlignedSize + x;
+                var i = y * size + x;
                 image[x, y] = new Rgb24((byte)Math.Clamp(bgr[2][i], 0, 255), (byte)Math.Clamp(bgr[1][i], 0, 255), (byte)Math.Clamp(bgr[0][i], 0, 255));
             }
         return image;
@@ -272,13 +239,19 @@ public sealed class FaceService : IDisposable
 
     private static float[] Embed(InferenceSession session, float[][] bgr)
     {
-        var tensor = new DenseTensor<float>(new[] { 1, 3, AlignedSize, AlignedSize });
-        for (var c = 0; c < 3; c++)
-            for (var i = 0; i < AlignedSize * AlignedSize; i++)
-                tensor[0, c, i / AlignedSize, i % AlignedSize] = bgr[c][i];
+        const int size = FaceAlignment.Size;
+        var tensor = new DenseTensor<float>(new[] { 1, 3, size, size });
 
-        var inputName = session.InputMetadata.Keys.First();
-        using var outputs = session.Run(new[] { NamedOnnxValue.CreateFromTensor(inputName, tensor) });
+        // SFace reads RGB, 0 to 255: OpenCV's FaceRecognizerSF calls blobFromImage with swapRB on, which
+        // turns its BGR crop into RGB. (Feeding BGR, as this once did, still runs but gives worse embeddings.)
+        for (var c = 0; c < 3; c++)
+        {
+            var source = bgr[2 - c];
+            for (var i = 0; i < size * size; i++)
+                tensor[0, c, i / size, i % size] = source[i];
+        }
+
+        using var outputs = session.Run(new[] { NamedOnnxValue.CreateFromTensor(RecogniserInput, tensor) }, new[] { RecogniserOutput });
         var vector = outputs.First().AsTensor<float>().ToArray();
 
         var length = MathF.Sqrt(vector.Sum(v => v * v));
