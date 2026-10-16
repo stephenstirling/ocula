@@ -52,16 +52,16 @@ names for tiles and sidebar entries, a Release MSIX build, and the Map page offl
 - Smart recognition inside the app (search and tag chips after the library is analysed again).
   The tokenizer, preprocessing, model names and downloads are checked against the reference, and
   search and tag quality are measured with tools/SmartEval (docs/SMART-EVALUATION.md).
-- People: "Not this person" in the running app, and the "Add the name as a tag" option (it writes into
-  files). Everything else was checked in October 2026 (docs/PEOPLE-EVALUATION.md). SFace's licence and
-  training data are unresolved (docs/KNOWN-ISSUES.md): settle before release.
+- People: the "Add the name as a tag" option (it writes into files). Everything else was checked in October
+  2026 (docs/PEOPLE-EVALUATION.md), including "Not this person". SFace's licence and training data are
+  unresolved (docs/KNOWN-ISSUES.md): settle before release.
 - Capta hand-off: ocula: links (import, edit, captures) and indexing Capta's PNG metadata.
 - Photo windows (double-click a thumbnail): spot placement (6 fixed columns), swapping,
   Alt+number, next display, linked zoom, and mixed-DPI monitors. The layout maths is unit-tested.
 - Duplicate finder limits on real photos.
 - Web download on real pages.
-- Delete / Move to Recycle Bin: the More-menu path was tested on copies (file in the Recycle Bin, grid,
-  selection, library rows); the Delete key itself, the 10-photo confirmation and RAW pairs were not.
+- Delete / Move to Recycle Bin: tested on copies with the real Delete key, the More menu and the 10-photo
+  confirmation (Recycle Bin, grid, selection, library rows); RAW+JPEG pairs were not.
 - Update checks and Store packaging with the Windows App Certification Kit.
 
 ## Read first

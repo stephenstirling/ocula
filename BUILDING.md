@@ -559,7 +559,7 @@ _Still to come_
   collected so nothing started after a restart.
 - Known limits: groups follow pose and sunglasses as much as identity, so each person ends up in several groups
   and crowd photos make mixed ones. Hidden groups can't be shown again from the window.
-- Still unchecked: "Not this person" in the running app, what "Add the name as a tag" writes into files, and
+- Still unchecked: what "Add the name as a tag" writes into files, and
   SFace's licence and training data (unclear; see docs/KNOWN-ISSUES.md). Resolve the last before release.
 
 **Smart recognition** (code added; measured with SmartEval, not yet checked in the app)

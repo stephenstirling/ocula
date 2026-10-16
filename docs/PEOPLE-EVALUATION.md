@@ -98,13 +98,15 @@ user's choice and groups can be hidden.
 | Name a group, with "Add the name as a tag" off | Saved; the card, the count ("1,026 still need a name") and the detail title update |
 | Close and reopen the window | The name is still there |
 | Type a name while scanning refreshes the list | **Was wiped every 3 seconds; fixed** (the name box now survives refreshes) |
+| Not this person (real right-click) | The face leaves the group and starts a new one |
 | Hide this group | The card and the detail panel go, and the count drops by one |
 | Delete all face data | Every face, group and name goes; the window says "People is off". **It left People switched on, so the next launch rescanned everything and rebuilt the groups, and a scan in flight could save one face after the delete. Fixed: it now waits for the scan to stop and turns People off, as its dialog says** |
 | People after a restart | **Never started: the 40-second start timer was a local variable and could be collected before it fired. Fixed, and the same for Smart recognition** |
 
-Not checked in the running app: "Not this person" (a right-click menu on a face, which could not be driven while the
-windows weren't on the visible desktop), and what "Add the name as a tag" writes into the files (switched off for every test
-so no photo was touched).
+"Not this person" (right-click a face) was checked afterwards with a real right-click: the face left its group (28 to 27 faces)
+and became a group of its own.
+
+Not checked: what "Add the name as a tag" writes into the files (switched off for every test so no photo was touched).
 
 ## Repeating the checks
 
