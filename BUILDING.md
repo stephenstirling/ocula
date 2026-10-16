@@ -419,7 +419,7 @@ Test on copies of your photos first.
 
 | Item | Status |
 |---|---|
-| Photo windows with snap spots | Code added, untested on a PC. Default is 6 spots (decided) |
+| Photo windows with snap spots | Tested on one 3440x1440 monitor; second monitor, mixed scaling and other taskbar positions untested. Default is 6 spots (decided) |
 | Person card and lookup | Not built |
 | Search by person details | Not built |
 | Screenshot text search | Partly built: Capta's capture details are indexed with plain matching. FTS5, the OcrText switch and the "Remove saved text" button are not built |
@@ -594,7 +594,7 @@ _Still to come_
   developed), "find similar photos" from a selected photo, and Smart search as its own sidebar
   view (it is a search-box prefix for now).
 
-**Photo windows with snap spots** (code added, untested on a PC)
+**Photo windows with snap spots** (tested on one 3440x1440 monitor, October 2026; see the last bullet for what isn't)
 - A single click shows the photo in the main window, as before. A double-click opens it in its
   own photo window (Settings > Photo windows turns this off; double-click is then full screen).
   "Open in separate windows" (right-click on the thumbnails, or More) opens the selected photos.
@@ -618,12 +618,28 @@ _Still to come_
   "5 columns", "1 large + 4", "3 + 2", "2 + 3" and "Cascade". The built and agreed default is **6 fixed
   spots** (the owner confirmed 6; the Windows mock-ups are superseded on that point). The layouts are the
   ones the code has, named from the spot count: with 6, "6 columns", "1 large + 5", "3 + 3" and "Cascade".
-- First things to check on a PC: windows land in their spots without gaps on each monitor,
-  including one with different scaling; dragging a window takes it out of its spot (and only
-  then). A mouse click waits 200 ms before the side panel shows its photo, so a double-click doesn't
+- A mouse click waits 200 ms before the side panel shows its photo, so a double-click doesn't
   flash it first (keyboard and Ctrl/Shift selections don't wait; Ctrl or Shift + double-click opens nothing).
   The spot rectangles are unit-tested for 2 to 6 spots on 1920x1080 and 3440x1440 monitors with the taskbar at
   the bottom or on the left.
+- **Tested on the owner's PC** (one 3440x1440 monitor at 100%, taskbar at the bottom, real mouse and keyboard):
+  - Six windows land in spots 1 to 6 at x = 0, 574, 1148, 1721, 2294, 2867, each 573 or 574 wide and the full
+    1392 px work-area height, with no gaps or overlaps. With 4 spots each is 860 wide.
+  - Double-click opens one; "Open in separate windows" opens a Shift-selected range, left to right in order;
+    five photos with four spots open four and say so; with every spot taken, "Replace the oldest" closes the
+    oldest and puts the new photo in its spot; closing a window frees its spot for the next photo.
+  - The spot buttons and Alt+1 to Alt+6 swap two windows; Alt+0 centres a window (two thirds size);
+    dragging a window by its title bar takes it out of its spot, and only that does.
+  - Layouts: 6 columns, 1 large + 5 (left half, then two columns, last row spanning), 3 + 3 (1147 x 696) and
+    Cascade (2064 x 835, stepped 58 px) all fit inside the work area. Switching layout re-arranges every window.
+  - Settings > Photo windows: spots 2 to 6, layout names follow the spot count, link zoom and pan (zooming one
+    window zoomed the others to the same view).
+  - Fixed while testing: a double-click on a thumbnail that wasn't selected yet opened the window behind the main
+    window (the main window took focus back about 300 ms later); the photo sat at the top of tall windows
+    instead of the middle; with 2, 4 or 6 spots the layout list had "3 + 3" twice.
+  - **Not tested:** a second monitor (the display button, "next display", moving between monitors), monitors
+    with different scaling, the taskbar anywhere but the bottom (unit tests only), "Ask" and "Open on top" for a
+    full set of spots, "Open in the spot used last", and panning (only zoom was linked and checked).
 
 **Phase 7 – back up to Google Photos and iCloud Photos** (planned, not built)
 - **Google Photos (upload only):** sign in once, choose folders or albums, and Ocula uploads new

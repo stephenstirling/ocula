@@ -56,8 +56,10 @@ names for tiles and sidebar entries, a Release MSIX build, and the Map page offl
   2026 (docs/PEOPLE-EVALUATION.md), including "Not this person". SFace's licence and training data are
   unresolved (docs/KNOWN-ISSUES.md): settle before release.
 - Capta hand-off: ocula: links (import, edit, captures) and indexing Capta's PNG metadata.
-- Photo windows (double-click a thumbnail): spot placement (6 fixed columns), swapping,
-  Alt+number, next display, linked zoom, and mixed-DPI monitors. The layout maths is unit-tested.
+- Photo windows (double-click a thumbnail): placement, swapping, Alt+number, layouts, replace-the-oldest and
+  linked zoom were checked on one 3440x1440 monitor in October 2026 (BUILDING.md lists the results). Still
+  untested: a second monitor ("next display"), mixed-DPI monitors, the taskbar away from the bottom (unit tests
+  only), the "Ask" and "Open on top" settings, "Open in the spot used last", and linked panning.
 - Duplicate finder limits on real photos.
 - Web download on real pages.
 - Delete / Move to Recycle Bin: tested on copies with the real Delete key, the More menu and the 10-photo
