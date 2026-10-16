@@ -19,6 +19,13 @@ if (options == null)
 }
 
 var labelled = Labels.Read(options.Labels);
+var unknown = labelled.SelectMany(p => p.Subjects.Concat(p.MaybeSubjects)).Distinct().Except(Prompts.ExpectedTags.Keys).ToList();
+if (unknown.Count > 0)
+{
+    Console.Error.WriteLine($"Unknown subjects in {options.Labels}: {string.Join(", ", unknown)}. Add them to Prompts.ExpectedTags.");
+    return 1;
+}
+var own = labelled.Where(p => p.AllSubjectsLabelled).ToList();
 var byFile = labelled.ToDictionary(p => p.File);
 var culture = CultureInfo.InvariantCulture;
 using var dump = options.Dump != null ? new StreamWriter(options.Dump, false, Encoding.UTF8) : null;
@@ -27,7 +34,10 @@ dump?.WriteLine("tier,kind,prompt,file,positives,ambiguous,score");
 Console.WriteLine($"# Smart recognition evaluation, {DateTime.Now:yyyy-MM-dd}");
 Console.WriteLine();
 Console.WriteLine($"{labelled.Count} labelled photos. Positives: " +
-    string.Join(", ", Prompts.Subjects.Select(s => $"{s} {labelled.Count(p => p.Is(s))}")) + ".");
+    string.Join(", ", Prompts.SearchSubjects.Select(s => $"{s} {labelled.Count(p => p.Is(s))}")) + ".");
+Console.WriteLine();
+Console.WriteLine($"{own.Count} photos in own/ are labelled for every subject. Positives: " +
+    string.Join(", ", Prompts.ExpectedTags.Keys.Except(Prompts.SearchSubjects).Select(s => $"{s} {own.Count(p => p.Is(s))}")) + ".");
 
 foreach (var tier in options.Tiers)
 {
@@ -73,23 +83,66 @@ foreach (var tier in options.Tiers)
     Console.WriteLine();
     Console.WriteLine("### Tag suggestions");
     Console.WriteLine();
-    Console.WriteLine("Expected tag: a suggestion names the photo's labelled subject (for example \"dog\", or \"sunset\" for a sunset).");
+    Console.WriteLine("Expected tag: a suggestion names the photo's labelled subject (for example \"dog\", or \"sunset\" for a sunset). " +
+                      "This table counts the five search subjects only, on all photos.");
     Console.WriteLine();
     Console.WriteLine("| | Photos with no tags | Tags per photo | Expected tag suggested |");
     Console.WriteLine("|---|--:|--:|--:|");
     foreach (var (name, tags) in new[] { ("Before", beforeTags), ("After", afterTags) })
     {
-        var expected = labelled.SelectMany(p => p.Subjects.Select(s => Prompts.ExpectedTags[s].Overlaps(tags[p.File]))).ToList();
+        var expected = labelled.SelectMany(p => p.Subjects.Intersect(Prompts.SearchSubjects)
+                                                 .Select(s => Prompts.ExpectedTags[s].Overlaps(tags[p.File]))).ToList();
         Console.WriteLine($"| {name} | {tags.Count(t => t.Value.Count == 0)} of {tags.Count} | {tags.Average(t => t.Value.Count):F1} | " +
                           $"{expected.Count(e => e)} of {expected.Count} |");
     }
+
+    Console.WriteLine();
+    Console.WriteLine("#### The owner's photos");
+    Console.WriteLine();
+    Console.WriteLine($"The {own.Count} own/ photos, labelled for every subject. Found: labelled positives with an expected tag. " +
+                      "Wrong: suggestions that name a subject the photo isn't labelled with, as positive or ambiguous. " +
+                      "Not judged: suggestions no subject covers.");
+    Console.WriteLine();
+    Console.WriteLine("| | Tags | Found | Wrong | Not judged |");
+    Console.WriteLine("|---|--:|--:|--:|--:|");
+    foreach (var (name, tags) in new[] { ("Before", beforeTags), ("After", afterTags) })
+    {
+        var found = own.SelectMany(p => p.Subjects.Select(s => Prompts.ExpectedTags[s].Overlaps(tags[p.File]))).ToList();
+        var suggested = own.SelectMany(p => tags[p.File].Select(t => (Photo: p, Tag: t))).ToList();
+        Console.WriteLine($"| {name} | {suggested.Count} | {found.Count(f => f)} of {found.Count} | " +
+                          $"{suggested.Count(s => Prompts.IsWrong(s.Photo, s.Tag))} | {suggested.Count(s => !Prompts.Covers(s.Tag))} |");
+    }
+    foreach (var (name, tags) in new[] { ("Before", beforeTags), ("After", afterTags) })
+    {
+        var notJudged = own.SelectMany(p => tags[p.File]).Where(t => !Prompts.Covers(t))
+                           .GroupBy(t => t).OrderByDescending(g => g.Count()).ThenBy(g => g.Key).Select(g => $"{g.Key} {g.Count()}");
+        Console.WriteLine();
+        Console.WriteLine($"Not judged, {name.ToLowerInvariant()}: {string.Join(", ", notJudged)}.");
+    }
+    Console.WriteLine();
+    Console.WriteLine("By subject (a wrong tag that several subjects share, such as \"sports\", counts under each):");
+    Console.WriteLine();
+    Console.WriteLine("| Subject | Photos | Before: found | wrong | After: found | wrong |");
+    Console.WriteLine("|---|--:|--:|--:|--:|--:|");
+    foreach (var (subject, expectedTags) in Prompts.ExpectedTags)
+    {
+        var positives = own.Where(p => p.Is(subject)).ToList();
+        string Score(Dictionary<string, List<string>> tags) =>
+            $"{positives.Count(p => expectedTags.Overlaps(tags[p.File]))} | " +
+            $"{own.Sum(p => tags[p.File].Count(t => expectedTags.Contains(t) && Prompts.IsWrong(p, t)))}";
+        Console.WriteLine($"| {subject} | {positives.Count} | {Score(beforeTags)} | {Score(afterTags)} |");
+    }
+
     if (options.ShowTags)
     {
         Console.WriteLine();
-        Console.WriteLine("| Photo | Before | After |");
-        Console.WriteLine("|---|---|---|");
+        Console.WriteLine("Labelled: positives (ambiguous). Wrong tags on own/ photos are struck through.");
+        Console.WriteLine();
+        Console.WriteLine("| Photo | Labelled | Before | After |");
+        Console.WriteLine("|---|---|---|---|");
         foreach (var photo in labelled)
-            Console.WriteLine($"| {photo.File} | {string.Join(", ", beforeTags[photo.File])} | {string.Join(", ", afterTags[photo.File])} |");
+            Console.WriteLine($"| {photo.File} | {photo.Positives}{(photo.Ambiguous.Length > 0 ? $" ({photo.Ambiguous})" : "")} | " +
+                              $"{ShowTags(photo, beforeTags[photo.File])} | {ShowTags(photo, afterTags[photo.File])} |");
     }
 }
 return 0;
@@ -103,6 +156,9 @@ string Describe(List<SmartMatch> shown, string? subject)
     var top = string.Join("<br>", shown.Take(3).Select(m => Path.GetFileNameWithoutExtension(m.Path)));
     return $"{shown.Count} | {right} / {wrong} / {missed} | {top}";
 }
+
+static string ShowTags(Photo photo, List<string> tags) =>
+    string.Join(", ", tags.Select(t => photo.AllSubjectsLabelled && Prompts.IsWrong(photo, t) ? $"~~{t}~~" : t));
 
 static string Csv(string s) => s.Contains(',') ? $"\"{s}\"" : s;
 
@@ -169,6 +225,10 @@ sealed record Options(string Root, string Labels, string ModelsRoot, string[] Ti
 sealed record Photo(string File, string Positives, string Ambiguous)
 {
     public IEnumerable<string> Subjects => Positives.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+    public IEnumerable<string> MaybeSubjects => Ambiguous.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+    /// <summary>The owner's photos are labelled for every subject; the Commons photos only for the search subjects.</summary>
+    public bool AllSubjectsLabelled => File.StartsWith("own/");
     public bool Is(string subject) => Positives.Split(' ').Contains(subject);
     public bool Maybe(string subject) => Ambiguous.Split(' ').Contains(subject);
 }
@@ -184,9 +244,13 @@ static class Labels
 
 static class Prompts
 {
-    public static readonly string[] Subjects = { "sunset", "dog", "table", "snow", "food" };
+    /// <summary>The subjects the search queries look for, labelled on every photo.</summary>
+    public static readonly string[] SearchSubjects = { "sunset", "dog", "table", "snow", "food" };
 
-    /// <summary>Suggestions that count as naming each subject.</summary>
+    /// <summary>
+    /// Suggestions that count as naming each subject. Only the best label of a group in
+    /// <see cref="SmartLabels.Groups"/> is suggested, so a subject lists every label of a group it uses.
+    /// </summary>
     public static readonly Dictionary<string, HashSet<string>> ExpectedTags = new()
     {
         ["sunset"] = new() { "sunset", "sunrise", "golden hour" },
@@ -194,7 +258,45 @@ static class Prompts
         ["table"] = new() { "restaurant", "family", "breakfast", "food", "picnic", "birthday party", "barbecue" },
         ["snow"] = new() { "snow", "skiing", "snowboarding" },
         ["food"] = new() { "food", "pizza", "burger", "sushi", "salad", "cake", "dessert", "breakfast", "fruit", "vegetables", "barbecue", "picnic" },
+        // Tag subjects, labelled on the owner's photos only.
+        ["portrait"] = new() { "portrait", "posed portrait" },
+        ["couple"] = new() { "couple" },
+        ["wedding"] = new() { "wedding" },
+        ["concert"] = new() { "concert", "festival" },
+        ["speech"] = new() { "speech" },
+        ["protest"] = new() { "protest" },
+        ["parade"] = new() { "parade", "festival" },
+        ["crowd"] = new() { "crowd" },
+        ["dancing"] = new() { "dancing" },
+        ["costume"] = new() { "costume" },
+        ["swimming"] = new() { "swimming", "swimming pool", "sports" },
+        ["volleyball"] = new() { "volleyball", "beach volleyball", "sports" },
+        ["tennis"] = new() { "tennis", "sports" },
+        ["soccer"] = new() { "soccer", "stadium", "sports" },
+        ["running"] = new() { "running", "track and field", "sports" },
+        ["cheerleading"] = new() { "cheerleading", "sports" },
+        ["dress"] = new() { "dress" },
+        ["jacket"] = new() { "jacket", "coat" },
+        ["hat"] = new() { "hat" },
+        ["sunglasses"] = new() { "sunglasses" },
+        ["child"] = new() { "child", "baby", "family" },
+        ["guitar"] = new() { "guitar" },
+        ["flag"] = new() { "flag" },
+        ["car"] = new() { "car", "truck", "taxi" },
+        ["bus"] = new() { "bus" },
+        ["candles"] = new() { "candles" },
+        ["goat"] = new() { "goat" },
     };
+
+    /// <summary>Whether some subject counts this label as naming it, so the label can be judged right or wrong.</summary>
+    public static bool Covers(string label) => ExpectedTags.Values.Any(tags => tags.Contains(label));
+
+    /// <summary>
+    /// A suggestion is wrong when it names a subject the photo isn't labelled with, as positive or
+    /// ambiguous. Only meaningful for photos labelled for every subject.
+    /// </summary>
+    public static bool IsWrong(Photo photo, string label) =>
+        Covers(label) && !ExpectedTags.Any(e => e.Value.Contains(label) && (photo.Is(e.Key) || photo.Maybe(e.Key)));
 
     /// <summary>Test queries and the subject each one should find (null: nothing in the set should match).</summary>
     public static readonly (string Query, string? Subject)[] Queries =

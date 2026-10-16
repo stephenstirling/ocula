@@ -1,6 +1,10 @@
 # Ground truth for Ocula's smart-recognition evaluation (tools/SmartEval).
 # positives: subjects clearly in the photo. ambiguous: partly there; ignored when scoring.
-# subjects: sunset (sunset over water), dog, table (people at a table), snow, food.
+# Search subjects, labelled on every photo: sunset (sunset over water), dog, table (people at a table), snow, food.
+# Tag subjects, labelled on own/ photos only (see Prompts.ExpectedTags in Program.cs): portrait (one or two
+# people posed or framed as the subject), couple, wedding, concert (singing or playing on stage), speech
+# (talking or reading at a microphone), protest, parade, crowd, dancing, costume, swimming, volleyball, tennis,
+# soccer, running, cheerleading, dress, jacket, hat, sunglasses, child, guitar, flag, car, bus, candles, goat.
 file,positives,ambiguous
 cc0/cc0 dog 01.jpg,dog,
 cc0/cc0 dog 02.jpg,dog,
@@ -76,107 +80,107 @@ cc0/cc0 table 09.jpg,table food,
 cc0/cc0 table 10.jpg,,table food
 cc0/cc0 table 11.jpg,table,food
 cc0/cc0 table 12.jpg,table,
-own/001 IMG_9786.JPG,,
-own/002 P3160713.JPG,,
-own/003 Pregnancy_by_nymosis.jpg,,
-own/004 _MG_5653.JPG,,
-own/005 _MG_6049.JPG,,
-own/006 P9070081.JPG,,
-own/007 IMG_0247.JPG,,
-own/008 IMG_0989.JPG,,
+own/001 IMG_9786.JPG,swimming,
+own/002 P3160713.JPG,tennis,crowd hat
+own/003 Pregnancy_by_nymosis.jpg,,portrait
+own/004 _MG_5653.JPG,sunglasses,volleyball portrait
+own/005 _MG_6049.JPG,volleyball sunglasses,
+own/006 P9070081.JPG,volleyball sunglasses,
+own/007 IMG_0247.JPG,speech portrait,
+own/008 IMG_0989.JPG,concert,speech portrait
 own/009 IMG_1452.JPG,,
-own/010 IMG_1807.JPG,,
-own/011 IMG_0458.JPG,,
-own/012 IMG_2680.JPG,,
-own/013 IMG_3212.JPG,,
-own/014 IMG_3883.JPG,,
-own/015 P8300194.JPG,,
-own/016 IMG_4283.JPG,,
-own/017 IMG_4214.JPG,,
-own/018 IMG_4825.JPG,,
-own/019 IMG_5597.JPG,,
-own/020 IMG_5865.JPG,,
-own/021 IMG_6086.jpg,,
-own/022 IMG_6763.JPG,,
-own/023 IMG_7617.jpg,,
-own/024 IMG_7678.JPG,,
-own/025 IMG_7761.JPG,,
-own/026 IMG_0494.JPG,,
-own/027 IMG_8538.JPG,,
-own/028 IMG_8600.JPG,,
-own/029 IMG_8621.JPG,,
-own/030 IMG_8963.JPG,,
-own/031 IMG_9307.JPG,,
-own/032 IMG_9450.JPG,,
-own/033 IMG_9484.JPG,,
-own/034 IMG_9387.JPG,,
-own/035 IMG_9509.JPG,,
-own/036 IMG_9608.JPG,,
-own/037 IMG_9562.JPG,,
-own/038 IMG_9681.JPG,,
-own/039 IMG_9637.JPG,,
-own/040 IMG_9770.JPG,,
-own/041 IMG_9893.JPG,,
-own/042 IMG_0074.JPG,,
-own/043 girls.JPG,,
-own/044 IMG_0522.JPG,,
-own/045 IMG_1069.JPG,,
-own/046 IMG_0995.JPG,,
-own/047 IMG_1106.JPG,,
-own/048 IMG_1315.JPG,,
-own/049 IMG_1540.JPG,,
-own/050 IMG_1601.JPG,,
-own/051 IMG_1637.JPG,,
-own/052 IMG_1730.JPG,,
-own/053 IMG_1836.JPG,,
-own/054 IMG_1948.JPG,,
-own/055 IMG_2040.JPG,,
-own/056 IMG_5694.JPG,,
-own/057 IMG_8683.JPG,,
-own/058 IMG_8747.JPG,,
-own/059 IMG_8783.JPG,,
-own/060 IMG_8825.JPG,,
-own/061 IMG_8867.JPG,,
-own/062 IMG_9536.JPG,,
-own/063 IMG_9642.JPG,,
-own/064 IMG_0899.JPG,,
-own/065 IMG_9832.JPG,,
-own/066 IMG_0284.JPG,,
-own/067 IMG_0359.JPG,,
-own/068 IMG_0568.JPG,,
-own/069 IMG_1067.JPG,,
-own/070 IMG_1251.JPG,,table
-own/071 IMG_2341.JPG,,
-own/072 IMG_4269.JPG,,
-own/073 IMG_6120.JPG,,
-own/074 IMG_6157.JPG,,
-own/075 IMG_6622.JPG,,
-own/076 IMG_7319.JPG,,
-own/077 IMG_8111.JPG,,
+own/010 IMG_1807.JPG,speech jacket,concert
+own/011 IMG_0458.JPG,cheerleading,portrait
+own/012 IMG_2680.JPG,swimming,
+own/013 IMG_3212.JPG,concert guitar,portrait jacket
+own/014 IMG_3883.JPG,dress,speech concert dancing costume
+own/015 P8300194.JPG,concert,costume
+own/016 IMG_4283.JPG,speech portrait,
+own/017 IMG_4214.JPG,volleyball,
+own/018 IMG_4825.JPG,concert guitar,portrait
+own/019 IMG_5597.JPG,,swimming
+own/020 IMG_5865.JPG,protest,hat crowd
+own/021 IMG_6086.jpg,,costume
+own/022 IMG_6763.JPG,volleyball sunglasses,crowd
+own/023 IMG_7617.jpg,,dancing costume
+own/024 IMG_7678.JPG,portrait,
+own/025 IMG_7761.JPG,parade costume,dancing crowd
+own/026 IMG_0494.JPG,wedding dress,
+own/027 IMG_8538.JPG,dress,wedding
+own/028 IMG_8600.JPG,portrait,
+own/029 IMG_8621.JPG,portrait jacket,dress
+own/030 IMG_8963.JPG,portrait,
+own/031 IMG_9307.JPG,portrait,dress
+own/032 IMG_9450.JPG,portrait,dress
+own/033 IMG_9484.JPG,couple hat sunglasses,portrait
+own/034 IMG_9387.JPG,portrait,
+own/035 IMG_9509.JPG,portrait,
+own/036 IMG_9608.JPG,portrait,
+own/037 IMG_9562.JPG,portrait,dress jacket
+own/038 IMG_9681.JPG,portrait,
+own/039 IMG_9637.JPG,portrait,
+own/040 IMG_9770.JPG,concert,costume dress dancing guitar
+own/041 IMG_9893.JPG,portrait,
+own/042 IMG_0074.JPG,portrait,
+own/043 girls.JPG,,couple
+own/044 IMG_0522.JPG,volleyball,
+own/045 IMG_1069.JPG,portrait,
+own/046 IMG_0995.JPG,portrait,
+own/047 IMG_1106.JPG,wedding dress,couple
+own/048 IMG_1315.JPG,portrait dress,
+own/049 IMG_1540.JPG,speech jacket,portrait
+own/050 IMG_1601.JPG,portrait jacket,
+own/051 IMG_1637.JPG,portrait,
+own/052 IMG_1730.JPG,portrait jacket,
+own/053 IMG_1836.JPG,portrait,jacket
+own/054 IMG_1948.JPG,portrait,
+own/055 IMG_2040.JPG,portrait,
+own/056 IMG_5694.JPG,tennis,hat
+own/057 IMG_8683.JPG,portrait,
+own/058 IMG_8747.JPG,,sunglasses
+own/059 IMG_8783.JPG,portrait,
+own/060 IMG_8825.JPG,portrait,
+own/061 IMG_8867.JPG,portrait,
+own/062 IMG_9536.JPG,,parade costume dancing sunglasses crowd
+own/063 IMG_9642.JPG,running,
+own/064 IMG_0899.JPG,dress,
+own/065 IMG_9832.JPG,jacket,hat sunglasses
+own/066 IMG_0284.JPG,dress,portrait
+own/067 IMG_0359.JPG,car,couple
+own/068 IMG_0568.JPG,candles,
+own/069 IMG_1067.JPG,volleyball,
+own/070 IMG_1251.JPG,,table crowd
+own/071 IMG_2341.JPG,portrait,jacket
+own/072 IMG_4269.JPG,tennis,hat
+own/073 IMG_6120.JPG,,sunglasses hat car crowd
+own/074 IMG_6157.JPG,,crowd
+own/075 IMG_6622.JPG,,dancing concert
+own/076 IMG_7319.JPG,concert,
+own/077 IMG_8111.JPG,hat sunglasses,volleyball
 own/078 IMG_0216.JPG,,table
-own/079 IMG_0471.JPG,,
-own/080 IMG_0072.JPG,,
+own/079 IMG_0471.JPG,portrait jacket,
+own/080 IMG_0072.JPG,,car dress child
 own/081 IMG_0845.JPG,,
-own/082 IMG_0561.JPG,,
-own/083 DSC_1102.JPG,,
-own/084 IMG_0968.jpg,,
-own/085 IMG_1901.jpg,,
-own/086 IMG_0968.jpg,,
-own/087 IMG_20191118_192739.jpg,,
-own/088 8L5A1453.JPG,,
-own/089 8L5A1006.JPG,,
-own/090 DSC_0721.JPG,,
-own/091 IMG_0451.JPG,,
-own/092 IMG_0180.JPG,,
+own/082 IMG_0561.JPG,soccer crowd,
+own/083 DSC_1102.JPG,portrait,jacket
+own/084 IMG_0968.jpg,portrait hat,
+own/085 IMG_1901.jpg,sunglasses,swimming portrait
+own/086 IMG_0968.jpg,portrait hat,
+own/087 IMG_20191118_192739.jpg,,dress costume portrait
+own/088 8L5A1453.JPG,hat,portrait dress
+own/089 8L5A1006.JPG,portrait,
+own/090 DSC_0721.JPG,,jacket
+own/091 IMG_0451.JPG,protest flag,crowd
+own/092 IMG_0180.JPG,protest crowd flag,
 own/093 IMG_0470.JPG,,food
-own/094 IMG_0588.JPG,,
-own/095 IMG_0713.JPG,,
-own/096 IMG_1170.JPG,,
-own/097 IMG_1920.JPG,,food
-own/098 IMG_2773.JPG,,
-own/099 IMG_3441.JPG,,
-own/100 IMG_3713.JPG,,
-own/101 IMG_3797.JPG,dog,
-own/102 PXL_20260503_194738402.jpg,,
-own/103 red-shorts-centered-wide-hdr.jpg,,
-own/104 goat-fence-depth-of-field.jpg,,
+own/094 IMG_0588.JPG,portrait,costume
+own/095 IMG_0713.JPG,costume hat,portrait
+own/096 IMG_1170.JPG,bus,
+own/097 IMG_1920.JPG,,food couple
+own/098 IMG_2773.JPG,dress child,
+own/099 IMG_3441.JPG,hat,
+own/100 IMG_3713.JPG,speech,flag costume
+own/101 IMG_3797.JPG,dog,flag
+own/102 PXL_20260503_194738402.jpg,car,couple
+own/103 red-shorts-centered-wide-hdr.jpg,,portrait
+own/104 goat-fence-depth-of-field.jpg,goat,
