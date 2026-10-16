@@ -196,9 +196,10 @@ public sealed partial class SettingsWindow : Window
     private void FillLayoutBox(int spots, SnapLayout selected)
     {
         LayoutBox.Items.Clear();
-        foreach (var layout in PhotoWindowLayout.Layouts)
+        var layouts = PhotoWindowLayout.LayoutsFor(spots);
+        foreach (var layout in layouts)
             LayoutBox.Items.Add(new ComboBoxItem { Content = PhotoWindowLayout.Name(layout, spots), Tag = layout });
-        LayoutBox.SelectedIndex = PhotoWindowLayout.Layouts.ToList().IndexOf(selected);
+        LayoutBox.SelectedIndex = layouts.ToList().IndexOf(PhotoWindowLayout.Canonical(selected, spots));
     }
 
     // ---------- Privacy ----------

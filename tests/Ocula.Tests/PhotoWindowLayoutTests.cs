@@ -154,6 +154,32 @@ public class PhotoWindowLayoutTests
     public void Spot_count_stays_between_two_and_six(int asked, int expected) =>
         Assert.Equal(expected, PhotoWindowLayout.ClampSpots(asked));
 
+    [Theory]
+    [InlineData(2)]
+    [InlineData(4)]
+    [InlineData(6)]
+    public void An_even_spot_count_lists_one_rows_layout_not_two_with_the_same_name(int spots)
+    {
+        var names = PhotoWindowLayout.LayoutsFor(spots).Select(l => PhotoWindowLayout.Name(l, spots)).ToList();
+        Assert.Equal(names.Count, names.Distinct().Count());
+        Assert.DoesNotContain(SnapLayout.BottomHeavyRows, PhotoWindowLayout.LayoutsFor(spots));
+        // A saved "bottom-heavy" choice shows as the one rows layout, and lays out the same.
+        Assert.Equal(SnapLayout.TopHeavyRows, PhotoWindowLayout.Canonical(SnapLayout.BottomHeavyRows, spots));
+        var area = new SpotRect(0, 0, 3440, 1392);
+        Assert.Equal(PhotoWindowLayout.Spots(SnapLayout.TopHeavyRows, spots, area),
+                     PhotoWindowLayout.Spots(SnapLayout.BottomHeavyRows, spots, area));
+    }
+
+    [Theory]
+    [InlineData(3)]
+    [InlineData(5)]
+    public void An_odd_spot_count_lists_both_rows_layouts(int spots)
+    {
+        Assert.Contains(SnapLayout.TopHeavyRows, PhotoWindowLayout.LayoutsFor(spots));
+        Assert.Contains(SnapLayout.BottomHeavyRows, PhotoWindowLayout.LayoutsFor(spots));
+        Assert.Equal(SnapLayout.BottomHeavyRows, PhotoWindowLayout.Canonical(SnapLayout.BottomHeavyRows, spots));
+    }
+
     [Fact]
     public void Centre_is_two_thirds_size_in_the_middle()
     {

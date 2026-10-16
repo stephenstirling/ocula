@@ -52,6 +52,17 @@ public static class PhotoWindowLayout
 
     public static int ClampSpots(int spots) => Math.Clamp(spots, MinSpots, MaxSpots);
 
+    /// <summary>
+    /// The layouts to offer for this many spots. With an even count the two row layouts split the same
+    /// way ("3 + 3"), so only one of them is listed.
+    /// </summary>
+    public static IReadOnlyList<SnapLayout> LayoutsFor(int spots) =>
+        spots % 2 == 0 ? Layouts.Where(l => l != SnapLayout.BottomHeavyRows).ToList() : Layouts;
+
+    /// <summary>The layout as <see cref="LayoutsFor"/> lists it: with an even count the bottom-heavy rows are the top-heavy ones.</summary>
+    public static SnapLayout Canonical(SnapLayout layout, int spots) =>
+        spots % 2 == 0 && layout == SnapLayout.BottomHeavyRows ? SnapLayout.TopHeavyRows : layout;
+
     /// <summary>The name shown on the layout chip, e.g. "6 columns", "1 large + 5" or "3 + 3".</summary>
     public static string Name(SnapLayout layout, int spots) => layout switch
     {
