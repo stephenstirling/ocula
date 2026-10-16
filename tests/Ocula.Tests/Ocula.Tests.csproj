@@ -19,6 +19,7 @@
     <Compile Include="..\..\Services\SmartScoring.cs" Link="App\SmartScoring.cs" />
     <Compile Include="..\..\Services\OculaLink.cs" Link="App\OculaLink.cs" />
     <Compile Include="..\..\Services\CaptaCapture.cs" Link="App\CaptaCapture.cs" />
+    <Compile Include="..\..\Services\CaptureTextIndex.cs" Link="App\CaptureTextIndex.cs" />
     <Compile Include="..\..\Services\PhotoWindowLayout.cs" Link="App\PhotoWindowLayout.cs" />
     <Compile Include="..\..\Services\WindowFrame.cs" Link="App\WindowFrame.cs" />
     <Compile Include="..\..\Services\YuNetDecoder.cs" Link="App\YuNetDecoder.cs" />
@@ -35,6 +36,7 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" />
     <PackageReference Include="SixLabors.ImageSharp" />
   </ItemGroup>
