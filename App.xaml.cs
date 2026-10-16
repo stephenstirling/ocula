@@ -18,6 +18,14 @@ public partial class App : Application
     public App()
     {
         InitializeComponent();
+
+        // A crash leaves a line in the diagnostic log (type, message, stack: never photo contents), so it can be
+        // found and fixed. These only record; they don't stop Windows ending the app as before.
+        UnhandledException += (_, e) => DiagnosticLog.Write("Unhandled exception (XAML)", e.Exception);
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            DiagnosticLog.Write("Unhandled exception (.NET)", e.ExceptionObject as Exception);
+        System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (_, e) =>
+            DiagnosticLog.Write("Unobserved task exception", e.Exception);
     }
 
     protected override async void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
