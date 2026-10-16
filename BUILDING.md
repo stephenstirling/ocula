@@ -419,11 +419,11 @@ Test on copies of your photos first.
 
 | Item | Status |
 |---|---|
-| Photo windows with snap spots | Code added, untested on a PC; differs from the design in two places (see its entry) |
+| Photo windows with snap spots | Code added, untested on a PC. Default is 6 spots (decided) |
 | Person card and lookup | Not built |
 | Search by person details | Not built |
 | Screenshot text search | Partly built: Capta's capture details are indexed with plain matching. FTS5, the OcrText switch and the "Remove saved text" button are not built |
-| Camera firmware (detect only) | Not built; needs a decision on how to read the camera |
+| Camera firmware (detect only) | Planned; research first |
 | Porta integration | Not built; blocked until the `stirling-shared` source is available |
 | Backup to Google Photos and iCloud (Phase 7) | Not built (planned) |
 | Duplicate finder extras | Not built |
@@ -614,14 +614,16 @@ _Still to come_
   invisible resize borders), `MainWindow.PhotoWindows.cs`, and the photo-window mode of
   `ViewerWindow`. Design: `docs/design-canvas/Windows1.dc.html` to `Windows4.dc.html` and
   `docs/mockups/Ocula-windows-*.png`.
-- Differs from the design, not built yet:
-  - The default is 6 spots (commit d7501ae chose six fixed columns); the design's default is 5, with
-    the layouts "5 columns", "1 large + 4", "3 + 2", "2 + 3" and "Cascade".
-  - The design's setting "keep snapped windows tidy" doesn't exist yet.
+- Spots, design versus build: the design boards and mock-ups show **5** spots, with the layouts
+  "5 columns", "1 large + 4", "3 + 2", "2 + 3" and "Cascade". The built and agreed default is **6 fixed
+  spots** (the owner confirmed 6; the Windows mock-ups are superseded on that point). The layouts are the
+  ones the code has, named from the spot count: with 6, "6 columns", "1 large + 5", "3 + 3" and "Cascade".
 - First things to check on a PC: windows land in their spots without gaps on each monitor,
   including one with different scaling; dragging a window takes it out of its spot (and only
-  then); the 200 ms single-click delay from the design wasn't added, because a single click only
-  updates the side panel here.
+  then). A mouse click waits 200 ms before the side panel shows its photo, so a double-click doesn't
+  flash it first (keyboard and Ctrl/Shift selections don't wait; Ctrl or Shift + double-click opens nothing).
+  The spot rectangles are unit-tested for 2 to 6 spots on 1920x1080 and 3440x1440 monitors with the taskbar at
+  the bottom or on the left.
 
 **Phase 7 – back up to Google Photos and iCloud Photos** (planned, not built)
 - **Google Photos (upload only):** sign in once, choose folders or albums, and Ocula uploads new
@@ -669,12 +671,18 @@ _Still to come_
   - A "Remove saved text from my captures" button in Settings. Decide whether it clears only
     Ocula's index (the safe default) or also the text inside the PNG files.
 
-**Camera firmware (detect only)** (not built; needs a decision first)
-- Show the connected camera's model and firmware version, with a link to the maker's own download
-  page. Never flash or install firmware, and never download it for the user.
-- Decide first how to read the camera: Windows Portable Devices (WPD) over MTP/PTP, or something
-  else. Ocula can't read MTP cameras today (card import needs a card reader), so this is new
-  device access. Check what the cameras you care about report over WPD before choosing.
+**Camera firmware (detect only)** (planned; research first, nothing built)
+- Scope: when a camera is connected over USB and shows up as a portable device, Ocula shows its **make,
+  model and current firmware version**, and a button that **opens the maker's official firmware page for that
+  model in the browser**.
+- What it will not do: download, install or flash firmware; contact a maker's site by itself (the browser
+  opens only when the user presses the button); say whether a newer version exists.
+- **Opt-in** (off until the user turns it on in Settings), and **no data leaves the PC**: reading the
+  camera is local, and the only network use is the user's own click on the button.
+- Ocula can't read MTP/PTP cameras today (card import needs a card reader), so this is new device access.
+  Feasibility on this PC, how each camera mode behaves, and the maker firmware pages are in
+  `docs/CAMERA-FIRMWARE.md`, from `tools/CameraProbe`. Don't build any UI until that research says it is
+  worth building.
 
 **Porta integration** (not built; blocked)
 - See `docs/PORTA-INTEGRATION.md`. Don't build it until the `stirling-shared` source is
