@@ -113,6 +113,18 @@
                     <ToggleSwitch x:Name="MapToggle" Toggled="MapToggle_Toggled"/>
                 </toolkit:SettingsCard>
 
+                <toolkit:SettingsExpander x:Name="CaptureTextExpander" Header="Search the text in screenshots"
+                                          Description="Capta reads the text in each screenshot on your PC and saves it inside the PNG file. When this is on, Ocula copies that text into its library on this PC so you can find a screenshot by what it says. Nothing is sent anywhere. Turning it off removes the text Ocula saved.">
+                    <toolkit:SettingsExpander.HeaderIcon><FontIcon Glyph="&#xE721;"/></toolkit:SettingsExpander.HeaderIcon>
+                    <ToggleSwitch x:Name="CaptureTextToggle" Toggled="CaptureTextToggle_Toggled"/>
+                    <toolkit:SettingsExpander.Items>
+                        <toolkit:SettingsCard x:Name="CaptureTextRemoveCard" Header="Remove saved text from my captures"
+                                              Description="Forgets the text Ocula saved from your screenshots and turns this off. Your screenshot files aren't changed: the text Capta put inside them stays there.">
+                            <Button x:Name="CaptureTextRemoveButton" Content="Remove saved text" Click="RemoveCaptureText_Click"/>
+                        </toolkit:SettingsCard>
+                    </toolkit:SettingsExpander.Items>
+                </toolkit:SettingsExpander>
+
                 <!-- Smart recognition -->
                 <TextBlock Text="Smart recognition" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,20,0,4"/>
                 <toolkit:SettingsExpander x:Name="SmartExpander" Header="Recognise what's in photos"

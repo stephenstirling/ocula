@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.UI.Xaml;
 using Ocula.Models;
 using Ocula.Services;
 
@@ -59,6 +60,53 @@ public sealed partial class MainWindow
         var path = await Task.Run(() => OculaLink.Adopt(file, captureFolder));
         AddCaptureFolder(Path.GetDirectoryName(path)!);
         return path;
+    }
+
+    /// <summary>
+    /// Settings > Privacy > "Search the text in screenshots". On: the text in Capta's PNGs is read again
+    /// into the library. Off: it is forgotten and no longer read, stored or searched.
+    /// </summary>
+    public async Task SetCaptureTextSearchAsync(bool on)
+    {
+        AppSettings.CaptureTextSearch = on;
+        if (on)
+        {
+            await _index.MarkCapturesForRereadAsync(); // the crawler reads their text into the library again,
+            _crawler.Start(RootFolders);               // in the background
+
+            // Screenshots already on screen get their text back now, without reloading the grid.
+            var shown = _all.Where(i => i.Capture != null).ToList();
+            var texts = await Task.Run(() => shown.Select(i => (Item: i, Text: CaptaCapture.Read(i.Path)?.Text)).ToList());
+            foreach (var (item, text) in texts) item.CaptureText = text;
+            if (_current != null) ShowCaptureDetails(_current);
+        }
+        else
+        {
+            await _index.ClearCaptureTextAsync();
+            foreach (var item in _all) item.CaptureText = null; // so it can't be saved back with a rating change
+            if (_current != null) ShowCaptureDetails(_current);
+            _ = LoadSidebarAsync(); // counts of the "with text" smart album
+        }
+    }
+
+    /// <summary>
+    /// The Capta card in the details panel: how the screenshot was taken, and the text found in it. Everything here
+    /// came off a screen or out of a file, so it only ever goes into TextBlocks, as plain text.
+    /// </summary>
+    private void ShowCaptureDetails(ImageItem? item)
+    {
+        if (item?.Capture is not { Length: > 0 } capture)
+        {
+            CaptureCard.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var parts = capture.Split('\n'); // mode, source app, window title (CaptaCapture.Summary)
+        CaptureSource.Text = string.Join(" · ", parts.Where(p => p.Length > 0));
+        var text = AppSettings.CaptureTextSearch ? item.CaptureText : null;
+        CaptureTextBox.Text = text ?? string.Empty;
+        CaptureTextExpander.Visibility = text is { Length: > 0 } ? Visibility.Visible : Visibility.Collapsed;
+        CaptureCard.Visibility = Visibility.Visible;
     }
 
     /// <summary>Adds the folder to the library unless it's already in it.</summary>

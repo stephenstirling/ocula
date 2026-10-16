@@ -506,6 +506,23 @@
                         </StackPanel>
                     </Grid>
 
+                    <!-- Capta screenshot: what Capta recorded. Shown as plain text only. -->
+                    <StackPanel x:Name="CaptureCard" Visibility="Collapsed" Spacing="4" Padding="12" CornerRadius="8" BorderThickness="1"
+                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                        <TextBlock Text="Capta screenshot" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                        <TextBlock x:Name="CaptureSource" TextWrapping="Wrap" IsTextSelectionEnabled="True"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        <Expander x:Name="CaptureTextExpander" Header="Text in this screenshot" HorizontalAlignment="Stretch"
+                                  HorizontalContentAlignment="Stretch" Margin="0,6,0,0">
+                            <ScrollViewer MaxHeight="200" VerticalScrollBarVisibility="Auto">
+                                <TextBlock x:Name="CaptureTextBox" TextWrapping="Wrap" IsTextSelectionEnabled="True"
+                                           Style="{StaticResource CaptionTextBlockStyle}"/>
+                            </ScrollViewer>
+                        </Expander>
+                    </StackPanel>
+
                     <!-- Tags -->
                     <StackPanel Spacing="8">
                         <TextBlock Text="Tags" Style="{StaticResource BodyStrongTextBlockStyle}"/>

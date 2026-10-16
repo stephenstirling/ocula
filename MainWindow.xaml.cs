@@ -604,6 +604,7 @@ public sealed partial class MainWindow : Window
         bool Stale() => version != _selectionVersion;
 
         FileName.Text = item.Name;
+        ShowCaptureDetails(item);
         BadgeText.Text = item.Badge;
         BadgeBorder.Visibility = item.BadgeVisibility;
         Preview.Source = item.Thumbnail;
@@ -847,6 +848,7 @@ public sealed partial class MainWindow : Window
         _selectionVersion++;
         _suggested.Clear();
         SuggestPanel.Visibility = Visibility.Collapsed;
+        ShowCaptureDetails(null);
         Preview.Source = null;
         FileName.Text = "No image selected";
         BadgeBorder.Visibility = Visibility.Collapsed;

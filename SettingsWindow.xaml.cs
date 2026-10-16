@@ -43,6 +43,8 @@ public sealed partial class SettingsWindow : Window
         CameraToggle.IsOn = AppSettings.OnlineCameraLookup;
         ColourToggle.IsOn = AppSettings.ColourManaged;
         MapToggle.IsOn = AppSettings.OnlineMaps;
+        CaptureTextToggle.IsOn = AppSettings.CaptureTextSearch;
+        _ = RefreshCaptureTextStatusAsync();
 
         // Photo windows
         PhotoWindowsToggle.IsOn = AppSettings.PhotoWindowsOnDoubleClick;
@@ -166,6 +168,47 @@ public sealed partial class SettingsWindow : Window
         await _main.Index.ClearAsync();
         await _main.RefreshAsync();
         UpdateCacheSize();
+    }
+
+    // ---------- Text in screenshots ----------
+
+    /// <summary>Says how many screenshots have text saved, so "Remove" has something to show for itself.</summary>
+    private async Task RefreshCaptureTextStatusAsync()
+    {
+        var (captures, withText) = await _main.Index.CountCapturesAsync();
+        CaptureTextRemoveButton.IsEnabled = withText > 0;
+        CaptureTextRemoveCard.Description =
+            (withText == 0 ? "No text is saved right now. " : $"Text is saved for {withText} of your {captures} Capta screenshots. ") +
+            "Removing forgets it and turns this off. Your screenshot files aren't changed: the text Capta put inside them stays there.";
+    }
+
+    private async void CaptureTextToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        await _main.SetCaptureTextSearchAsync(CaptureTextToggle.IsOn);
+        await RefreshCaptureTextStatusAsync();
+    }
+
+    private async void RemoveCaptureText_Click(object sender, RoutedEventArgs e)
+    {
+        var confirm = new ContentDialog
+        {
+            XamlRoot = Root.XamlRoot,
+            RequestedTheme = Root.ActualTheme,
+            Title = "Remove the saved text from your captures?",
+            Content = "Ocula will forget the text it found in your screenshots, and stop searching it. " +
+                      "Your screenshot files aren't changed, and you can turn this on again later to read the text back in.",
+            PrimaryButtonText = "Remove saved text",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close
+        };
+        if (await confirm.ShowAsync() != ContentDialogResult.Primary) return;
+
+        await _main.SetCaptureTextSearchAsync(false);
+        _loading = true;
+        CaptureTextToggle.IsOn = false;
+        _loading = false;
+        await RefreshCaptureTextStatusAsync();
     }
 
     // ---------- Photo windows ----------
