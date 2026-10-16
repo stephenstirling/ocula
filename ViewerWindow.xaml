@@ -59,7 +59,10 @@
                           HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"
                           SizeChanged="Scroller_SizeChanged" ViewChanged="Scroller_ViewChanged"
                           DoubleTapped="Scroller_DoubleTapped">
-                <Image x:Name="Photo" Stretch="Uniform"/>
+                <!-- The grid is sized to the viewport (Scroller_SizeChanged) and the picture sits in its centre. -->
+                <Grid x:Name="PhotoHost">
+                    <Image x:Name="Photo" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Grid>
             </ScrollViewer>
             <local:MediaPlayerView x:Name="Video" Visibility="Collapsed"/>
             <ProgressRing x:Name="Busy" Width="36" Height="36" IsActive="False"/>

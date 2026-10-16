@@ -41,6 +41,8 @@ public sealed partial class ViewerWindow : Window
     private readonly DispatcherQueueTimer _hide;
     private readonly bool _photoWindow;
     private int _placing;
+    private long _holdUntil;
+    private int _holdRetries;
     private bool _applyingLinkedView;
     private int _index;
     private int _version;
@@ -62,7 +64,18 @@ public sealed partial class ViewerWindow : Window
         _hide.Tick += (_, _) => Overlay.Opacity = 0;
 
         Strip.ItemsSource = _items;
-        Activated += (_, _) => Root.Focus(FocusState.Programmatic);
+        Activated += (_, a) =>
+        {
+            if (a.WindowActivationState == WindowActivationState.Deactivated)
+            {
+                // The main window takes the focus back a moment after a double-click opens this window
+                // (the click that selected the thumbnail is still being finished, and it can take a few
+                // goes when the app is busy). Claim it again, a handful of times at most, only at the start.
+                if (Environment.TickCount64 < _holdUntil && _holdRetries++ < 6) DispatcherQueue.TryEnqueue(Activate);
+                return;
+            }
+            Root.Focus(FocusState.Programmatic);
+        };
         Closed += (_, _) =>
         {
             _hide.Stop();
@@ -132,8 +145,8 @@ public sealed partial class ViewerWindow : Window
 
     private void Scroller_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        Photo.Width = e.NewSize.Width;  // zoom factor 1 = whole photo fitted
-        Photo.Height = e.NewSize.Height;
+        PhotoHost.Width = e.NewSize.Width;  // zoom factor 1 = whole photo fitted, centred
+        PhotoHost.Height = e.NewSize.Height;
     }
 
     private void Scroller_ViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
@@ -149,10 +162,10 @@ public sealed partial class ViewerWindow : Window
     /// <summary>Shows the same part of the photo at the same zoom as another photo window.</summary>
     public void ApplyLinkedView(float zoom, double centreX, double centreY)
     {
-        if (Scroller.Visibility != Visibility.Visible || double.IsNaN(Photo.Width) || Photo.Width <= 0) return;
+        if (Scroller.Visibility != Visibility.Visible || double.IsNaN(PhotoHost.Width) || PhotoHost.Width <= 0) return;
         _applyingLinkedView = true;
-        var x = centreX * Photo.Width * zoom - Scroller.ViewportWidth / 2;
-        var y = centreY * Photo.Height * zoom - Scroller.ViewportHeight / 2;
+        var x = centreX * PhotoHost.Width * zoom - Scroller.ViewportWidth / 2;
+        var y = centreY * PhotoHost.Height * zoom - Scroller.ViewportHeight / 2;
         Scroller.ChangeView(Math.Max(0, x), Math.Max(0, y), zoom, disableAnimation: true);
         DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () => _applyingLinkedView = false);
     }
@@ -315,13 +328,13 @@ public sealed partial class ViewerWindow : Window
         if (!_photoWindow) return;
         LayoutChip.Content = PhotoWindowLayout.Name(layout, spots);
         LayoutMenu.Items.Clear();
-        foreach (var option in PhotoWindowLayout.Layouts)
+        foreach (var option in PhotoWindowLayout.LayoutsFor(spots))
         {
             var item = new RadioMenuFlyoutItem
             {
                 Text = PhotoWindowLayout.Name(option, spots),
                 GroupName = "Layout",
-                IsChecked = option == layout,
+                IsChecked = option == PhotoWindowLayout.Canonical(layout, spots),
             };
             item.Click += (_, _) => _main.SetPhotoWindowLayout(option);
             LayoutMenu.Items.Add(item);
@@ -359,9 +372,9 @@ public sealed partial class ViewerWindow : Window
             CompactMenu.Items.Add(item);
         }
         CompactMenu.Items.Add(new MenuFlyoutSeparator());
-        foreach (var option in PhotoWindowLayout.Layouts)
+        foreach (var option in PhotoWindowLayout.LayoutsFor(spots))
         {
-            var item = new RadioMenuFlyoutItem { Text = PhotoWindowLayout.Name(option, spots), GroupName = "Layout", IsChecked = option == layout };
+            var item = new RadioMenuFlyoutItem { Text = PhotoWindowLayout.Name(option, spots), GroupName = "Layout", IsChecked = option == PhotoWindowLayout.Canonical(layout, spots) };
             item.Click += (_, _) => _main.SetPhotoWindowLayout(option);
             CompactMenu.Items.Add(item);
         }
@@ -413,6 +426,14 @@ public sealed partial class ViewerWindow : Window
     }
 
     private static RectInt32 ToRect(SpotRect r) => new(r.X, r.Y, r.Width, r.Height);
+
+    /// <summary>Brings the window to the front, and keeps it there if the main window grabs activation back in the next moment.</summary>
+    public void ActivateInFront()
+    {
+        _holdUntil = Environment.TickCount64 + 1500;
+        _holdRetries = 0;
+        Activate();
+    }
 
     private void NextDisplay_Click(object sender, RoutedEventArgs e) => _main.SendPhotoWindowToNextDisplay(this);
 }

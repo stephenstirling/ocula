@@ -62,7 +62,7 @@ public sealed partial class MainWindow
             if (entry.Spot != null) ArrangeDisplay(display);
             else PlaceUnsnapped(entry);
             UpdateSnapBars();
-            window.Activate();
+            window.ActivateInFront();
         }
 
         if (photos.Count > spots)
