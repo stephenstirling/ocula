@@ -423,7 +423,7 @@ Test on copies of your photos first.
 | Person card and lookup | Not built |
 | Search by person details | Not built |
 | Screenshot text search | Partly built: Capta's capture details are indexed with plain matching. FTS5, the OcrText switch and the "Remove saved text" button are not built |
-| Camera firmware (detect only) | Planned; research first |
+| Camera firmware (detect only) | Research tool written (`tools/CameraProbe`), not yet run on a real camera; no UI. See `docs/CAMERA-FIRMWARE.md` |
 | Porta integration | Not built; blocked until the `stirling-shared` source is available |
 | Backup to Google Photos and iCloud (Phase 7) | Not built (planned) |
 | Duplicate finder extras | Not built |
