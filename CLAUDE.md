@@ -57,8 +57,9 @@ names for tiles and sidebar entries, a Release MSIX build, and the Map page offl
   unresolved (docs/KNOWN-ISSUES.md): settle before release.
 - Capta hand-off: ocula: links (import, edit; `captures` was exercised) with a real Capta. Screenshot text search
   (FTS5, Settings switch, Remove button, untrusted-text handling) was checked in October 2026 on generated
-  Capta-format PNGs, not PNGs from a real Capta, and not with non-Latin text. Capta's own switch to stop writing
-  the text is not built (BUILDING.md has the decisions).
+  Capta-format PNGs and, for Window captures only, on PNGs from a real Capta (with and without Capta's new "Save
+  text found in captures" switch, which lives on Capta's branch `claude/capta-text-switch`). Not checked: other
+  Capta modes, and non-Latin text (BUILDING.md has the decisions).
 - Photo windows (double-click a thumbnail): placement, swapping, Alt+number, layouts, replace-the-oldest and
   linked zoom were checked on one 3440x1440 monitor in October 2026 (BUILDING.md lists the results). Still
   untested: a second monitor ("next display"), mixed-DPI monitors, the taskbar away from the bottom (unit tests
