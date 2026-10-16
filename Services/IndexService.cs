@@ -70,6 +70,8 @@ public sealed class IndexService : IDisposable
         // PNGs can hold them, so only those are read again.
         if (AddColumn("capture TEXT", rereadAll: false) | AddColumn("ocr TEXT", rereadAll: false))
             Execute("UPDATE images SET modified = 0 WHERE path LIKE '%.png';");
+        // Full-text search over those details (SQLite FTS5), kept in step with the rows by triggers.
+        CaptureTextIndex.EnsureSchema(_db);
         Execute(@"
             CREATE TABLE IF NOT EXISTS collections (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS collection_items (
@@ -344,6 +346,30 @@ public sealed class IndexService : IDisposable
         cmd.Parameters.AddWithValue("$old", oldPath);
         cmd.ExecuteNonQuery();
         return true;
+    });
+
+    // ================= Text found in screenshots =================
+
+    /// <summary>
+    /// Forgets the text found in every screenshot, in the library only: the PNG files are untouched, and
+    /// the source app and window title stay. Returns how many screenshots had text.
+    /// </summary>
+    public Task<int> ClearCaptureTextAsync() => RunAsync(() => CaptureTextIndex.ClearText(_db));
+
+    /// <summary>Marks screenshots out of date so the next crawl reads their text again (after the switch is turned back on).</summary>
+    public Task MarkCapturesForRereadAsync() => RunAsync(() =>
+    {
+        Execute("UPDATE images SET modified = 0 WHERE capture IS NOT NULL;");
+        return true;
+    });
+
+    /// <summary>How many Capta screenshots are in the library, and how many of those have text saved.</summary>
+    public Task<(int Captures, int WithText)> CountCapturesAsync() => RunAsync(() =>
+    {
+        using var cmd = _db.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*), COALESCE(SUM(ocr IS NOT NULL AND ocr <> ''), 0) FROM images WHERE capture IS NOT NULL";
+        using var reader = cmd.ExecuteReader();
+        return reader.Read() ? (reader.GetInt32(0), reader.GetInt32(1)) : (0, 0);
     });
 
     // ================= Timeline, collections and smart albums =================

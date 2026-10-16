@@ -68,7 +68,7 @@ public static class Indexer
                 item.Rating = user.Rating;
                 item.Label = user.Label;
                 item.Capture = capture?.Summary;
-                item.CaptureText = capture?.Text;
+                item.CaptureText = AppSettings.CaptureTextSearch ? capture?.Text : null;
                 // Screenshots have no camera date; when Capta took it is the closest thing.
                 if (item.Taken == null && capture?.CapturedAt is { } capturedAt) item.Taken = capturedAt.LocalDateTime;
 

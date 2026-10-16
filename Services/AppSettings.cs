@@ -31,6 +31,17 @@ public static class AppSettings
         set => Store.Values["OnlineMaps"] = value;
     }
 
+    /// <summary>
+    /// Whether Ocula reads the text Capta found in a screenshot (OCR) from the PNG, keeps it in the library
+    /// on this PC and searches it. Off: it isn't read, stored or searched, and what was stored is removed.
+    /// The source app and window title Capta records are not affected.
+    /// </summary>
+    public static bool CaptureTextSearch
+    {
+        get => Store.Values["CaptureTextSearch"] as bool? ?? true;
+        set => Store.Values["CaptureTextSearch"] = value;
+    }
+
     /// <summary>Whether to convert wide-gamut photos (Display P3, Adobe RGB…) for the screen.</summary>
     public static bool ColourManaged
     {

@@ -11,13 +11,14 @@ namespace Ocula.Services;
 /// <summary>
 /// Turns what's typed in the search box into a library query. Plain words match file names,
 /// tags, camera models and, for Capta captures, the source app, window title and the text in
-/// the image; filters narrow it down and can be combined freely:
+/// the image (full-text search: whole words or the start of one); filters narrow it down and can be combined freely:
 ///
 ///   camera:R5          tag:wedding         tag:"smith wedding"   label:red
 ///   rating>=4          rating:5            stars:3               (also >, &lt;, &lt;=)
 ///   year:2025          date:2026-09        date:2026-09-26
 ///   hdr                raw                 gps                   folder:Lisbon
 ///   capture            hastext             app:Terminal          (Capta captures)
+///   text:invoice       text:"order confirmation"                  (only the text found in a screenshot)
 ///
 /// Every condition must match (AND). Values are passed as SQL parameters, never pasted in.
 /// </summary>
@@ -55,7 +56,7 @@ public sealed class SearchQuery
     }
 
     private static bool IsKnownKey(string key) =>
-        key is "camera" or "tag" or "label" or "rating" or "stars" or "year" or "date" or "folder" or "app";
+        key is "camera" or "tag" or "label" or "rating" or "stars" or "year" or "date" or "folder" or "app" or "text";
 
     private static bool IsFlag(string key) =>
         key is "hdr" or "raw" or "gps" or "soft" or "sharp" or "picked" or "rejected" or "video" or "capture" or "hastext";
@@ -72,22 +73,39 @@ public sealed class SearchQuery
             return name;
         }
 
+        // Whether the text Capta found in screenshots is searched (Settings > Privacy); the app and window title always are.
+        var includeText = AppSettings.CaptureTextSearch;
+
+        // LIKE with the typed text's own % and _ escaped, so they match themselves.
+        string Like(string column, string value) => $"{column} LIKE {Param($"%{CaptureTextIndex.EscapeLike(value)}%")} ESCAPE '\\'";
+
         foreach (var word in _words)
         {
-            var p = Param($"%{word}%");
-            parts.Add($"(path LIKE {p} OR tags LIKE {p} OR camera LIKE {p} OR capture LIKE {p} OR ocr LIKE {p})");
+            // File name, tags and camera by substring; a Capta screenshot's app, window title and text by whole
+            // word or start of a word (FTS5). The word is quoted whole, so nothing typed acts as an FTS5 operator.
+            var clause = $"{Like("path", word)} OR {Like("tags", word)} OR {Like("camera", word)}";
+            if (CaptureTextIndex.MatchExpression(word, includeText) is { } match)
+                clause += $" OR path IN (SELECT path FROM capture_fts WHERE capture_fts MATCH {Param(match)})";
+            parts.Add($"({clause})");
         }
 
         foreach (var (key, op, value) in _filters)
         {
             switch (key)
             {
-                case "camera": parts.Add($"camera LIKE {Param($"%{value}%")}"); break;
-                case "tag": parts.Add($"tags LIKE {Param($"%{value}%")}"); break;
-                case "folder": parts.Add($"folder LIKE {Param($"%{value}%")}"); break;
-                case "app": parts.Add($"capture LIKE {Param($"%{value}%")}"); break;
+                case "camera": parts.Add(Like("camera", value)); break;
+                case "tag": parts.Add(Like("tags", value)); break;
+                case "folder": parts.Add(Like("folder", value)); break;
+                case "app": parts.Add(Like("capture", value)); break;
                 case "capture": parts.Add("capture IS NOT NULL"); break;
-                case "hastext": parts.Add("ocr IS NOT NULL AND ocr <> ''"); break;
+                case "hastext": parts.Add(includeText ? "ocr IS NOT NULL AND ocr <> ''" : "1 = 0"); break;
+                case "text":
+                    // Only the text found in the image, not the app or window title.
+                    if (includeText && CaptureTextIndex.TextOnlyExpression(value) is { } textMatch)
+                        parts.Add($"path IN (SELECT path FROM capture_fts WHERE capture_fts MATCH {Param(textMatch)})");
+                    else
+                        parts.Add("1 = 0");
+                    break;
                 case "label":
                     parts.Add($"label = {Param(Capitalise(value))}");
                     break;

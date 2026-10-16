@@ -202,7 +202,8 @@ public sealed class ImageItem : INotifyPropertyChanged
 
     public IndexRow ToRow() => new(Path, Folder, Modified, Camera, Exposure, Taken, Rating, Label,
                                    string.Join('\n', Tags), Hdr, CachedThumb, RawPath, Latitude, Longitude,
-                                   Sharpness, Flag, Duration?.Ticks, Capture, CaptureText);
+                                   Sharpness, Flag, Duration?.Ticks, Capture,
+                                   Ocula.Services.AppSettings.CaptureTextSearch ? CaptureText : null); // never saved while the text switch is off
 
     public void ApplyIndex(IndexRow row)
     {
