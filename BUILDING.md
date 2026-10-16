@@ -422,7 +422,7 @@ Test on copies of your photos first.
 | Photo windows with snap spots | Tested on one 3440x1440 monitor; second monitor, mixed scaling and other taskbar positions untested. Default is 6 spots (decided) |
 | Person card and lookup | Not built |
 | Search by person details | Not built |
-| Screenshot text search | Partly built: Capta's capture details are indexed with plain matching. FTS5, the OcrText switch and the "Remove saved text" button are not built |
+| Screenshot text search | Built and tested on generated Capta-format PNGs: FTS5 search, Ocula's text switch, "Remove saved text" button, untrusted-text handling. Not built: Capta's own switch to stop writing the text. Not tested with real Capta PNGs |
 | Camera firmware (detect only) | Research tool written (`tools/CameraProbe`), not yet run on a real camera; no UI. See `docs/CAMERA-FIRMWARE.md` |
 | Porta integration | Not built; blocked until the `stirling-shared` source is available |
 | Backup to Google Photos and iCloud (Phase 7) | Not built (planned) |
@@ -667,25 +667,48 @@ _Still to come_
   Export and Edit in… work from the composite.
 - Not included: browsing layers, and other layered formats (GIMP .xcf, Krita .kra, Affinity).
 
-**Screenshot text search** (partly built; the rest is not built)
-- Built, untested in the app (commit fd2ba68): Ocula reads the `Capta` tEXt chunk that Capta writes
-  into saved PNGs (one JSON object; Capta's `docs/ocula-integration.md` lists `mode`, `sourceApp`,
-  `windowTitle`, `capturedAt` and `ocrText`) into the library's `capture` and `ocr` columns. Search
-  words match them, and `capture`, `hastext` and `app:` filter by them. Files:
-  `Services/CaptaCapture.cs`, `MainWindow.Captures.cs`, `IndexService.cs`, `SearchQuery.cs`.
-- Not built:
-  - Index the `Stirling.*` PNG text chunks that Capta writes, including OcrText, with SQLite FTS5
-    (a full-text table over the OCR text, window title and source app) instead of plain matching.
-    Capta currently writes one `Capta` chunk, not `Stirling.*` chunks, so check Capta's format
-    again before building and read both if it has changed.
-  - Treat the text as untrusted: it is whatever was on screen, or in a file someone sent. Never
-    use it as markup, a file name, a path or a command; escape it in FTS queries; cap its length;
-    show it as plain text.
-  - Search matches OcrText, window title and source app.
-  - Honour Capta's switch: when it is off, stop using OcrText (don't index it, don't search it).
-    That switch isn't in Capta's `Settings.cs` yet, so decide where Ocula will read it from.
-  - A "Remove saved text from my captures" button in Settings. Decide whether it clears only
-    Ocula's index (the safe default) or also the text inside the PNG files.
+**Screenshot text search** (built and tested on a PC with generated Capta-format PNGs; see "Not tested")
+- **Source:** Ocula reads the `Capta` tEXt chunk Capta writes into saved PNGs (one ASCII JSON object; Capta's
+  `docs/ocula-integration.md` lists `mode`, `sourceApp`, `windowTitle`, `capturedAt` and `ocrText`). Capta's
+  format was checked again on 16 October 2026: still that one chunk, no `Stirling.*` chunks, so only `Capta` is read.
+  Capta OCRs the image *after* it has covered personal info, so redacted text is not in `ocrText` (read from
+  Capta's `AutoRedact.cs` and `CaptureMetadata.cs`; not run).
+- **Search:** SQLite FTS5 (`capture_fts`, columns `details` = mode, app and window title, and `body` = the text),
+  kept in step with the library by triggers in `Services/CaptureTextIndex.cs`. Plain words match whole words or
+  the start of a word, accents ignored ("reservation" finds "réservation", "netw" finds "Network"), alongside the
+  old substring match on file name, tags and camera. This replaces the old substring match on the text, so a
+  word's *middle* ("work" in "network") no longer finds a screenshot. `text:word` looks only in the image text;
+  `app:`, `capture` and `hastext` still work. Each typed word is wrapped in quotes and its quotes doubled, so no
+  FTS5 operator (AND, OR, NOT, NEAR, `*`, `:`, `^`, brackets) can be typed; LIKE wildcards typed by the user match
+  themselves.
+- **Untrusted text:** Ocula never uses it as markup, a file name, a path or a command. When read, each field is
+  cleaned and capped once (`CaptureTextIndex.CleanLine/CleanText`): control characters and right-to-left overrides
+  removed, one line for app and title (260 characters), the text 50,000 characters, and a non-Capta `tEXt` chunk is
+  skipped without being read (a Capta chunk over 1 MB is ignored). It is shown only in `TextBlock`s as plain text.
+  `tests/Ocula.Tests/CaptureTextIndexTests.cs` and `CaptaIntegrationTests.cs` cover hostile files and queries.
+- **The switch (decided):** Ocula doesn't read Capta's settings (they sit in another app's package). Capta's own
+  switch to stop writing `ocrText` is not built (Capta's `Settings.cs`): once it is, a capture saved with it off
+  simply has no `ocrText` and Ocula has nothing to index; PNGs already saved keep theirs. Ocula's own switch,
+  **Settings > Privacy > Search the text in screenshots** (default on), covers what Ocula holds: off = the text isn't
+  read, stored or searched, and the stored copy is removed; on again = the PNGs are read again in the background.
+  The app and window title are not part of the switch.
+- **"Remove saved text from my captures" (decided):** clears only Ocula's library copy and turns the switch off so it
+  isn't read back at the next scan. The PNG files are never changed, and the text Capta put in them stays there.
+  (Rewriting PNGs was left out on purpose: it would change files the user didn't ask Ocula to touch.)
+- **Details panel:** a "Capta screenshot" card with how it was taken and a "Text in this screenshot" box.
+- **Tested on this PC** (October 2026, real Ocula, real mouse, generated PNGs in Capta's format because the
+  earlier real captures were no longer on disk): search by text, by window title, by source app, by prefix, with
+  accents and with punctuation ("Wi-Fi"); a hostile PNG (markup and paths in the text, FTS5 operators, a
+  right-to-left override and a line break in the title, a 5,000-character app name, 200,000 characters of text)
+  was cleaned, capped and searchable, and displayed as literal text; 12 hostile search strings ran as plain
+  searches; the switch off and the Remove button cleared the text (app and title still found), a re-read with the
+  switch off did not bring it back, and switching on read it back in. Library migration on the real 30,000-photo
+  library added the FTS5 table without trouble (backup: `ocula-library-backup-20261016`, made before it).
+- **Not tested:** PNGs made by a real Capta, text in non-Latin scripts (FTS5's `unicode61` tokenizer treats Chinese
+  or Japanese runs as one word, so short searches won't match inside them), performance with tens of thousands of
+  screenshots (delete and rename scan the FTS table by path), and Capta's own switch (not built).
+- **Found while testing:** `RefreshAsync` crashed Ocula in one state (`docs/KNOWN-ISSUES.md`); Ocula now logs
+  unhandled exceptions to `ocula.log`.
 
 **Camera firmware (detect only)** (planned; research first, nothing built)
 - Scope: when a camera is connected over USB and shows up as a portable device, Ocula shows its **make,

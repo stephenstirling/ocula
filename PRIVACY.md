@@ -12,6 +12,11 @@ information. In short: your photos and personal data stay on your computer.
 - **Ocula's library** (thumbnails, metadata including photo locations, and duplicate-detection
   fingerprints) is stored in
   `%LOCALAPPDATA%\Ocula` on your PC. You can clear it in Settings > Library.
+- **Text in screenshots.** A screenshot saved by Capta carries, inside the PNG, the app and window
+  title it was taken from and the text Capta found in it (read on your PC). Ocula copies that into its
+  library on your PC so you can find a screenshot by what it says. It is stored only there, is never
+  sent anywhere, and is only ever shown and searched as plain text. Turn it off, and remove what Ocula
+  saved, in **Settings > Privacy > Search the text in screenshots**. Ocula never changes the PNG files.
 - **Settings** (theme, folders, export presets) are stored on your PC.
 
 Ocula has no accounts, no advertising, and no analytics or tracking.

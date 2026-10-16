@@ -17,5 +17,5 @@ Calls (contract copied from the Porta design chat):
   Support `ocula:background` (start without a window, quit after 10 idle minutes).
 - `photos.pinnables` (`porta.pin-people-albums`): named people and albums, 256x256 square covers,
   plus a "Pin to Start" right-click item that opens `porta:pin?link=...&name=...&cover=...`.
-- Screenshot text search needs Capta PNG metadata (`Stirling.*` text chunks, `OcrText`) indexed in
-  FTS5 — not built yet in Ocula.
+- Screenshot text search: built in Ocula (FTS5 over the `Capta` PNG chunk's app, window title and
+  `ocrText`; see BUILDING.md). Capta writes one `Capta` chunk, not `Stirling.*` chunks.

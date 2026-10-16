@@ -77,3 +77,24 @@ applies to anything else), or ship People without the downloadable model and let
 
 People also stays off until the user turns it on and downloads the models, and nothing leaves the PC.
 
+
+## Reloading the open folder crashed Ocula in one state (`RefreshAsync`)
+
+Found in October 2026 while testing screenshot text search. **Worked around, cause not found.**
+
+- **What happened:** Ocula ended about 3 seconds after `MainWindow.RefreshAsync()` ran, in this state: a
+  folder open in the grid, its PNG files modified on disk since they were indexed, and the library still
+  indexing in the background. It happened every time in that state (three crashes, then three clean runs
+  once `RefreshAsync` was no longer called).
+- **What the dumps show** (`%LOCALAPPDATA%\CrashDumps\Ocula.exe.*.dmp`, analysed with `dotnet-dump`): a
+  native fail-fast in `Microsoft.UI.Xaml.dll` (exception code `0xc000027b`, a stowed exception) with no
+  managed exception. The UI thread was inside `Thumbs_ContainerContentChanging` →
+  `LoadThumbnailAsync` → `ThumbnailService.TryWindowsThumbnailAsync`, that is, while grid tiles were being
+  realised after the reload. Ocula's own crash logging (`ocula.log`) caught nothing because the failure is
+  native.
+- **Why it matters:** `RefreshAsync` is also what **Settings > Library > Clear cache** calls afterwards. Nobody
+  has tried Clear cache in the state above, so whether it can crash is unknown.
+- **Workaround in place:** turning on "Search the text in screenshots" no longer calls `RefreshAsync`; it
+  re-reads the text for the screenshots already loaded and lets the crawler do the rest.
+- **To reproduce:** open a folder of PNGs, change their modified times (for example `(Get-Item f).LastWriteTime = Get-Date`),
+  then call `RefreshAsync` while indexing runs. Look at the dump's UI thread first.

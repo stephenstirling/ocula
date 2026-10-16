@@ -55,7 +55,10 @@ names for tiles and sidebar entries, a Release MSIX build, and the Map page offl
 - People: the "Add the name as a tag" option (it writes into files). Everything else was checked in October
   2026 (docs/PEOPLE-EVALUATION.md), including "Not this person". SFace's licence and training data are
   unresolved (docs/KNOWN-ISSUES.md): settle before release.
-- Capta hand-off: ocula: links (import, edit, captures) and indexing Capta's PNG metadata.
+- Capta hand-off: ocula: links (import, edit; `captures` was exercised) with a real Capta. Screenshot text search
+  (FTS5, Settings switch, Remove button, untrusted-text handling) was checked in October 2026 on generated
+  Capta-format PNGs, not PNGs from a real Capta, and not with non-Latin text. Capta's own switch to stop writing
+  the text is not built (BUILDING.md has the decisions).
 - Photo windows (double-click a thumbnail): placement, swapping, Alt+number, layouts, replace-the-oldest and
   linked zoom were checked on one 3440x1440 monitor in October 2026 (BUILDING.md lists the results). Still
   untested: a second monitor ("next display"), mixed-DPI monitors, the taskbar away from the bottom (unit tests
