@@ -41,6 +41,7 @@ public sealed partial class SettingsWindow : Window
 
         // Privacy
         CameraToggle.IsOn = AppSettings.OnlineCameraLookup;
+        PersonLookupToggle.IsOn = AppSettings.OnlinePersonLookup;
         ColourToggle.IsOn = AppSettings.ColourManaged;
         MapToggle.IsOn = AppSettings.OnlineMaps;
         CaptureTextToggle.IsOn = AppSettings.CaptureTextSearch;
@@ -251,6 +252,12 @@ public sealed partial class SettingsWindow : Window
     {
         if (_loading) return;
         AppSettings.OnlineCameraLookup = CameraToggle.IsOn;
+    }
+
+    private void PersonLookupToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        AppSettings.OnlinePersonLookup = PersonLookupToggle.IsOn;
     }
 
     private void ColourToggle_Toggled(object sender, RoutedEventArgs e)

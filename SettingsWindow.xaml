@@ -107,6 +107,12 @@
                     <ToggleSwitch x:Name="CameraToggle" Toggled="CameraToggle_Toggled"/>
                 </toolkit:SettingsCard>
 
+                <toolkit:SettingsCard Header="Look up people on Wikidata"
+                                      Description="Adds a &quot;Look up on Wikidata&quot; button to People. When you press it, the name you gave a group is sent to Wikidata, and the facts you choose (birth date, occupation and so on) are saved in Ocula on this PC. Nothing is sent otherwise, and photos and faces are never sent.">
+                    <toolkit:SettingsCard.HeaderIcon><FontIcon Glyph="&#xE77B;"/></toolkit:SettingsCard.HeaderIcon>
+                    <ToggleSwitch x:Name="PersonLookupToggle" Toggled="PersonLookupToggle_Toggled"/>
+                </toolkit:SettingsCard>
+
                 <toolkit:SettingsCard Header="Map"
                                       Description="Downloads map images from OpenFreeMap when you open the map. The map provider can see which areas you view, which are where your photos were taken. Photos and their exact locations are never sent.">
                     <toolkit:SettingsCard.HeaderIcon><FontIcon Glyph="&#xE707;"/></toolkit:SettingsCard.HeaderIcon>

@@ -24,6 +24,16 @@ public static class AppSettings
         set => Store.Values["OnlineCameraLookup"] = value;
     }
 
+    /// <summary>
+    /// Whether People may offer "Look up on Wikidata". Nothing is sent until you press that button, and then only the name you gave
+    /// the group.
+    /// </summary>
+    public static bool OnlinePersonLookup
+    {
+        get => Store.Values["OnlinePersonLookup"] as bool? ?? true;
+        set => Store.Values["OnlinePersonLookup"] = value;
+    }
+
     /// <summary>Whether the map may download map tiles from OpenFreeMap.</summary>
     public static bool OnlineMaps
     {

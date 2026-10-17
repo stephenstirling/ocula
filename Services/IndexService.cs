@@ -105,6 +105,27 @@ public sealed class IndexService : IDisposable
                 modified INTEGER NOT NULL);
             CREATE INDEX IF NOT EXISTS ix_faces_person ON faces(person_id);
             CREATE INDEX IF NOT EXISTS ix_faces_path ON faces(path);");
+        // Person cards: what Wikidata said about a named group, kept as plain fields (so they can be searched later) plus the
+        // whole card as JSON. A card belongs to its group and goes with it: the trigger covers merges, deleted groups and
+        // "Delete all face data".
+        Execute(@"
+            CREATE TABLE IF NOT EXISTS person_cards (
+                person_id   INTEGER PRIMARY KEY,
+                wikidata_id TEXT NOT NULL,
+                birth_date  TEXT,
+                birth_year  INTEGER,
+                birth_place TEXT,
+                occupations TEXT,
+                spouse      TEXT,
+                children    INTEGER,
+                height_cm   REAL,
+                languages   TEXT,
+                retrieved   TEXT NOT NULL,
+                json        TEXT NOT NULL);
+            CREATE TRIGGER IF NOT EXISTS trg_people_delete_card AFTER DELETE ON people
+            BEGIN
+                DELETE FROM person_cards WHERE person_id = old.id;
+            END;");
         // Smart recognition: one embedding per photo and model. An empty blob means "tried, nothing to read".
         Execute(@"
             CREATE TABLE IF NOT EXISTS embeddings (
@@ -763,11 +784,23 @@ public sealed class IndexService : IDisposable
             if (find.ExecuteScalar() is long other)
             {
                 survivor = other;
+                // A card for this name moves to the group that keeps it, unless that group already has one.
+                Execute($"UPDATE OR IGNORE person_cards SET person_id = {other} WHERE person_id = {personId};");
                 Execute($"UPDATE faces SET person_id = {other} WHERE person_id = {personId};");
                 Execute($"DELETE FROM people WHERE id = {personId};");
                 RecomputeGroup(other);
                 return survivor;
             }
+        }
+
+        // A card describes one named person, so a different name makes it stale: remove it.
+        using (var stale = _db.CreateCommand())
+        {
+            stale.CommandText = @"DELETE FROM person_cards WHERE person_id = $id
+                                  AND (SELECT name FROM people WHERE id = $id) IS NOT $n";
+            stale.Parameters.AddWithValue("$n", (object?)name ?? DBNull.Value);
+            stale.Parameters.AddWithValue("$id", personId);
+            stale.ExecuteNonQuery();
         }
 
         using var cmd = _db.CreateCommand();
@@ -776,6 +809,45 @@ public sealed class IndexService : IDisposable
         cmd.Parameters.AddWithValue("$id", personId);
         cmd.ExecuteNonQuery();
         return survivor;
+    });
+
+    // ----- Person cards (Wikidata) -----
+
+    /// <summary>Saves (or replaces) the card for a named group. Kept in the library only, never written into photos.</summary>
+    public Task SavePersonCardAsync(long personId, PersonFacts facts) => RunAsync(() =>
+    {
+        using var cmd = _db.CreateCommand();
+        cmd.CommandText = @"INSERT OR REPLACE INTO person_cards
+              (person_id, wikidata_id, birth_date, birth_year, birth_place, occupations, spouse, children, height_cm, languages, retrieved, json)
+            VALUES ($id, $qid, $bd, $by, $bp, $occ, $sp, $ch, $h, $lang, $at, $json)";
+        cmd.Parameters.AddWithValue("$id", personId);
+        cmd.Parameters.AddWithValue("$qid", facts.WikidataId);
+        cmd.Parameters.AddWithValue("$bd", (object?)facts.BirthDate ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$by", (object?)facts.BirthYear ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$bp", facts.BirthPlaceChain.Count == 0 ? DBNull.Value : string.Join(" | ", facts.BirthPlaceChain));
+        cmd.Parameters.AddWithValue("$occ", facts.Occupations.Count == 0 ? DBNull.Value : string.Join(" | ", facts.Occupations));
+        cmd.Parameters.AddWithValue("$sp", facts.Spouses.Count == 0 ? DBNull.Value : string.Join(" | ", facts.Spouses.Select(s => s.Name)));
+        cmd.Parameters.AddWithValue("$ch", (object?)facts.Children ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$h", (object?)facts.HeightCm ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$lang", facts.Languages.Count == 0 ? DBNull.Value : string.Join(" | ", facts.Languages));
+        cmd.Parameters.AddWithValue("$at", facts.RetrievedAt.ToString("o", CultureInfo.InvariantCulture));
+        cmd.Parameters.AddWithValue("$json", facts.ToJson());
+        cmd.ExecuteNonQuery();
+        return true;
+    });
+
+    public Task<PersonFacts?> GetPersonCardAsync(long personId) => RunAsync(() =>
+    {
+        using var cmd = _db.CreateCommand();
+        cmd.CommandText = "SELECT json FROM person_cards WHERE person_id = $id";
+        cmd.Parameters.AddWithValue("$id", personId);
+        return cmd.ExecuteScalar() is string json ? PersonFacts.FromJson(json) : null;
+    });
+
+    public Task DeletePersonCardAsync(long personId) => RunAsync(() =>
+    {
+        Execute($"DELETE FROM person_cards WHERE person_id = {personId};");
+        return true;
     });
 
     /// <summary>"Not this person": moves one face into a new group of its own and keeps it there.</summary>

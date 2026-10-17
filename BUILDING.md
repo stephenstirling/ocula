@@ -420,7 +420,7 @@ Test on copies of your photos first.
 | Item | Status |
 |---|---|
 | Photo windows with snap spots | Tested on one 3440x1440 monitor; second monitor, mixed scaling and other taskbar positions untested. Default is 6 spots (decided) |
-| Person card and lookup | Not built |
+| Person card and lookup | Wikidata part built (`PersonLookup.cs`, `PeopleWindow`); 37 unit tests on hand-written JSON and a by-hand test against real Wikidata. The People window itself was not run (People is off on the test PC). DBpedia and MusicBrainz fill-ins not built |
 | Search by person details | Not built |
 | Screenshot text search | Built and tested: FTS5 search, Ocula's text switch, "Remove saved text" button, untrusted-text handling, and Capta's own switch (on its own branch, `claude/capta-text-switch`, not yet merged). Checked with real Capta PNGs for Window captures only |
 | Camera firmware (detect only) | Research tool written (`tools/CameraProbe`), not yet run on a real camera; no UI. See `docs/CAMERA-FIRMWARE.md` |
@@ -444,7 +444,7 @@ _Still to come_
     before release.
   - Similar faces are grouped; you name a group once and Ocula offers that name as a tag on
     every matching photo, including in the web downloader's "Suggested tags".
-  - **Person card and lookup (not built).** Optional "Look up on Wikidata" when you name someone: Ocula lists matches with a short
+  - **Person card and lookup (Wikidata part built; DBpedia and MusicBrainz not built).** Optional "Look up on Wikidata" when you name someone: Ocula lists matches with a short
     description (many people share a name) and you pick one. The person card (full name including
     middle names, from Wikidata's "birth name" when it has one; date and place of
     birth, occupation, current spouse, number of children, height and languages spoken when Wikidata has them) comes from Wikidata (CC0), is kept in the local library only, and only the
@@ -455,6 +455,22 @@ _Still to come_
     Former spouses are the P26 entries that have an end date, and "former partners" are Wikidata's
     unmarried-partner entries (P451, which is not gender specific, so the label is "partners"). Both
     are only what Wikidata lists, with years when it has them, and are often incomplete.
+  - How the Wikidata part works (October 2026): `PersonLookup.cs` searches (`wbsearchentities`), keeps only items that are instances of
+    human (a `wbgetclaims` check on each match), then reads the chosen person (`wbgetentities`) and builds a `PersonFacts` card. The
+    card is saved in the library (`person_cards` table: plain columns for later search plus the whole card as JSON), removed when the
+    group is deleted or merged away, and removed when the group is given a different name. Settings > Privacy > "Look up people on
+    Wikidata" (on by default; nothing is sent until the button is pressed) switches the button off.
+    Choices I made that you may want to change: the card also keeps a death date (so a "current spouse" isn't taken at face value);
+    the place is shown as place, region and country ("Barranquilla, Atlántico Department, Colombia") and the whole chain is kept for
+    "born in Texas" searches; children is the number Wikidata states, else how many it lists (shown "as listed"); a height in a unit
+    Ocula doesn't know, or outside 50 to 260 cm, is left out; deprecated statements are ignored; the other names Wikidata has are offered
+    as tag chips with none ticked. All Wikidata text is cleaned before use, because anyone can edit Wikidata.
+    Real Wikidata needs `languagefallback=1`: many items (Shakira's among them) have their name only under the "mul" label, and a plain
+    English request returned no name.
+  - Not done: the People window was never run with this (People is off on the test PC and turning it on downloads models and scans the
+    library), so the picker dialog, the card layout and the tag-chip dialog are only compile-checked. Also not built: search by person details,
+    DBpedia and MusicBrainz fill-ins, the two notices they would need, and a contact address in the Wikimedia User-Agent (the same
+    placeholder as camera photos, to replace before release).
   - Lookup order: Wikidata first. Any field it leaves empty (height and former partners most
     often) is filled from DBpedia's public endpoint (CC BY-SA, no key). For musicians,
     MusicBrainz (CC0, needs a User-Agent, about one request a second) can add more. Anything still
@@ -575,7 +591,7 @@ the tag suggester have been run only on hand-written pages and fake responses, s
   (Ocula would contact sites the user chooses) and add a short "only download what you have the
   right to use" note in the dialog.
 
-**People** (checked on a PC in October 2026; see docs/PEOPLE-EVALUATION.md. The Wikidata person card is not built)
+**People** (checked on a PC in October 2026; see docs/PEOPLE-EVALUATION.md. The Wikidata person card is built but its window was not run)
 - Settings > People: switch on and Ocula downloads YuNet and SFace (about 39 MB) from Hugging Face,
   pinned to one revision each and rejected unless their size and SHA-256 match (`FaceModels.cs`).
 - Faces are found in the background (idle only), grouped when similarity is above 0.45, and

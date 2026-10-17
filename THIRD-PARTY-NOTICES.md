@@ -38,7 +38,8 @@ OpenMapTiles from OpenStreetMap data © OpenStreetMap contributors, available un
 Database License. The required credit is shown on the map itself.
 
 Camera photos are downloaded at run time from Wikimedia Commons, found through Wikidata
-(data available under CC0). Each photo is under its own free licence and is credited in the
+(data available under CC0). Facts about people (People > "Look up on Wikidata") also come from Wikidata, only when the
+user asks, and are credited on the card. Each photo is under its own free licence and is credited in the
 app with a link to its Commons page.
 
 ---

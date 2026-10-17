@@ -29,7 +29,14 @@ image from Wikimedia Commons. Nothing else is sent: no photos, file names, locat
 metadata. Downloaded camera images are cached on your PC. These services are run by the
 Wikimedia Foundation under its own privacy policy: https://foundation.wikimedia.org/wiki/Policy:Privacy_policy
 
-You can turn this off in **Settings > Privacy > Show camera photos**. With this, the map and
+**Person details (optional).** In People, when you press "Look up on Wikidata" for a group you have named, Ocula sends
+that name to Wikidata, then asks Wikidata for the facts about the person you pick (birth date and place, occupation,
+spouse, number of children, height, languages). Nothing is sent until you press the button, and no photos, faces or
+file names are ever sent. The facts are kept on your PC only and you can remove each card. Wikidata is run by the
+Wikimedia Foundation under its own privacy policy (linked above). Turn it off in **Settings > Privacy > Look up people
+on Wikidata**.
+
+You can turn camera photos off in **Settings > Privacy > Show camera photos**. With this, person lookups, the map and
 automatic update checks turned off, Ocula makes no internet requests of its own.
 
 **Map (optional).** When you open the map, Ocula downloads map images from OpenFreeMap
