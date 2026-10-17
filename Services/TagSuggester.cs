@@ -11,6 +11,8 @@ namespace Ocula.Services;
 /// It looks for names and topics that repeat, such as a name in the title that also appears in most
 /// captions. This reads text only: no pictures are analysed and nothing leaves the PC. Nothing is
 /// added until the user ticks it.
+/// Forum-aware: strips common thread prefixes (e.g. APPEARANCE) and treats dashes as separators so
+/// celebrity names in titles like "APPEARANCE - Katy Perry - Attends …" become suggested tags.
 /// </summary>
 public static class TagSuggester
 {
@@ -21,8 +23,19 @@ public static class TagSuggester
         "page","home","forum","forums","thread","threads","post","posts","reply","share","download","menu","login","log",
         "sign","new","latest","best","more","view","click","here","full","size","thumb","thumbnail","small","large",
         "jpg","jpeg","png","gif","webp","dsc","dscn","img_","web","www","com","org","net","http","https","video","videos",
-        "part","set","series","collection","all","top","next","previous","prev","back","read","about","contact","search"
+        "part","set","series","collection","all","top","next","previous","prev","back","read","about","contact","search",
+        // Forum / event-title noise (celebrity photo boards)
+        "appearance","discussion","update","news","photoshoot","editorial","magazine","cover","covers",
+        "annual","awards","award","benefit","fund","performs","perform","attends","attend","during","tour",
+        "concert","premiere","red","carpet","los","angeles","new","york","london","paris","milan","tokyo",
+        "california","october","january","february","march","april","june","july","august","september","november","december",
+        "oct","jan","feb","mar","apr","jun","jul","aug","sep","nov","dec","world","pop","style","instyle"
     };
+
+    /// <summary>Prefixes stripped from forum thread titles before name extraction.</summary>
+    private static readonly Regex ForumPrefix = new(
+        @"^\s*(?:appearance|discussion|update|news|photos?|pics?|gif|video|request|ot|off[\s-]?topic)\s*[-–—:|]\s*",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private sealed class Phrase
     {
@@ -42,7 +55,12 @@ public static class TagSuggester
         var phrases = new Dictionary<string, Phrase>();
         var siteWords = SiteWords(page.Url);
 
-        foreach (var phrase in DistinctPhrases(page.Title, names: true, siteWords)) Merge(phrases, phrase, title: true);
+        var titleForNames = ForumPrefix.Replace(page.Title ?? string.Empty, "");
+        foreach (var phrase in DistinctPhrases(titleForNames, names: true, siteWords)) Merge(phrases, phrase, title: true);
+        // Also scan the raw title so nothing is lost if the prefix regex missed.
+        if (!string.Equals(titleForNames, page.Title, StringComparison.Ordinal))
+            foreach (var phrase in DistinctPhrases(page.Title, names: true, siteWords)) Merge(phrases, phrase, title: true);
+
         foreach (var heading in page.Headings.Concat(page.Breadcrumbs).Concat(page.Keywords))
             foreach (var phrase in DistinctPhrases(heading, names: true, siteWords)) Merge(phrases, phrase, heading: true);
 
@@ -67,7 +85,10 @@ public static class TagSuggester
         foreach (var p in phrases.Values)
         {
             var share = (double)p.ImageHits / total;
-            p.Score = (p.InTitle ? 3.0 : 0) + (p.HeadingHits > 0 ? 1.5 : 0) + share * 5 + (p.Key.Contains(' ') ? 0.5 : 0);
+            // Prefer multi-word names that appear in the title (typical celebrity thread titles).
+            var nameBonus = p.IsName && p.InTitle && p.Key.Contains(' ') ? 1.5 : 0;
+            p.Score = (p.InTitle ? 3.0 : 0) + (p.HeadingHits > 0 ? 1.5 : 0) + share * 5
+                      + (p.Key.Contains(' ') ? 0.5 : 0) + nameBonus;
         }
 
         // Keep phrases with real support, and prefer a longer phrase over the words inside it.
@@ -88,6 +109,7 @@ public static class TagSuggester
         {
             Label = p.IsName ? Title(p.Display) : p.Display,
             Reason = Reason(p, total),
+            // Auto-tick title names and phrases that dominate image text.
             On = p.InTitle || (double)p.ImageHits / total >= 0.6
         }).ToList();
     }
@@ -136,7 +158,8 @@ public static class TagSuggester
         {
             var gap = text.Substring(last, m.Index - last);
             var capital = char.IsUpper(m.Value[0]);
-            if (!capital || gap.Any(c => c is ',' or ';' or ':' or '|' or '(' or ')' or '/' or '–' or '—' or '.' or '!' or '?'))
+            // Treat ASCII hyphen and en/em dashes as separators so "Katy Perry - Attends" splits cleanly.
+            if (!capital || gap.Any(c => c is ',' or ';' or ':' or '|' or '(' or ')' or '/' or '-' or '–' or '—' or '.' or '!' or '?'))
             {
                 if (current.Count > 0) runs.Add(current);
                 current = new List<string>();

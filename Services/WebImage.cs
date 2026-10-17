@@ -22,6 +22,12 @@ public sealed class WebImage : INotifyPropertyChanged
     public int Width { get; init; }
     public int Height { get; init; }
 
+    /// <summary>
+    /// True when the grabber found this image inside a forum post body (message content),
+    /// not in an avatar, signature, or site chrome. Used to prefer post photos over UI images.
+    /// </summary>
+    public bool InPost { get; init; }
+
     private string _fullUrl = string.Empty;
     /// <summary>The address that will be downloaded. Starts as the picture itself, and is replaced by the larger version when one is found.</summary>
     public string FullUrl
@@ -127,4 +133,10 @@ public sealed class PageSnapshot
     public List<string> Breadcrumbs { get; init; } = new();
     public List<string> Keywords { get; init; } = new();
     public List<WebImage> Images { get; init; } = new();
+
+    /// <summary>
+    /// Other pages of the same thread (pagination), if the grabber detected them.
+    /// Empty for ordinary pages. Used to offer "grab all pages of this thread".
+    /// </summary>
+    public List<string> PageUrls { get; init; } = new();
 }

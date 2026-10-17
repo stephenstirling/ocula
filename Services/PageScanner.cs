@@ -14,6 +14,8 @@ namespace Ocula.Services;
 /// are on it. For a thumbnail that links to another page (a gallery or forum post), it opens
 /// that page once and looks for the full-size picture. It never goes further than one link,
 /// never fills in forms, and does not try to get past ad screens, countdowns, paywalls or logins.
+/// Forum-aware: prefers images inside posts, ignores avatars/signatures/logos, and reports
+/// other pages of the current thread when present.
 /// </summary>
 public static class PageScanner
 {
@@ -24,9 +26,17 @@ public static class PageScanner
   const clean = s => (s || '').replace(/\s+/g, ' ').trim().slice(0, 300);
   const text = e => clean(e && (e.innerText || e.textContent));
   const meta = n => { const m = document.querySelector('meta[property="' + n + '"],meta[name="' + n + '"]'); return m ? clean(m.content) : ''; };
+
+  // Forum / post content: XenForo, vBulletin, phpBB, Discourse, generic message bodies.
+  const postSel = '.message-body, .bbWrapper, .messageContent, .message-content, .postbody, .post-body, .post_message, .postcontent, .post-content, .bbCodeImage, article .content, .topic-body, .cooked, .post';
+  const ignoreSel = 'aside, nav, header, footer, .signature, .message-signature, .userBanner, .avatar, .memberHeader, .p-nav, .p-header, .p-footer, .sidebar, .sideNav, #navigation, #header, #footer, .ad, .ads, .advert, [class*="avatar"], [class*="signature"], [id*="signature"]';
+
+  const inPost = el => !!(el.closest(postSel) && !el.closest(ignoreSel));
+  const isIgnored = el => !!el.closest(ignoreSel);
+
   const bestSrc = img => {
     let u = img.currentSrc || img.getAttribute('src') || '';
-    const lazy = img.dataset.src || img.dataset.original || img.dataset.lazySrc || img.dataset.full || img.dataset.url || '';
+    const lazy = img.dataset.src || img.dataset.original || img.dataset.lazySrc || img.dataset.full || img.dataset.url || img.dataset.image || '';
     if ((!u || u.startsWith('data:')) && lazy) u = lazy;
     const ss = img.getAttribute('srcset') || img.dataset.srcset || '';
     if (ss) {
@@ -40,14 +50,22 @@ public static class PageScanner
     }
     return abs(u);
   };
+
   const imgExt = /\.(jpe?g|png|gif|webp|avif|bmp|tiff?)(\?|#|$)/i;
   const seen = new Set();
   const images = [];
+
   for (const img of document.images) {
+    if (isIgnored(img)) continue;
     const src = bestSrc(img);
     if (!src || src.startsWith('data:') || seen.has(src)) continue;
     const w = img.naturalWidth || img.width || 0, h = img.naturalHeight || img.height || 0;
-    if (w && h && (w < 80 || h < 80)) continue;               // icons, spacers, avatars
+    const post = inPost(img);
+    // Tighter size filter for non-post images (avatars, icons, chrome).
+    const minSide = post ? 60 : 120;
+    if (w && h && (w < minSide || h < minSide)) continue;
+    // Skip obvious avatar / icon paths even if size is unknown.
+    if (!post && /avatar|icon|logo|smiley|emoticon|sprite/i.test(src)) continue;
     seen.add(src);
     const a = img.closest('a[href]');
     const fig = img.closest('figure');
@@ -55,24 +73,54 @@ public static class PageScanner
       src, w, h,
       alt: clean(img.alt || img.title),
       caption: fig ? text(fig.querySelector('figcaption')) : '',
-      link: a ? abs(a.getAttribute('href')) : null
+      link: a ? abs(a.getAttribute('href')) : null,
+      inPost: post
     });
   }
-  for (const a of document.querySelectorAll('a[href]')) {      // plain links to image files
+
+  for (const a of document.querySelectorAll('a[href]')) {
+    if (isIgnored(a) || a.querySelector('img')) continue;
     const href = abs(a.getAttribute('href'));
-    if (!href || seen.has(href) || !imgExt.test(href) || a.querySelector('img')) continue;
+    if (!href || seen.has(href) || !imgExt.test(href)) continue;
+    const post = inPost(a);
     seen.add(href);
-    images.push({ src: href, w: 0, h: 0, alt: text(a), caption: '', link: null });
+    images.push({ src: href, w: 0, h: 0, alt: text(a), caption: '', link: null, inPost: post });
   }
+
+  // Prefer post images when the page has a clear post structure.
+  const postCount = images.filter(i => i.inPost).length;
+  const filtered = postCount >= 2 ? images.filter(i => i.inPost) : images;
+
   const crumbs = [...document.querySelectorAll('[aria-label*="readcrumb" i] a, .breadcrumb a, .breadcrumbs a, nav ol li a')]
     .map(text).filter(Boolean).slice(0, 8);
   const headings = [...document.querySelectorAll('h1, h2')].map(text).filter(Boolean).slice(0, 12);
   const keywords = meta('keywords').split(',').map(clean).filter(Boolean).slice(0, 12);
+
+  // Other pages of this thread (XenForo, vBulletin, phpBB, Discourse, generic).
+  const pageUrls = [];
+  const pageSeen = new Set([location.href.split('#')[0]]);
+  const addPage = href => {
+    const u = abs(href);
+    if (!u || pageSeen.has(u.split('#')[0])) return;
+    pageSeen.add(u.split('#')[0]);
+    pageUrls.push(u.split('#')[0]);
+  };
+  document.querySelectorAll(
+    '.pageNav a[href], .pagination a[href], .PageNav a[href], nav[aria-label*="page" i] a[href], .pagelinks a[href], .pages a[href]'
+  ).forEach(a => {
+    const t = (a.textContent || '').trim();
+    const rel = (a.getAttribute('rel') || '').toLowerCase();
+    if (rel === 'next' || rel === 'prev' || /^\d+$/.test(t) || /next|prev|previous|>|»|«/i.test(t))
+      addPage(a.getAttribute('href'));
+  });
+
   return JSON.stringify({
     url: location.href,
     title: meta('og:title') || clean(document.title),
     description: meta('og:description') || meta('description'),
-    headings, crumbs, keywords, images
+    headings, crumbs, keywords,
+    images: filtered,
+    pageUrls: pageUrls.slice(0, 40)
   });
 })()
 """;
@@ -87,6 +135,8 @@ public static class PageScanner
             e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? string.Empty : string.Empty;
         static int Num(JsonElement e, string name) =>
             e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out var n) ? n : 0;
+        static bool Flag(JsonElement e, string name) =>
+            e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.True;
         static List<string> List(JsonElement e, string name)
         {
             var list = new List<string>();
@@ -103,7 +153,8 @@ public static class PageScanner
             Description = Str(root, "description"),
             Headings = List(root, "headings"),
             Breadcrumbs = List(root, "crumbs"),
-            Keywords = List(root, "keywords")
+            Keywords = List(root, "keywords"),
+            PageUrls = List(root, "pageUrls")
         };
 
         if (root.TryGetProperty("images", out var images) && images.ValueKind == JsonValueKind.Array)
@@ -120,7 +171,8 @@ public static class PageScanner
                     Alt = Str(item, "alt"),
                     Caption = Str(item, "caption"),
                     Width = Num(item, "w"),
-                    Height = Num(item, "h")
+                    Height = Num(item, "h"),
+                    InPost = Flag(item, "inPost")
                 });
             }
         }
@@ -139,8 +191,9 @@ public static class PageScanner
 
     /// <summary>
     /// For every image that links somewhere, finds the full-size picture. Images that link straight to
-    /// an image file use that file; links to pages are opened once and read. If nothing larger is found
-    /// the image is marked with a problem and left out of the download.
+    /// an image file use that file; links to pages are opened once and read. Host-specific logic is
+    /// used for common image hosts (ImageTwist, ImageBam, etc.). If nothing larger is found the image
+    /// is marked with a problem and left out of the download.
     /// </summary>
     public static async Task ResolveAsync(HttpClient http, IReadOnlyList<WebImage> images, Uri page,
         string? pageCookies, IProgress<int>? progress, CancellationToken cancel)
@@ -181,6 +234,13 @@ public static class PageScanner
             return;
         }
 
+        // Host-specific shortcuts before fetching HTML.
+        if (TryHostDirect(link, out var direct))
+        {
+            image.FullUrl = direct;
+            return;
+        }
+
         var html = await GetTextAsync(http, new Uri(link), page, cookies, cancel);
         if (html == null)
         {
@@ -189,9 +249,17 @@ public static class PageScanner
         }
 
         var baseUri = new Uri(link);
+
+        // Host-specific extraction from the landing page HTML.
+        if (TryHostFromHtml(link, html, baseUri, out var fromHost))
+        {
+            image.FullUrl = fromHost;
+            return;
+        }
+
         var candidates = FindCandidates(html, baseUri)
             .Where(c => c != image.ThumbUrl)
-            .Take(6)
+            .Take(8)
             .ToList();
 
         string? best = null;
@@ -206,6 +274,182 @@ public static class PageScanner
         // Anything under about 30 KB is an icon, ad or placeholder, not the photo.
         if (best != null && bestSize >= 30_000) image.FullUrl = best;
         else image.Problem = "Couldn't find the full-size version.";
+    }
+
+    // ================= Host-specific full-size helpers =================
+
+    /// <summary>Known image-host patterns where the landing URL maps to a predictable direct file.</summary>
+    private static bool TryHostDirect(string link, out string full)
+    {
+        full = string.Empty;
+        if (!Uri.TryCreate(link, UriKind.Absolute, out var uri)) return false;
+        var host = uri.Host.ToLowerInvariant();
+
+        // ImageTwist / ImageHaha (including phun.imagetwist.com and i*.imagetwist.com thumbs).
+        // Landing: https://imagetwist.com/CODE/name.jpg  or  https://phun.imagetwist.com/CODE/name.jpg
+        // Direct files often live on imgN.imagetwist.com — we still prefer HTML extraction, but
+        // some gallery links already point at a usable path.
+        if (host.Contains("imagetwist") || host.Contains("imagehaha"))
+        {
+            // If the path already looks like a direct image file, use it.
+            if (IsImageUrl(link) && !host.StartsWith("i") && !link.Contains("/th/"))
+            {
+                full = link;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Pull the largest sensible image URL from a known host's landing-page HTML.</summary>
+    private static bool TryHostFromHtml(string link, string html, Uri baseUri, out string full)
+    {
+        full = string.Empty;
+        if (!Uri.TryCreate(link, UriKind.Absolute, out var uri)) return false;
+        var host = uri.Host.ToLowerInvariant();
+
+        // ---- ImageTwist / ImageHaha ----
+        if (host.Contains("imagetwist") || host.Contains("imagehaha"))
+        {
+            // Common patterns: <img id="image" ...>, data-src on the main viewer, og:image.
+            foreach (Match m in Regex.Matches(html,
+                @"(?:id\s*=\s*[""']image[""'][^>]*src|src\s*=\s*[""']([^""']+)[""'][^>]*id\s*=\s*[""']image[""'])",
+                RegexOptions.IgnoreCase))
+            {
+                var src = m.Groups[1].Success ? m.Groups[1].Value : Attr(m.Value, "src");
+                if (AddIfImage(src, baseUri, ref full)) return true;
+            }
+
+            foreach (Match m in Regex.Matches(html,
+                @"<img\b[^>]*(?:class\s*=\s*[""'][^""']*(?:pic|full|main|image)[^""']*[""'])[^>]*>",
+                RegexOptions.IgnoreCase))
+            {
+                var src = Attr(m.Value, "data-src") ?? Attr(m.Value, "src");
+                if (AddIfImage(src, baseUri, ref full)) return true;
+            }
+
+            // og:image is usually the full file on ImageTwist.
+            foreach (Match m in MetaTag.Matches(html))
+            {
+                var key = (Attr(m.Value, "property") ?? Attr(m.Value, "name") ?? string.Empty).ToLowerInvariant();
+                if (key is "og:image" or "og:image:url" or "og:image:secure_url")
+                {
+                    if (AddIfImage(Attr(m.Value, "content"), baseUri, ref full)) return true;
+                }
+            }
+
+            // Direct file links that look like imgN.imagetwist.com/i/.../file.jpg
+            foreach (Match m in Regex.Matches(html,
+                @"https?://(?:img\d+\.)?(?:[\w.-]+\.)?image(?:twist|haha)\.com/[^""'\s>]+\.(?:jpe?g|png|webp|gif)",
+                RegexOptions.IgnoreCase))
+            {
+                if (!m.Value.Contains("/th/", StringComparison.OrdinalIgnoreCase) &&
+                    AddIfImage(m.Value, baseUri, ref full))
+                    return true;
+            }
+        }
+
+        // ---- ImageBam ----
+        if (host.Contains("imagebam"))
+        {
+            foreach (Match m in Regex.Matches(html,
+                @"<img\b[^>]*(?:class\s*=\s*[""'][^""']*main-image[^""']*[""']|id\s*=\s*[""'][^""']*image[^""']*[""'])[^>]*>",
+                RegexOptions.IgnoreCase))
+            {
+                var src = Attr(m.Value, "src") ?? Attr(m.Value, "data-src");
+                if (AddIfImage(src, baseUri, ref full)) return true;
+            }
+            foreach (Match m in MetaTag.Matches(html))
+            {
+                var key = (Attr(m.Value, "property") ?? Attr(m.Value, "name") ?? string.Empty).ToLowerInvariant();
+                if (key is "og:image" or "og:image:url")
+                {
+                    if (AddIfImage(Attr(m.Value, "content"), baseUri, ref full)) return true;
+                }
+            }
+        }
+
+        // ---- Pixhost (pixhost.to / pixhost.org) ----
+        // Landing: pixhost.to/show/NNNN/ID_name.jpg
+        // Full:    imgN.pixhost.to/images/NNNN/ID_name.jpg  (id="image", class image-img)
+        // og:image is the *thumbnail* — never use it as full size.
+        if (host.Contains("pixhost"))
+        {
+            foreach (Match m in Regex.Matches(html,
+                @"<img\b[^>]*(?:id\s*=\s*[""']image[""']|class\s*=\s*[""'][^""']*image-img[^""']*[""'])[^>]*>",
+                RegexOptions.IgnoreCase))
+            {
+                var src = Attr(m.Value, "src") ?? Attr(m.Value, "data-src");
+                if (src != null && src.Contains("/images/", StringComparison.OrdinalIgnoreCase) &&
+                    AddIfImage(src, baseUri, ref full))
+                    return true;
+            }
+            foreach (Match m in Regex.Matches(html,
+                @"https?://(?:img\d+\.)?pixhost\.(?:to|org)/images/[^""'\s>]+\.(?:jpe?g|png|webp|gif)",
+                RegexOptions.IgnoreCase))
+            {
+                if (AddIfImage(m.Value, baseUri, ref full)) return true;
+            }
+        }
+
+        // ---- TurboImageHost ----
+        if (host.Contains("turboimagehost"))
+        {
+            foreach (Match m in Regex.Matches(html,
+                @"<img\b[^>]*(?:id\s*=\s*[""']imageid[""']|class\s*=\s*[""'][^""']*(?:uimage|main-image|full)[^""']*[""'])[^>]*>",
+                RegexOptions.IgnoreCase))
+            {
+                var src = Attr(m.Value, "src") ?? Attr(m.Value, "data-src");
+                if (AddIfImage(src, baseUri, ref full)) return true;
+            }
+            foreach (Match m in MetaTag.Matches(html))
+            {
+                var key = (Attr(m.Value, "property") ?? Attr(m.Value, "name") ?? string.Empty).ToLowerInvariant();
+                if (key is "og:image" or "og:image:url")
+                {
+                    var content = Attr(m.Value, "content");
+                    // Prefer non-thumb paths when possible
+                    if (content != null && !content.Contains("/th/", StringComparison.OrdinalIgnoreCase) &&
+                        AddIfImage(content, baseUri, ref full))
+                        return true;
+                }
+            }
+        }
+
+        // ---- Generic: og:image that points at a real image file ----
+        // Skip hosts where og:image is known to be a thumbnail only.
+        if (host.Contains("pixhost"))
+            return false;
+
+        foreach (Match m in MetaTag.Matches(html))
+        {
+            var key = (Attr(m.Value, "property") ?? Attr(m.Value, "name") ?? string.Empty).ToLowerInvariant();
+            if (key is "og:image" or "og:image:url" or "og:image:secure_url" or "twitter:image" or "twitter:image:src")
+            {
+                var content = Attr(m.Value, "content");
+                if (content != null && IsImageUrl(content) && AddIfImage(content, baseUri, ref full))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool AddIfImage(string? url, Uri baseUri, ref string full)
+    {
+        if (string.IsNullOrWhiteSpace(url) || url.StartsWith("data:", StringComparison.OrdinalIgnoreCase)) return false;
+        if (!Uri.TryCreate(baseUri, url.Trim(), out var abs) || !IsWeb(abs.AbsoluteUri)) return false;
+        var u = abs.AbsoluteUri;
+        // Prefer URLs that look like actual image files; skip known thumbnail paths.
+        if (u.Contains("/thumbs/", StringComparison.OrdinalIgnoreCase) ||
+            u.Contains("/th/", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (!IsImageUrl(u) && !u.Contains("/i/", StringComparison.OrdinalIgnoreCase) &&
+            !u.Contains("/images/", StringComparison.OrdinalIgnoreCase))
+            return false;
+        full = u;
+        return true;
     }
 
     private static readonly Regex MetaTag = new(@"<meta\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -247,7 +491,7 @@ public static class PageScanner
             _ = int.TryParse(Attr(tag, "width"), out var w);
             _ = int.TryParse(Attr(tag, "height"), out var h);
             var hint = ((Attr(tag, "id") ?? "") + " " + (Attr(tag, "class") ?? "")).ToLowerInvariant();
-            var named = hint.Contains("full") || hint.Contains("main") || hint.Contains("photo") || hint.Contains("picture") || hint.Contains("image");
+            var named = hint.Contains("full") || hint.Contains("main") || hint.Contains("photo") || hint.Contains("picture") || hint.Contains("image") || hint.Contains("pic");
             return (src, area: w * h, named);
         })
         .Where(t => t.src != null)
