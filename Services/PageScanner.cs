@@ -228,23 +228,23 @@ public static class PageScanner
     private static async Task ResolveOneAsync(HttpClient http, WebImage image, Uri page, string? cookies, CancellationToken cancel)
     {
         var link = image.LinkUrl!;
-        if (IsImageUrl(link))
+
+        // An address that ends in an image extension is the picture itself, except on the image hosts below, whose landing pages
+        // are addressed like pictures (pixhost.to/show/1234/ID_name.jpg) but are web pages that hold the real picture.
+        if (IsImageUrl(link) && !IsHostLandingPage(link))
         {
             image.FullUrl = link;
-            return;
-        }
-
-        // Host-specific shortcuts before fetching HTML.
-        if (TryHostDirect(link, out var direct))
-        {
-            image.FullUrl = direct;
             return;
         }
 
         var html = await GetTextAsync(http, new Uri(link), page, cookies, cancel);
         if (html == null)
         {
-            image.Problem = "Couldn't open the linked page.";
+            // Not a page we can read. A host landing address that is really a picture (not HTML) is still a usable picture.
+            if (IsImageUrl(link) && await ImageSizeAsync(http, new Uri(link), page, cookies, cancel) > 0)
+                image.FullUrl = link;
+            else
+                image.Problem = "Couldn't open the linked page.";
             return;
         }
 
@@ -278,29 +278,37 @@ public static class PageScanner
 
     // ================= Host-specific full-size helpers =================
 
-    /// <summary>Known image-host patterns where the landing URL maps to a predictable direct file.</summary>
-    private static bool TryHostDirect(string link, out string full)
+    /// <summary>
+    /// True for an address on a known image host that is a landing PAGE even though it may end in .jpg, so it has to be opened and read,
+    /// not downloaded as a picture. Pixhost: pixhost.to/show/NNNN/ID_name.jpg (the pictures are on imgN.pixhost.to/images and
+    /// tN.pixhost.to/thumbs). ImageTwist and ImageHaha: imagetwist.com/CODE/name.jpg, or the same under another subdomain such as
+    /// phun.imagetwist.com (the pictures are on imgN.imagetwist.com, under /i/ or /th/). ImageBam: www.imagebam.com/view/CODE.
+    /// TurboImageHost: every page on turboimagehost.com (the pictures are on turboimg.net). The host is matched whole (the name itself or
+    /// a subdomain of it), so a different site that merely contains the name isn't taken for it.
+    /// </summary>
+    internal static bool IsHostLandingPage(string link)
     {
-        full = string.Empty;
         if (!Uri.TryCreate(link, UriKind.Absolute, out var uri)) return false;
         var host = uri.Host.ToLowerInvariant();
+        var path = uri.AbsolutePath;
 
-        // ImageTwist / ImageHaha (including phun.imagetwist.com and i*.imagetwist.com thumbs).
-        // Landing: https://imagetwist.com/CODE/name.jpg  or  https://phun.imagetwist.com/CODE/name.jpg
-        // Direct files often live on imgN.imagetwist.com — we still prefer HTML extraction, but
-        // some gallery links already point at a usable path.
-        if (host.Contains("imagetwist") || host.Contains("imagehaha"))
-        {
-            // If the path already looks like a direct image file, use it.
-            if (IsImageUrl(link) && !host.StartsWith("i") && !link.Contains("/th/"))
-            {
-                full = link;
-                return true;
-            }
-        }
+        if (HostIs(host, "pixhost.to") || HostIs(host, "pixhost.org"))
+            return path.StartsWith("/show/", StringComparison.OrdinalIgnoreCase);
+
+        if (HostIs(host, "imagetwist.com") || HostIs(host, "imagehaha.com"))
+            return !Regex.IsMatch(host, @"^img\d*\.") &&
+                   !path.Contains("/i/", StringComparison.OrdinalIgnoreCase) && !path.Contains("/th/", StringComparison.OrdinalIgnoreCase);
+
+        if (HostIs(host, "imagebam.com"))
+            return host is "imagebam.com" or "www.imagebam.com";
+
+        if (HostIs(host, "turboimagehost.com"))
+            return true;
 
         return false;
     }
+
+    private static bool HostIs(string host, string domain) => host == domain || host.EndsWith("." + domain, StringComparison.Ordinal);
 
     /// <summary>Pull the largest sensible image URL from a known host's landing-page HTML.</summary>
     private static bool TryHostFromHtml(string link, string html, Uri baseUri, out string full)

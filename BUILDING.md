@@ -427,7 +427,7 @@ Test on copies of your photos first.
 | Porta integration | Not built; blocked until the `stirling-shared` source is available |
 | Backup to Google Photos and iCloud (Phase 7) | Not built (planned) |
 | Duplicate finder extras | Not built |
-| Web download: forum threads (Forum Scraper) | Code added (f311a33); run only on hand-written XenForo, phpBB and Discourse pages in headless Edge, and on fake image-host responses. No real forum or image-host page tried. Four known problems are listed under Phase 6. Reading a thread's other pages (`PageUrls`) is designed, not built (`docs/WEB-THREAD-PAGES.md`) |
+| Web download: forum threads (Forum Scraper) | Code added (f311a33); run only on hand-written XenForo, phpBB and Discourse pages in headless Edge, and on fake image-host responses. No real forum or image-host page tried. Three known problems are listed under Phase 6 (a fourth, `.jpg` landing addresses, is fixed). Reading a thread's other pages (`PageUrls`) is designed, not built (`docs/WEB-THREAD-PAGES.md`) |
 
 **Phase 4 – culling, viewing, organising and sharing**
 
@@ -528,11 +528,13 @@ the tag suggester have been run only on hand-written pages and fake responses, s
   (`PageScannerTests.cs`); `WebImage` and `TagSuggester` have unit tests. **Never tried: a real forum, a real image host (ImageTwist,
   ImageBam, Pixhost, TurboImageHost), the Web window itself, the downloader, or tags landing in files.** The host rules rest on what the
   commit's author remembered of those sites' pages, not on pages seen here.
-- Known problems found in review of f311a33 (not fixed; two have skipped tests that say what should happen):
-  - **Pixhost and ImageTwist landing addresses that end in `.jpg` are never opened.** `ResolveOneAsync` takes any address ending in an
-    image extension as the picture itself, before the host rules, and Pixhost (`pixhost.to/show/NNNN/ID_name.jpg`) and ImageTwist
-    (`imagetwist.com/CODE/name.jpg`) landing addresses look like that. The "full-size" address is then the web page. (`TryHostDirect` can't
-    help: it only acts on addresses the first rule already took.)
+- Fixed after review of f311a33: **Pixhost and ImageTwist landing addresses that end in `.jpg` were never opened.** `ResolveOneAsync` took
+  any address ending in an image extension as the picture itself, before the host rules, and Pixhost (`pixhost.to/show/NNNN/ID_name.jpg`)
+  and ImageTwist (`imagetwist.com/CODE/name.jpg`) landing addresses look like that, so the "full-size" address was the web page.
+  `PageScanner.IsHostLandingPage` now recognises each named host's landing pages (the host matched whole, so look-alike sites aren't taken
+  for it) and they are opened and read; if one turns out to serve a picture instead of HTML it is still used. The unreachable
+  `TryHostDirect` was removed. The addresses are as the commit's author described them and were tested against fake responses, not real pages.
+- Known problems found in review of f311a33 (not fixed; the first has a skipped test that says what should happen):
   - **An `og:image` that is an image file is accepted without the 30 KB size check**, on any site, so a logo or small preview can be taken
     as the full-size picture.
   - **Pictures inside `<header>`, `<nav>`, `<aside>` or `<footer>` are dropped on every page, not just forums**: a news or blog article's

@@ -66,7 +66,7 @@ names for tiles and sidebar entries, a Release MSIX build, and the Map page offl
   only), the "Ask" and "Open on top" settings, "Open in the spot used last", and linked panning.
 - Duplicate finder limits on real photos.
 - Web download on real pages, including forum threads and the image-host rules (ImageTwist, ImageBam, Pixhost,
-  TurboImageHost). Only hand-written forum pages and fake responses have been run (BUILDING.md, Phase 6, lists four
+  TurboImageHost). Only hand-written forum pages and fake responses have been run (BUILDING.md, Phase 6, lists three
   known problems).
 - Delete / Move to Recycle Bin: tested on copies with the real Delete key, the More menu and the 10-photo
   confirmation (Recycle Bin, grid, selection, library rows); RAW+JPEG pairs were not.

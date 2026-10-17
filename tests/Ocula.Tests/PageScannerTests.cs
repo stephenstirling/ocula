@@ -148,14 +148,13 @@ public class PageScannerTests
         Assert.Empty(requests);
     }
 
-    // The Pixhost and ImageTwist tests below use landing addresses WITHOUT a file extension, to exercise the code that reads the
-    // landing page. Real ones usually end in .jpg ("pixhost.to/show/1234/ID_name.jpg"), and the resolver treats any address that
-    // ends in an image extension as the picture itself and never opens it: see the skipped test further down.
+    // Landing addresses on these hosts end in .jpg like pictures do (pixhost.to/show/1234/ID_name.jpg), so the tests below use that real
+    // shape. Such an address has to be opened and read, not downloaded as if it were the picture.
 
     [Fact]
-    public async Task Pixhost_page_reading_gives_the_full_image_and_never_the_thumbnail_from_og_image()
+    public async Task Pixhost_gives_the_full_image_and_never_the_thumbnail_from_og_image()
     {
-        var (image, requests) = await ResolveAsync("https://pixhost.to/show/1234/aaa_1", _ => Html("""
+        var (image, requests) = await ResolveAsync("https://pixhost.to/show/1234/aaa_1.jpg", _ => Html("""
             <html><head><meta property="og:image" content="https://t1.pixhost.to/thumbs/1234/aaa_1.jpg"></head>
             <body><img id="image" class="image-img" src="https://img1.pixhost.to/images/1234/aaa_1.jpg"></body></html>
             """));
@@ -165,9 +164,9 @@ public class PageScannerTests
     }
 
     [Fact]
-    public async Task Pixhost_page_reading_without_a_full_image_on_the_page_is_a_problem_not_a_thumbnail()
+    public async Task Pixhost_without_a_full_image_on_the_page_is_a_problem_not_a_thumbnail()
     {
-        var (image, _) = await ResolveAsync("https://pixhost.to/show/1234/aaa_1", request =>
+        var (image, _) = await ResolveAsync("https://pixhost.to/show/1234/aaa_1.jpg", request =>
             request.RequestUri!.Host == "pixhost.to"
                 ? Html("""<html><head><meta property="og:image" content="https://t1.pixhost.to/thumbs/1234/aaa_1.jpg"></head><body>nothing</body></html>""")
                 : Image(500));
@@ -177,25 +176,76 @@ public class PageScannerTests
     }
 
     /// <summary>
-    /// KNOWN DEFECT in the Forum Scraper commit (f311a33), found while writing these tests. ResolveOneAsync's first rule is "a link
-    /// that ends in an image extension is the picture", which is checked before any host rule. A Pixhost landing address is
-    /// pixhost.to/show/NNNN/ID_name.jpg (the commit's own comment says so), and an ImageTwist one is imagetwist.com/CODE/name.jpg,
-    /// so the host code that reads those landing pages is never reached: the "full-size" address is the web page itself, and a
-    /// download would save HTML as a .jpg. Un-skip this when the order of the two rules is settled. (TryHostDirect, which is meant to
-    /// handle these addresses, can't help: it only acts on addresses that end in an image extension, which the first rule already took.)
+    /// Fixed after the Forum Scraper commit (f311a33), whose "an address ending in an image extension is the picture" rule ran before
+    /// the host rules, so Pixhost and ImageTwist landing addresses (which end in .jpg) were never opened and the "full-size" address
+    /// was the web page itself.
     /// </summary>
-    [Fact(Skip = "Known defect in f311a33: addresses ending in .jpg are taken as the picture before the Pixhost/ImageTwist rules run. See the summary comment.")]
-    public async Task Pixhost_and_ImageTwist_landing_addresses_that_end_in_jpg_are_opened_and_read()
+    [Fact]
+    public async Task Landing_addresses_that_end_in_jpg_are_opened_and_read_on_Pixhost_and_ImageTwist()
     {
-        var (pix, _) = await ResolveAsync("https://pixhost.to/show/1234/aaa_1.jpg", _ => Html("""
-            <html><body><img id="image" class="image-img" src="https://img1.pixhost.to/images/1234/aaa_1.jpg"></body></html>
-            """));
-        Assert.Equal("https://img1.pixhost.to/images/1234/aaa_1.jpg", pix.FullUrl);
-
         var (twist, _) = await ResolveAsync("https://imagetwist.com/aaa111/pc_1.jpg", _ => Html("""
             <html><body><img src="https://img1.imagetwist.com/i/001/aaa111/pc_1.jpg" id="image" class="pic"></body></html>
             """));
         Assert.Equal("https://img1.imagetwist.com/i/001/aaa111/pc_1.jpg", twist.FullUrl);
+
+        var (phun, _) = await ResolveAsync("https://phun.imagetwist.com/bbb222/pc_2.jpg", _ => Html("""
+            <html><body><img src="https://img1.imagetwist.com/i/001/bbb222/pc_2.jpg" id="image" class="pic"></body></html>
+            """));
+        Assert.Equal("https://img1.imagetwist.com/i/001/bbb222/pc_2.jpg", phun.FullUrl);
+    }
+
+    [Theory]
+    // Landing pages: opened and read.
+    [InlineData("https://pixhost.to/show/1234/aaa_1.jpg", true)]
+    [InlineData("https://www.pixhost.to/show/1234/aaa_1.jpg", true)]
+    [InlineData("https://pixhost.org/show/1234/aaa_1.jpg", true)]
+    [InlineData("https://imagetwist.com/aaa111/pc_1.jpg", true)]
+    [InlineData("https://phun.imagetwist.com/aaa111/pc_1.jpg", true)]
+    [InlineData("https://imagehaha.com/aaa111/pc_1.jpg", true)]
+    [InlineData("https://www.imagebam.com/view/ME123", true)]
+    [InlineData("https://www.turboimagehost.com/p/12345/a.jpg.html", true)]
+    // The pictures themselves, thumbnails included: used as they are.
+    [InlineData("https://img1.pixhost.to/images/1234/aaa_1.jpg", false)]
+    [InlineData("https://t1.pixhost.to/thumbs/1234/aaa_1.jpg", false)]
+    [InlineData("https://img1.imagetwist.com/i/001/aaa111/pc_1.jpg", false)]
+    [InlineData("https://img12.imagetwist.com/th/001/aaa111.jpg", false)]
+    [InlineData("https://imagetwist.com/i/001/aaa111/pc_1.jpg", false)]
+    [InlineData("https://images4.imagebam.com/aa/bb/cc/ME123.jpg", false)]
+    // Other sites, including ones that only contain a host's name.
+    [InlineData("https://example.test/gallery/a.jpg", false)]
+    [InlineData("https://notpixhost.to/show/1234/a.jpg", false)]
+    [InlineData("https://pixhost.to.evil.test/show/1234/a.jpg", false)]
+    [InlineData("https://myimagetwist.com/x/a.jpg", false)]
+    [InlineData("not an address", false)]
+    public void IsHostLandingPage_tells_a_known_hosts_landing_page_from_its_pictures(string address, bool landing) =>
+        Assert.Equal(landing, PageScanner.IsHostLandingPage(address));
+
+    [Fact]
+    public async Task A_picture_on_a_known_host_is_used_as_it_is_with_no_request()
+    {
+        var (image, requests) = await ResolveAsync("https://img1.pixhost.to/images/1234/aaa_1.jpg", _ => throw new InvalidOperationException("no request expected"));
+
+        Assert.Equal("https://img1.pixhost.to/images/1234/aaa_1.jpg", image.FullUrl);
+        Assert.Empty(requests);
+    }
+
+    [Fact]
+    public async Task A_landing_looking_address_that_turns_out_to_be_a_picture_is_still_used()
+    {
+        // The address looks like a landing page but serves a picture, not HTML: it can't be read as a page, so it is taken as the picture.
+        var (image, _) = await ResolveAsync("https://imagetwist.com/aaa111/pc_1.jpg", _ => Image(80_000));
+
+        Assert.Equal("https://imagetwist.com/aaa111/pc_1.jpg", image.FullUrl);
+        Assert.Null(image.Problem);
+    }
+
+    [Fact]
+    public async Task A_landing_address_that_cant_be_opened_at_all_is_a_problem_not_a_picture()
+    {
+        var (image, _) = await ResolveAsync("https://pixhost.to/show/9/gone.jpg", _ => new HttpResponseMessage(HttpStatusCode.NotFound));
+
+        Assert.False(image.HasLargerVersion);
+        Assert.Equal("Couldn't open the linked page.", image.Problem);
     }
 
     [Fact]
