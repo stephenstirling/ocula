@@ -78,7 +78,13 @@ public static class PageScanner
     if (isIgnored(img)) continue;
     const src = bestSrc(img);
     if (!src || src.startsWith('data:') || seen.has(src)) continue;
-    const w = img.naturalWidth || img.width || 0, h = img.naturalHeight || img.height || 0;
+    // When a remote thumbnail fails to load, Chromium may report the width of its alt text
+    // instead of the HTML width attribute. Keep linked forum images discoverable in that case.
+    const failed = img.complete && img.naturalWidth === 0;
+    const attrWidth = parseInt(img.getAttribute('width') || '', 10) || 0;
+    const attrHeight = parseInt(img.getAttribute('height') || '', 10) || 0;
+    const w = failed ? attrWidth : (img.naturalWidth || attrWidth || img.width || 0);
+    const h = failed ? attrHeight : (img.naturalHeight || attrHeight || img.height || 0);
     const post = inPost(img);
     // Tighter size filter for non-post images (avatars, icons, chrome).
     const minSide = post ? 60 : 120;
