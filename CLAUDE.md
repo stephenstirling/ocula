@@ -65,7 +65,9 @@ names for tiles and sidebar entries, a Release MSIX build, and the Map page offl
   untested: a second monitor ("next display"), mixed-DPI monitors, the taskbar away from the bottom (unit tests
   only), the "Ask" and "Open on top" settings, "Open in the spot used last", and linked panning.
 - Duplicate finder limits on real photos.
-- Web download on real pages.
+- Web download on real pages, including forum threads and the image-host rules (ImageTwist, ImageBam, Pixhost,
+  TurboImageHost). Only hand-written forum pages and fake responses have been run (BUILDING.md, Phase 6, lists four
+  known problems).
 - Delete / Move to Recycle Bin: tested on copies with the real Delete key, the More menu and the 10-photo
   confirmation (Recycle Bin, grid, selection, library rows); RAW+JPEG pairs were not.
 - Update checks and Store packaging with the Windows App Certification Kit.

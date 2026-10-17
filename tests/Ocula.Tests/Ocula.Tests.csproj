@@ -29,6 +29,9 @@
     <Compile Include="..\..\Services\FaceModels.cs" Link="App\FaceModels.cs" />
     <Compile Include="..\..\Services\DiagnosticLog.cs" Link="App\DiagnosticLog.cs" />
     <Compile Include="..\..\Services\SmartModels.cs" Link="App\SmartModels.cs" />
+    <Compile Include="..\..\Services\PageScanner.cs" Link="App\PageScanner.cs" />
+    <Compile Include="..\..\Services\WebImage.cs" Link="App\WebImage.cs" />
+    <Compile Include="..\..\Services\TagSuggester.cs" Link="App\TagSuggester.cs" />
     <None Include="TestData\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
@@ -37,6 +40,7 @@
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="System.Management" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" />
     <PackageReference Include="SixLabors.ImageSharp" />
   </ItemGroup>

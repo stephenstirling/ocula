@@ -427,6 +427,7 @@ Test on copies of your photos first.
 | Porta integration | Not built; blocked until the `stirling-shared` source is available |
 | Backup to Google Photos and iCloud (Phase 7) | Not built (planned) |
 | Duplicate finder extras | Not built |
+| Web download: forum threads (Forum Scraper) | Code added (f311a33); run only on hand-written XenForo, phpBB and Discourse pages in headless Edge, and on fake image-host responses. No real forum or image-host page tried. Four known problems are listed under Phase 6. Reading a thread's other pages (`PageUrls`) is designed, not built (`docs/WEB-THREAD-PAGES.md`) |
 
 **Phase 4 – culling, viewing, organising and sharing**
 
@@ -493,15 +494,23 @@ _Still to come_
     choice in Settings.
   - Shares the ONNX Runtime setup with People, so build them together.
 
-**Phase 6 – download from the web** (code added, untested)
+**Phase 6 – download from the web** (code added; never run on a real forum or image-host page. The grab script, the resolver and
+the tag suggester have been run only on hand-written pages and fake responses, see "Checked so far")
 - Toolbar > Web opens `WebDownloadWindow`: an address bar and a WebView2 browser pane (so sign-ins and
   script-built pages work). "Grab images on this page" runs `PageScanner.GrabScript` in the page and
-  lists the images (img, srcset, lazy-load attributes, plain links to image files). Icons under 80 px
-  are skipped.
+  lists the images (img, srcset, lazy-load attributes, plain links to image files). Small pictures are
+  skipped: under 60 px inside a forum post, under 120 px elsewhere. Anything inside a header, nav, aside or
+  footer, and avatars, signatures, logos and smilies, is skipped too.
+- Forum pages (Forum Scraper commit, f311a33): the script knows the post containers of XenForo, vBulletin, phpBB and Discourse
+  (`.message-body`, `.bbWrapper`, `.postbody`, `.cooked` and so on). When a page has at least two pictures in posts, only those are
+  listed (`WebImage.InPost`); with one or none, the page's other pictures are listed too. It also lists the other pages of the thread
+  that the page's own page-number links point to (`PageSnapshot.PageUrls`, at most 40), but **nothing uses them**: see
+  `docs/WEB-THREAD-PAGES.md` for a design, and for the wording the "one link" rule would need.
 - Thumbnail > full size: an image wrapped in a link to an image file uses that file; a link to another
   page is opened once (`PageScanner.ResolveAsync`) and the full picture is chosen from the declared
   main image (`og:image`), then large `<img>` tags, by file size (under about 30 KB is treated as an icon
-  or ad). Nothing deeper than one link, and no clicking through ad screens, countdowns, forms,
+  or ad). Rules for four named image hosts (ImageTwist/ImageHaha, ImageBam, Pixhost, TurboImageHost) read their
+  landing pages first. Nothing deeper than one link, and no clicking through ad screens, countdowns, forms,
   paywalls or logins. Cookies from the page the user is signed in to are only sent back to that same site.
   Images where no larger version is found show "Couldn't find the full-size version" and aren't selectable.
 - Suggested tags: `TagSuggester` reads the title, headings, breadcrumbs, keywords, alt text, captions and
@@ -512,14 +521,37 @@ _Still to come_
   and the folder is opened in the library.
 - Files: `WebImage.cs`, `PageScanner.cs`, `TagSuggester.cs`, `WebDownloader.cs`, `WebDownloadWindow.xaml(.cs)`,
   `MainWindow.Web.cs`.
-- Checked so far: the grab script was run in headless Chromium on a sample page and found the right images,
-  the lazy-load and srcset variants, captions and links. Nothing else (the C#, the resolver, the tag
-  suggester, the downloader) has been compiled or run.
+- Checked so far (October 2026): the real grab script was run in headless Edge on **hand-written** XenForo, phpBB and Discourse pages
+  (not saved from real sites) and on two plain pages (`tests/Ocula.Tests/ForumGrabTests.cs`, pages in `TestData/forums`). On those it kept
+  the post pictures, dropped avatars, signature banners, logos, smilies and quoted posts, kept each thumbnail's link, and found the other
+  pages of a XenForo and a phpBB thread. The resolver was run against fake responses written to look like each host's landing page
+  (`PageScannerTests.cs`); `WebImage` and `TagSuggester` have unit tests. **Never tried: a real forum, a real image host (ImageTwist,
+  ImageBam, Pixhost, TurboImageHost), the Web window itself, the downloader, or tags landing in files.** The host rules rest on what the
+  commit's author remembered of those sites' pages, not on pages seen here.
+- Known problems found in review of f311a33 (not fixed; two have skipped tests that say what should happen):
+  - **Pixhost and ImageTwist landing addresses that end in `.jpg` are never opened.** `ResolveOneAsync` takes any address ending in an
+    image extension as the picture itself, before the host rules, and Pixhost (`pixhost.to/show/NNNN/ID_name.jpg`) and ImageTwist
+    (`imagetwist.com/CODE/name.jpg`) landing addresses look like that. The "full-size" address is then the web page. (`TryHostDirect` can't
+    help: it only acts on addresses the first rule already took.)
+  - **An `og:image` that is an image file is accepted without the 30 KB size check**, on any site, so a logo or small preview can be taken
+    as the full-size picture.
+  - **Pictures inside `<header>`, `<nav>`, `<aside>` or `<footer>` are dropped on every page, not just forums**: a news or blog article's
+    lead picture inside its `<header>` is no longer offered (the previous script offered it).
+  - **A thumbnail that failed to load and has alt text is dropped as an icon** (Chrome reports the size of its alt text). phpBB's
+    pictures have `alt="Image"`, so a thread whose thumbnails can't load (a host that blocks hotlinking) gives no pictures. Older than the
+    commit, but it bites forum pages.
+  - Smaller: the first ImageTwist pattern's `id` before `src` branch captures nothing (the later patterns still find the picture);
+    host rules match on a substring of the host name; `WebImage.FileName` keeps `%20` and similar, so tags from file names with encoded spaces
+    don't match; the forum word list in `TagSuggester` removes city and month words everywhere ("June Carter Cash" becomes "Carter Cash").
+  - `grok/forum-web-download/` (untracked, byte-identical copies of the three committed files plus an `APPLY.md`) is **not excluded from
+    `Ocula.csproj`**, so with it in the repository folder the app fails to build (duplicate types). Move it out or delete it.
 - First things to check on a PC: a plain gallery page; a page whose thumbnails link to full-size images;
-  a page that needs sign-in (sign in in the pane, then grab); that tags land in the files; and what
-  `TagSuggester` proposes on a page with a name in the title.
-- Not planned (unchanged): site-specific scrapers or rules for named image hosts, DRM, paywall, ad-screen or
-  login circumvention. Later: following "next page" links, resume, scheduling.
+  a real forum thread on each of XenForo, phpBB and Discourse (post pictures only, names from the title, host landing pages
+  resolve to the full picture and not to a web page); a page that needs sign-in (sign in in the pane, then grab); that tags land
+  in the files; and what `TagSuggester` proposes on a page with a name in the title.
+- Named image-host rules now exist (ImageTwist/ImageHaha, ImageBam, Pixhost, TurboImageHost). This replaces the earlier line "Not planned:
+  site-specific scrapers or rules for named image hosts"; the owner should confirm that is wanted. Still not planned: DRM, paywall, ad-screen
+  or login circumvention. Later: reading a thread's other pages (designed, `docs/WEB-THREAD-PAGES.md`), resume, scheduling.
 - (Original plan, kept for reference)
 - "Download from web…" next to Import from card. Browse to a page in a built-in WebView2 pane
   (so logins and JavaScript-heavy pages work) and choose "Grab images on this page".
@@ -745,5 +777,5 @@ _Still to come_
   Ocula's own pHash and dHash (`DuplicateFinder`), keeping the stored fingerprint format or
   recomputing it once, then move ImageSharp from 2.1.13 to 4.1.2 or later to clear the five
   advisories in `docs/KNOWN-ISSUES.md`. Check the Six Labors Split License (3.0 and later) first.
-- Phase 6 extras: multi-page galleries, resumable downloads.
+- Phase 6 extras: reading the other pages of a forum thread (designed, `docs/WEB-THREAD-PAGES.md`), resumable downloads.
 - iPhone HDR gain maps and 32-bit HDR merges in the HDR preview.
