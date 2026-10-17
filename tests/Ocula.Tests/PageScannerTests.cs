@@ -314,12 +314,11 @@ public class PageScannerTests
     }
 
     /// <summary>
-    /// KNOWN DEFECT in the Forum Scraper commit (f311a33). A page's og:image that looks like an image file is now accepted straight away
-    /// (the "Generic" block in TryHostFromHtml), before the size check that used to guard against thumbnails, logos and placeholders
-    /// (about 30 KB). Many sites set og:image to their logo or a small preview, so on an unknown site the "full-size" picture can now be
-    /// an icon. Un-skip when the generic rule is size-checked like every other candidate.
+    /// Fixed after the Forum Scraper commit (f311a33), which accepted a page's og:image straight away when it looked like an image file,
+    /// before the size check that guards against logos and placeholders (about 30 KB). Many sites set og:image to their logo or a small
+    /// preview, so on an unknown site the "full-size" picture could be an icon.
     /// </summary>
-    [Fact(Skip = "Known defect in f311a33: an og:image that is an image file skips the 30 KB size check. See the summary comment.")]
+    [Fact]
     public async Task An_unknown_sites_og_image_is_size_checked_like_the_other_candidates()
     {
         var (image, _) = await ResolveAsync("https://other.test/gallery/7", request =>
@@ -327,6 +326,50 @@ public class PageScannerTests
                 ? Html("""<html><head><meta property="og:image" content="https://other.test/img/site-logo.png"></head></html>""")
                 : Image(10_000));
 
+        Assert.Equal("Couldn't find the full-size version.", image.Problem);
+    }
+
+    [Fact]
+    public async Task A_big_picture_on_the_page_beats_a_small_og_image()
+    {
+        var landing = """
+            <html><head><meta property="og:image" content="https://other.test/img/site-logo.png"></head>
+            <body><img id="photo" src="https://other.test/photos/7-full.jpg" width="1600" height="1200"></body></html>
+            """;
+        var (image, _) = await ResolveAsync("https://other.test/gallery/7", request =>
+            request.RequestUri!.AbsolutePath switch
+            {
+                "/gallery/7" => Html(landing),
+                "/img/site-logo.png" => Image(8_000),
+                _ => Image(400_000),
+            });
+
+        Assert.Equal("https://other.test/photos/7-full.jpg", image.FullUrl);
+    }
+
+    [Theory]
+    [InlineData("https://other.test/thumbs/7.jpg")]
+    [InlineData("https://other.test/th/7.jpg")]
+    public async Task A_picture_under_a_thumbs_or_th_folder_is_never_the_full_size_picture_however_big_the_file(string thumb)
+    {
+        var landing = $"""<html><head><meta property="og:image" content="{thumb}"></head></html>""";
+        var (image, _) = await ResolveAsync("https://other.test/gallery/7", request =>
+            request.RequestUri!.AbsolutePath == "/gallery/7" ? Html(landing) : Image(400_000));
+
+        Assert.False(image.HasLargerVersion);
+        Assert.Equal("Couldn't find the full-size version.", image.Problem);
+    }
+
+    [Fact]
+    public async Task Pixhosts_big_og_image_thumbnail_is_not_taken_for_the_full_size_picture()
+    {
+        // Pixhost's og:image is the thumbnail. Even a thumbnail over 30 KB must not be chosen when the page has no full-size picture.
+        var (image, _) = await ResolveAsync("https://pixhost.to/show/1234/aaa_1.jpg", request =>
+            request.RequestUri!.Host == "pixhost.to"
+                ? Html("""<html><head><meta property="og:image" content="https://t1.pixhost.to/thumbs/1234/aaa_1.jpg"></head><body>nothing</body></html>""")
+                : Image(400_000));
+
+        Assert.False(image.HasLargerVersion);
         Assert.Equal("Couldn't find the full-size version.", image.Problem);
     }
 

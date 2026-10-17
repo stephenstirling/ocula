@@ -14,8 +14,10 @@ namespace Ocula.Services;
 /// are on it. For a thumbnail that links to another page (a gallery or forum post), it opens
 /// that page once and looks for the full-size picture. It never goes further than one link,
 /// never fills in forms, and does not try to get past ad screens, countdowns, paywalls or logins.
-/// Forum-aware: prefers images inside posts, ignores avatars/signatures/logos, and reports
-/// other pages of the current thread when present.
+/// Forum-aware, but only on a page that has a forum message container (XenForo, vBulletin, phpBB,
+/// Discourse, MyBB): there it prefers images inside posts and ignores avatars, signatures and logos.
+/// Any other page is read as it always was. It also reports other pages of the current thread
+/// when present.
 /// </summary>
 public static class PageScanner
 {
@@ -27,12 +29,15 @@ public static class PageScanner
   const text = e => clean(e && (e.innerText || e.textContent));
   const meta = n => { const m = document.querySelector('meta[property="' + n + '"],meta[name="' + n + '"]'); return m ? clean(m.content) : ''; };
 
-  // Forum / post content: XenForo, vBulletin, phpBB, Discourse, generic message bodies.
-  const postSel = '.message-body, .bbWrapper, .messageContent, .message-content, .postbody, .post-body, .post_message, .postcontent, .post-content, .bbCodeImage, article .content, .topic-body, .cooked, .post';
+  // Forum rules: XenForo, vBulletin, phpBB, Discourse, MyBB. They apply only to a page that has one of these platform-specific message
+  // containers. Any other page (a blog, a news article, a gallery) is read as it always was: every picture over 80 px, nothing ignored.
+  const forumSel = '.message-body, .bbWrapper, .messageContent, .message-content, .postbody, .post-body, .post_message, .postcontent, .post-content, .bbCodeImage, .topic-body, .cooked';
+  const postSel = forumSel + ', article .content, .post';
   const ignoreSel = 'aside, nav, header, footer, .signature, .message-signature, .userBanner, .avatar, .memberHeader, .p-nav, .p-header, .p-footer, .sidebar, .sideNav, #navigation, #header, #footer, .ad, .ads, .advert, [class*="avatar"], [class*="signature"], [id*="signature"]';
+  const isForum = !!document.querySelector(forumSel);
 
-  const inPost = el => !!(el.closest(postSel) && !el.closest(ignoreSel));
-  const isIgnored = el => !!el.closest(ignoreSel);
+  const inPost = el => isForum && !!(el.closest(postSel) && !el.closest(ignoreSel));
+  const isIgnored = el => isForum && !!el.closest(ignoreSel);
 
   const bestSrc = img => {
     let u = img.currentSrc || img.getAttribute('src') || '';
@@ -61,11 +66,12 @@ public static class PageScanner
     if (!src || src.startsWith('data:') || seen.has(src)) continue;
     const w = img.naturalWidth || img.width || 0, h = img.naturalHeight || img.height || 0;
     const post = inPost(img);
-    // Tighter size filter for non-post images (avatars, icons, chrome).
-    const minSide = post ? 60 : 120;
+    // On a forum page: small pictures inside a post are kept down to 60 px, others need 120 px (avatars, icons, chrome).
+    // On any other page: 80 px, as before.
+    const minSide = isForum ? (post ? 60 : 120) : 80;
     if (w && h && (w < minSide || h < minSide)) continue;
-    // Skip obvious avatar / icon paths even if size is unknown.
-    if (!post && /avatar|icon|logo|smiley|emoticon|sprite/i.test(src)) continue;
+    // Forum pages only: skip obvious avatar / icon paths even if size is unknown.
+    if (isForum && !post && /avatar|icon|logo|smiley|emoticon|sprite/i.test(src)) continue;
     seen.add(src);
     const a = img.closest('a[href]');
     const fig = img.closest('figure');
@@ -87,9 +93,9 @@ public static class PageScanner
     images.push({ src: href, w: 0, h: 0, alt: text(a), caption: '', link: null, inPost: post });
   }
 
-  // Prefer post images when the page has a clear post structure.
+  // On a forum page, prefer the pictures in posts when there are at least two.
   const postCount = images.filter(i => i.inPost).length;
-  const filtered = postCount >= 2 ? images.filter(i => i.inPost) : images;
+  const filtered = isForum && postCount >= 2 ? images.filter(i => i.inPost) : images;
 
   const crumbs = [...document.querySelectorAll('[aria-label*="readcrumb" i] a, .breadcrumb a, .breadcrumbs a, nav ol li a')]
     .map(text).filter(Boolean).slice(0, 8);
@@ -258,7 +264,7 @@ public static class PageScanner
         }
 
         var candidates = FindCandidates(html, baseUri)
-            .Where(c => c != image.ThumbUrl)
+            .Where(c => c != image.ThumbUrl && !IsThumbnailPath(c))
             .Take(8)
             .ToList();
 
@@ -307,6 +313,10 @@ public static class PageScanner
 
         return false;
     }
+
+    /// <summary>An address under a /thumbs/ or /th/ folder: a thumbnail however big the file is, never the full-size picture.</summary>
+    private static bool IsThumbnailPath(string url) =>
+        url.Contains("/thumbs/", StringComparison.OrdinalIgnoreCase) || url.Contains("/th/", StringComparison.OrdinalIgnoreCase);
 
     private static bool HostIs(string host, string domain) => host == domain || host.EndsWith("." + domain, StringComparison.Ordinal);
 
@@ -425,22 +435,9 @@ public static class PageScanner
             }
         }
 
-        // ---- Generic: og:image that points at a real image file ----
-        // Skip hosts where og:image is known to be a thumbnail only.
-        if (host.Contains("pixhost"))
-            return false;
-
-        foreach (Match m in MetaTag.Matches(html))
-        {
-            var key = (Attr(m.Value, "property") ?? Attr(m.Value, "name") ?? string.Empty).ToLowerInvariant();
-            if (key is "og:image" or "og:image:url" or "og:image:secure_url" or "twitter:image" or "twitter:image:src")
-            {
-                var content = Attr(m.Value, "content");
-                if (content != null && IsImageUrl(content) && AddIfImage(content, baseUri, ref full))
-                    return true;
-            }
-        }
-
+        // No generic rule for other sites: an og:image there is only a candidate like any other picture on the page (FindCandidates),
+        // chosen by size in ResolveOneAsync. (It used to be accepted outright here, so a site logo or a small preview could become the
+        // "full-size" picture.)
         return false;
     }
 

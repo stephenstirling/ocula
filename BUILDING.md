@@ -427,7 +427,7 @@ Test on copies of your photos first.
 | Porta integration | Not built; blocked until the `stirling-shared` source is available |
 | Backup to Google Photos and iCloud (Phase 7) | Not built (planned) |
 | Duplicate finder extras | Not built |
-| Web download: forum threads (Forum Scraper) | Code added (f311a33); run only on hand-written XenForo, phpBB and Discourse pages in headless Edge, and on fake image-host responses. No real forum or image-host page tried. Three known problems are listed under Phase 6 (a fourth, `.jpg` landing addresses, is fixed). Reading a thread's other pages (`PageUrls`) is designed, not built (`docs/WEB-THREAD-PAGES.md`) |
+| Web download: forum threads (Forum Scraper) | Code added (f311a33); run only on hand-written XenForo, phpBB and Discourse pages in headless Edge, and on fake image-host responses. No real forum or image-host page tried. One known problem and some smaller ones are listed under Phase 6 (the `.jpg` landing addresses, the `og:image` size check and the header-picture drop are fixed). Reading a thread's other pages (`PageUrls`) is designed, not built (`docs/WEB-THREAD-PAGES.md`) |
 
 **Phase 4 – culling, viewing, organising and sharing**
 
@@ -499,8 +499,10 @@ the tag suggester have been run only on hand-written pages and fake responses, s
 - Toolbar > Web opens `WebDownloadWindow`: an address bar and a WebView2 browser pane (so sign-ins and
   script-built pages work). "Grab images on this page" runs `PageScanner.GrabScript` in the page and
   lists the images (img, srcset, lazy-load attributes, plain links to image files). Small pictures are
-  skipped: under 60 px inside a forum post, under 120 px elsewhere. Anything inside a header, nav, aside or
-  footer, and avatars, signatures, logos and smilies, is skipped too.
+  skipped: on a forum page, under 60 px inside a post and under 120 px elsewhere, plus anything inside a header, nav, aside or
+  footer and pictures whose address says avatar, icon, logo, smiley or sprite; on any other page, under 80 px. The forum rules apply
+  only when the page has a forum message container (`.message-body`, `.postbody`, `.cooked` and so on), so an article or a blog is not
+  affected by them. That gating was my choice when fixing the problem below; change it if you want something different.
 - Forum pages (Forum Scraper commit, f311a33): the script knows the post containers of XenForo, vBulletin, phpBB and Discourse
   (`.message-body`, `.bbWrapper`, `.postbody`, `.cooked` and so on). When a page has at least two pictures in posts, only those are
   listed (`WebImage.InPost`); with one or none, the page's other pictures are listed too. It also lists the other pages of the thread
@@ -534,19 +536,18 @@ the tag suggester have been run only on hand-written pages and fake responses, s
   `PageScanner.IsHostLandingPage` now recognises each named host's landing pages (the host matched whole, so look-alike sites aren't taken
   for it) and they are opened and read; if one turns out to serve a picture instead of HTML it is still used. The unreachable
   `TryHostDirect` was removed. The addresses are as the commit's author described them and were tested against fake responses, not real pages.
-- Known problems found in review of f311a33 (not fixed; the first has a skipped test that says what should happen):
-  - **An `og:image` that is an image file is accepted without the 30 KB size check**, on any site, so a logo or small preview can be taken
-    as the full-size picture.
-  - **Pictures inside `<header>`, `<nav>`, `<aside>` or `<footer>` are dropped on every page, not just forums**: a news or blog article's
-    lead picture inside its `<header>` is no longer offered (the previous script offered it).
+- Fixed after review of f311a33 (second round): **an `og:image` that was an image file skipped the 30 KB size check**, so a logo or small
+  preview could be taken as the full-size picture; it is now checked like every other candidate, and a picture under a `thumbs/` or `th/`
+  folder is never taken as full size (Pixhost's `og:image` is its thumbnail). **The header, nav, aside and footer drop and the larger
+  minimum size applied on every page**, so an article's lead picture in its `<header>` was not offered; they now apply only on pages with a
+  forum message container. Both have tests (`PageScannerTests.cs`, `ForumGrabTests.cs`) and are untried on real pages.
+- Known problems found in review of f311a33 (not fixed):
   - **A thumbnail that failed to load and has alt text is dropped as an icon** (Chrome reports the size of its alt text). phpBB's
     pictures have `alt="Image"`, so a thread whose thumbnails can't load (a host that blocks hotlinking) gives no pictures. Older than the
     commit, but it bites forum pages.
   - Smaller: the first ImageTwist pattern's `id` before `src` branch captures nothing (the later patterns still find the picture);
     host rules match on a substring of the host name; `WebImage.FileName` keeps `%20` and similar, so tags from file names with encoded spaces
     don't match; the forum word list in `TagSuggester` removes city and month words everywhere ("June Carter Cash" becomes "Carter Cash").
-  - `grok/forum-web-download/` (untracked, byte-identical copies of the three committed files plus an `APPLY.md`) is **not excluded from
-    `Ocula.csproj`**, so with it in the repository folder the app fails to build (duplicate types). Move it out or delete it.
 - First things to check on a PC: a plain gallery page; a page whose thumbnails link to full-size images;
   a real forum thread on each of XenForo, phpBB and Discourse (post pictures only, names from the title, host landing pages
   resolve to the full picture and not to a web page); a page that needs sign-in (sign in in the pane, then grab); that tags land

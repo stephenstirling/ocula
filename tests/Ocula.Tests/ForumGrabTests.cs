@@ -166,19 +166,44 @@ public class ForumGrabTests
     }
 
     /// <summary>
-    /// CURRENT BEHAVIOUR, FOR REVIEW. The forum filter drops anything inside header, nav, aside or footer on EVERY page, not only
-    /// forums, so the lead picture of an article whose theme puts it in the article's header is no longer offered. The grabber
-    /// before the Forum Scraper commit offered it.
+    /// Fixed after the Forum Scraper commit (f311a33), which dropped anything inside header, nav, aside or footer on EVERY page, so the
+    /// lead picture of an article whose theme puts it in the article's header was no longer offered. The forum rules (header, nav,
+    /// aside and footer pictures dropped, larger minimum size, name-based avatar/logo filter) now apply only on a page that has a
+    /// forum message container, so an ordinary article behaves as it did before the Forum Scraper.
     /// </summary>
     [Fact]
-    public async Task On_an_ordinary_article_a_picture_inside_a_header_or_aside_is_not_offered()
+    public async Task On_an_ordinary_article_a_picture_inside_a_header_or_aside_is_still_offered()
     {
         var r = await GrabAsync("article-with-header-image.html", "/2026/lake");
 
         Assert.Equal(
-            new[] { "https://blog.test/img/lake-boat.jpg", "https://blog.test/img/lake-dock.jpg" },
+            new[]
+            {
+                "https://blog.test/img/lake-hero.jpg",     // inside <header>
+                "https://blog.test/img/lake-boat.jpg",
+                "https://blog.test/img/lake-dock.jpg",
+                "https://blog.test/img/related-1.jpg",     // inside <aside>
+            },
             Thumbs(r.Page));
-        Assert.DoesNotContain(Thumbs(r.Page), t => t.Contains("lake-hero"));   // inside <header>
-        Assert.DoesNotContain(Thumbs(r.Page), t => t.Contains("related-1"));   // inside <aside>
+    }
+
+    /// <summary>
+    /// A blog whose entries carry a "post" class is not a forum: only the forum message containers (.message-body, .bbWrapper,
+    /// .postbody, .cooked and so on) switch the forum rules on, so 100 px thumbnails, a header picture and a picture whose address
+    /// contains "icon" are all still offered.
+    /// </summary>
+    [Fact]
+    public async Task A_blog_that_uses_a_post_class_is_not_treated_as_a_forum()
+    {
+        var r = await GrabAsync("blog-with-post-class.html", "/trip/day-one");
+
+        var thumbs = Thumbs(r.Page);
+        Assert.Contains("https://blog.test/img/day1-hero.jpg", thumbs);      // inside <header>
+        Assert.Contains("https://blog.test/img/thumb/a.jpg", thumbs);        // 100 px, above the 80 px minimum
+        Assert.Contains("https://blog.test/img/thumb/b.jpg", thumbs);
+        Assert.Contains("https://blog.test/img/day1-extra.jpg", thumbs);
+        Assert.Contains("https://blog.test/img/site-icon-badge.png", thumbs); // "icon" in the name only matters on forums
+        Assert.Contains("https://blog.test/img/nav-picture.jpg", thumbs);    // inside <nav>
+        Assert.All(r.Page.Images, image => Assert.False(image.InPost));
     }
 }
