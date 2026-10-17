@@ -522,7 +522,7 @@ public static class PageScanner
         {
             var src = Attr(tag, "data-full") ?? Attr(tag, "data-original") ?? Attr(tag, "data-original-src") ??
                       Attr(tag, "data-large") ?? Attr(tag, "data-src") ?? Attr(tag, "data-lazy-src") ??
-                      Attr(tag, "src") ?? FirstSrcsetUrl(Attr(tag, "data-srcset") ?? Attr(tag, "srcset"));
+                      FirstSrcsetUrl(Attr(tag, "data-srcset") ?? Attr(tag, "srcset")) ?? Attr(tag, "src");
             _ = int.TryParse(Attr(tag, "width"), out var w);
             _ = int.TryParse(Attr(tag, "height"), out var h);
             var hint = ((Attr(tag, "id") ?? "") + " " + (Attr(tag, "class") ?? "")).ToLowerInvariant();
