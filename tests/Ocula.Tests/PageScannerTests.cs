@@ -113,6 +113,24 @@ public class PageScannerTests
             found);
     }
 
+    [Fact]
+    public void FindCandidates_prefers_explicit_original_urls_and_supports_lazy_srcsets()
+    {
+        var html = """
+            <html><body>
+              <img src="/thumb.jpg" data-original="/original.jpg" width="200" height="120">
+              <img data-lazy-srcset="/small.jpg 320w, /large.jpg 1280w" src="/fallback.jpg">
+              <img data-src="/lazy.jpg" src="data:image/gif;base64,AAAA">
+            </body></html>
+            """;
+
+        var found = PageScanner.FindCandidates(html, new Uri("https://x.test/thread/")).ToList();
+
+        Assert.Equal(
+            new[] { "https://x.test/original.jpg", "https://x.test/large.jpg", "https://x.test/lazy.jpg" },
+            found);
+    }
+
     // ---------- ResolveAsync ----------
 
     private static readonly Uri ForumPage = new("https://forum.test/threads/x.1/");

@@ -40,18 +40,37 @@ public static class PageScanner
   const isIgnored = el => isForum && !!el.closest(ignoreSel);
 
   const bestSrc = img => {
-    let u = img.currentSrc || img.getAttribute('src') || '';
-    const lazy = img.dataset.src || img.dataset.original || img.dataset.lazySrc || img.dataset.full || img.dataset.url || img.dataset.image || '';
-    if ((!u || u.startsWith('data:')) && lazy) u = lazy;
-    const ss = img.getAttribute('srcset') || img.dataset.srcset || '';
+    // Prefer explicit original/full-size attributes over currentSrc: browsers often select
+    // a thumbnail from srcset even when the page also exposes the original in a data-* field.
+    const preferred = img.dataset.full || img.dataset.original || img.dataset.originalSrc ||
+      img.dataset.large || img.dataset.zoomImage || img.dataset.image ||
+      img.dataset.url || img.dataset.lazySrc || img.dataset.src || '';
+    let u = preferred || img.currentSrc || img.getAttribute('src') || '';
+    if (!u || u.startsWith('data:')) {
+      u = img.dataset.original || img.dataset.originalSrc || img.dataset.full ||
+        img.dataset.large || img.dataset.lazySrc || img.dataset.src || img.getAttribute('src') || '';
+    }
+
+    // Only use srcset when no explicit original/full-size URL was supplied.
+    const ss = !preferred
+      ? (img.getAttribute('srcset') || img.dataset.srcset || img.dataset.lazySrcset || img.dataset.originalSrcset || '')
+      : '';
     if (ss) {
       let best = null, bw = -1;
       ss.split(',').forEach(p => {
-        const parts = p.trim().split(/\s+/);
-        const w = parseFloat(parts[1]) || 1;
-        if (parts[0] && w >= bw) { bw = w; best = parts[0]; }
+        const parts = p.trim().split(/\\s+/);
+        const descriptor = parts[1] || '';
+        const w = descriptor.endsWith('w') ? parseFloat(descriptor) : (descriptor.endsWith('x') ? parseFloat(descriptor) * 1000 : 1);
+        if (parts[0] && Number.isFinite(w) && w >= bw) { bw = w; best = parts[0]; }
       });
       if (best) u = best;
+    }
+
+    // Some forum themes put the useful URL on a <source> inside <picture>.
+    if (!preferred && (!u || u.startsWith('data:'))) {
+      const source = img.closest('picture')?.querySelector('source[srcset],source[data-srcset]');
+      const sourceSet = source?.getAttribute('srcset') || source?.getAttribute('data-srcset') || '';
+      if (sourceSet) u = sourceSet.split(',').map(p => p.trim().split(/\\s+/)[0]).filter(Boolean).pop() || u;
     }
     return abs(u);
   };
@@ -64,7 +83,13 @@ public static class PageScanner
     if (isIgnored(img)) continue;
     const src = bestSrc(img);
     if (!src || src.startsWith('data:') || seen.has(src)) continue;
-    const w = img.naturalWidth || img.width || 0, h = img.naturalHeight || img.height || 0;
+    // When a remote thumbnail fails to load, Chromium may report the width of its alt text
+    // instead of the HTML width attribute. Keep linked forum images discoverable in that case.
+    const failed = img.complete && img.naturalWidth === 0;
+    const attrWidth = parseInt(img.getAttribute('width') || '', 10) || 0;
+    const attrHeight = parseInt(img.getAttribute('height') || '', 10) || 0;
+    const w = failed ? attrWidth : (img.naturalWidth || attrWidth || img.width || 0);
+    const h = failed ? attrHeight : (img.naturalHeight || attrHeight || img.height || 0);
     const post = inPost(img);
     // On a forum page: small pictures inside a post are kept down to 60 px, others need 120 px (avatars, icons, chrome).
     // On any other page: 80 px, as before.
@@ -492,7 +517,9 @@ public static class PageScanner
         // Pictures in the page body: bigger declared size first; names that sound like the photo next.
         var tags = ImgTag.Matches(html).Select(m => m.Value).Select(tag =>
         {
-            var src = Attr(tag, "data-src") ?? Attr(tag, "data-original") ?? Attr(tag, "src");
+            var src = Attr(tag, "data-full") ?? Attr(tag, "data-original") ?? Attr(tag, "data-original-src") ??
+                      Attr(tag, "data-large") ?? Attr(tag, "data-src") ?? Attr(tag, "data-lazy-src") ??
+                      FirstSrcsetUrl(Attr(tag, "data-srcset") ?? Attr(tag, "srcset")) ?? Attr(tag, "src");
             _ = int.TryParse(Attr(tag, "width"), out var w);
             _ = int.TryParse(Attr(tag, "height"), out var h);
             var hint = ((Attr(tag, "id") ?? "") + " " + (Attr(tag, "class") ?? "")).ToLowerInvariant();
@@ -504,6 +531,14 @@ public static class PageScanner
         foreach (var t in tags) Add(t.src);
 
         return found;
+    }
+
+    private static string? FirstSrcsetUrl(string? srcset)
+    {
+        if (string.IsNullOrWhiteSpace(srcset)) return null;
+        return srcset.Split(',')
+            .Select(part => part.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault())
+            .LastOrDefault(url => !string.IsNullOrWhiteSpace(url));
     }
 
     private static HttpRequestMessage Request(Uri uri, Uri referer, string? cookies)
