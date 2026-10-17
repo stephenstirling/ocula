@@ -420,7 +420,7 @@ Test on copies of your photos first.
 | Item | Status |
 |---|---|
 | Photo windows with snap spots | Tested on one 3440x1440 monitor; second monitor, mixed scaling and other taskbar positions untested. Default is 6 spots (decided) |
-| Person card and lookup | Wikidata part built (`PersonLookup.cs`, `PeopleWindow`); 37 unit tests on hand-written JSON and a by-hand test against real Wikidata. The People window itself was not run (People is off on the test PC). DBpedia and MusicBrainz fill-ins not built |
+| Person card and lookup | Wikidata part built (`PersonLookup.cs`, `PeopleWindow`); 37 unit tests on hand-written JSON, a by-hand test against real Wikidata, and the window run once on a real library (October 2026): search, picker, card, saved row, rename removes the card. "Look up again", "Remove card", the no-match message and ticking tag chips were not tried. DBpedia and MusicBrainz fill-ins not built |
 | Search by person details | Not built |
 | Screenshot text search | Built and tested: FTS5 search, Ocula's text switch, "Remove saved text" button, untrusted-text handling, and Capta's own switch (on its own branch, `claude/capta-text-switch`, not yet merged). Checked with real Capta PNGs for Window captures only |
 | Camera firmware (detect only) | Research tool written (`tools/CameraProbe`), not yet run on a real camera; no UI. See `docs/CAMERA-FIRMWARE.md` |
@@ -467,8 +467,12 @@ _Still to come_
     as tag chips with none ticked. All Wikidata text is cleaned before use, because anyone can edit Wikidata.
     Real Wikidata needs `languagefallback=1`: many items (Shakira's among them) have their name only under the "mul" label, and a plain
     English request returned no name.
-  - Not done: the People window was never run with this (People is off on the test PC and turning it on downloads models and scans the
-    library), so the picker dialog, the card layout and the tag-chip dialog are only compile-checked. Also not built: search by person details,
+  - Checked in the real window (October 2026, People switched on, 280+ groups): a group named "Shakira" (with "Add the name as a tag" off)
+    gave a picker of five people with descriptions (the given name, album and crater were filtered out), "Use this person" saved the card
+    (full name, born February 2, 1977 in Barranquilla, Atlántico Department, Colombia, occupations, partners with years, 2 children, 5'2"
+    (157 cm), languages, credit line and link), the tag-chip dialog offered the birth name unticked, the `person_cards` row was written, no
+    tag reached any photo, and clearing the name removed the card. Not tried: "Look up again", "Remove card", the no-match and
+    offline messages, ticking a tag chip (that writes into photos), a person with a current spouse. Not built: search by person details,
     DBpedia and MusicBrainz fill-ins, the two notices they would need, and a contact address in the Wikimedia User-Agent (the same
     placeholder as camera photos, to replace before release).
   - Lookup order: Wikidata first. Any field it leaves empty (height and former partners most
@@ -591,7 +595,7 @@ the tag suggester have been run only on hand-written pages and fake responses, s
   (Ocula would contact sites the user chooses) and add a short "only download what you have the
   right to use" note in the dialog.
 
-**People** (checked on a PC in October 2026; see docs/PEOPLE-EVALUATION.md. The Wikidata person card is built but its window was not run)
+**People** (checked on a PC in October 2026; see docs/PEOPLE-EVALUATION.md. The Wikidata person card is built and was run once, see below)
 - Settings > People: switch on and Ocula downloads YuNet and SFace (about 39 MB) from Hugging Face,
   pinned to one revision each and rejected unless their size and SHA-256 match (`FaceModels.cs`).
 - Faces are found in the background (idle only), grouped when similarity is above 0.45, and
