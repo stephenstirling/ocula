@@ -32,10 +32,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Not part of the app: the C++ shell extension, the spare icon folder, design docs, tests and tools. -->
-    <Compile Remove="OculaShell\**;Ocula-Assets\**;docs\**;tests\**;tools\**" />
-    <None Remove="OculaShell\**;Ocula-Assets\**;docs\**;tests\**;tools\**" />
-    <Page Remove="OculaShell\**;Ocula-Assets\**;docs\**;tests\**;tools\**" />
+    <!-- Not part of the app: the C++ shell extension, the spare icon folder, design docs, tests, tools, and grok\ (code
+         delivered by another tool, kept for reference; copies of files that are already in Services\). -->
+    <Compile Remove="OculaShell\**;Ocula-Assets\**;docs\**;tests\**;tools\**;grok\**" />
+    <None Remove="OculaShell\**;Ocula-Assets\**;docs\**;tests\**;tools\**;grok\**" />
+    <Page Remove="OculaShell\**;Ocula-Assets\**;docs\**;tests\**;tools\**;grok\**" />
     <!-- The Windows App SDK packages everything under Assets\ by default; leave out sources and notes. -->
     <Content Remove="Assets\AppIcon*.svg;Assets\**\README.md" />
   </ItemGroup>
