@@ -148,21 +148,20 @@ public class ForumGrabTests
     }
 
     /// <summary>
-    /// CURRENT BEHAVIOUR, FOR REVIEW (not new in the Forum Scraper commit, but it matters for forums). The script reads a picture's
-    /// size from img.width when it has no natural size. In Chrome a picture that FAILED to load and has alt text reports the size of
-    /// its alt text (about 56 x 18), not its width and height attributes, so it is dropped as an icon. phpBB's BBCode pictures have
-    /// alt="Image", so a thread whose thumbnails fail to load (an image host that blocks hotlinking, or being offline) yields no
-    /// pictures, although the links around them lead to the full-size pictures. A failed picture with EMPTY alt text keeps its
-    /// attribute size, so XenForo's (alt="") survive.
+    /// Broken remote thumbnails must not hide the links to their full-size images. Chromium can report the width of alt text
+    /// instead of the HTML width attribute when an image fails to load; the grabber should use the declared dimensions.
     /// </summary>
     [Fact]
-    public async Task Thumbnails_that_failed_to_load_and_have_alt_text_are_dropped_as_if_they_were_icons()
+    public async Task Thumbnails_that_failed_to_load_still_keep_their_linked_images()
     {
         var phpbb = await GrabAsync("phpbb-thread.html", "/viewtopic.php?t=7", picturesFail: true);
-        Assert.Empty(phpbb.Page.Images);                                                    // alt="Image"
+        Assert.Equal(2, phpbb.Page.Images.Count);
+        Assert.All(phpbb.Page.Images, image => Assert.True(image.InPost));
+        Assert.Equal("https://imagetwist.com/aaa111/pc_1.jpg.html", phpbb.Page.Images[0].LinkUrl);
+        Assert.Equal("https://imagetwist.com/bbb222/pc_2.jpg.html", phpbb.Page.Images[1].LinkUrl);
 
         var xenforo = await GrabAsync("xenforo-thread.html", "/threads/katy-perry.5938936/", picturesFail: true);
-        Assert.Equal(2, xenforo.Page.Images.Count(i => i.ThumbUrl.Contains("pixhost.to"))); // alt=""
+        Assert.Equal(2, xenforo.Page.Images.Count(i => i.ThumbUrl.Contains("pixhost.to")));
     }
 
     /// <summary>
