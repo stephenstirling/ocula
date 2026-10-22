@@ -345,6 +345,30 @@ public sealed partial class PeopleWindow : Window
                 CardNote.Text = "Couldn't read that person from Wikidata. Try again in a moment.";
                 return;
             }
+            // Enrich height (CelebHeights) and bra size when online lookup is allowed.
+            try
+            {
+                var ch = new CelebHeightsLookup(WikidataClient);
+                var (chHeight, _) = await ch.LookupAsync(name);
+                if (chHeight != null)
+                    CelebHeightsLookup.ApplyHeight(facts, chHeight);
+            }
+            catch (Exception ex) when (ex is System.Net.Http.HttpRequestException or TaskCanceledException)
+            {
+                DiagnosticLog.Write("CelebHeights lookup failed: " + ex.GetType().Name);
+            }
+
+            try
+            {
+                var bra = new BraSizeLookup(WikidataClient);
+                var braResult = await bra.LookupAsync(name);
+                if (braResult != null)
+                    BraSizeLookup.Apply(facts, braResult);
+            }
+            catch (Exception ex) when (ex is System.Net.Http.HttpRequestException or TaskCanceledException)
+            {
+                DiagnosticLog.Write("Bra size lookup failed: " + ex.GetType().Name);
+            }
 
             await _main.Library.SavePersonCardAsync(person.Id, facts);
             _ = _main.RefreshPersonHeaderAsync(person.Id);

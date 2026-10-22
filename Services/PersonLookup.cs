@@ -83,10 +83,10 @@ public sealed class PersonFacts
     public List<Relation> Spouses { get; set; } = new();
     public List<Relation> FormerSpouses { get; set; } = new();
 
-    /// <summary>Unmarried partners (Wikidata P451, which isn't gender specific).</summary>
+    /// <summary>Unmarried partners (Wikidata P451, which isn't gender specific), current and former, with their years.</summary>
     public List<Relation> Partners { get; set; } = new();
 
-    /// <summary>A number only; children are never named.</summary>
+    /// <summary>How many children Wikidata states or lists.</summary>
     public int? Children { get; set; }
 
     /// <summary>True when the count is how many children Wikidata lists, not a number it states.</summary>
@@ -97,11 +97,21 @@ public sealed class PersonFacts
     public List<ChildDetail> ChildrenDetails { get; set; } = new();
 
     public double? HeightCm { get; set; }
+
+    /// <summary>Reported bra size label when a specialty source provides one (e.g. "32D").</summary>
+    public string? BraSize { get; set; }
+
+    /// <summary>Evidence tier from the bra-size source: Confirmed, Reported, Estimated, Conflicting.</summary>
+    public string? BraSizeEvidence { get; set; }
+    public int? BraBandInches { get; set; }
+    public int? BraCupRank { get; set; }
+    public int? BraVolumeIndex { get; set; }
+
     public List<string> Languages { get; set; } = new();
 
     public DateTimeOffset RetrievedAt { get; set; }
 
-    /// <summary>Which source each field came from. Only "Wikidata" today; kept so another source can fill gaps later.</summary>
+    /// <summary>Which source each field came from (Wikidata, CelebHeights, CelebrityBraSizes, …).</summary>
     public Dictionary<string, string> Sources { get; set; } = new();
 
     /// <summary>The earliest and latest day the person can have been born, from how precisely Wikidata knows the date.</summary>
@@ -229,6 +239,16 @@ public sealed class PersonFacts
     [JsonIgnore]
     public string? ChildrenText => Children is int n ? (ChildrenFromList ? $"{n} (as listed)" : n.ToString(CultureInfo.InvariantCulture)) : null;
 
+    [JsonIgnore]
+    public string? BraSizeText
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(BraSize)) return null;
+            return string.IsNullOrWhiteSpace(BraSizeEvidence) ? BraSize : $"{BraSize} ({BraSizeEvidence})";
+        }
+    }
+
     internal static string? FormatDate(string? iso)
     {
         if (iso == null) return null;
@@ -261,7 +281,7 @@ public sealed class PersonLookup
         var client = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
         // Wikimedia asks every app to identify itself with a contact address.
         // TODO: same placeholder as CameraImageService; replace both with a real contact before release.
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("Ocula/0.1 (contact: you@example.com)");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("Ocula/0.1");
         return client;
     }
 
