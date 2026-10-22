@@ -94,6 +94,90 @@ public sealed class PersonSources
         }
     }
 
+    // ---------- Wikipedia (the height in the article's infobox) ----------
+
+    /// <summary>
+    /// The height in the infobox of the person's English Wikipedia article (Wikipedia text is CC BY-SA). Only the article's introduction
+    /// section is read, where the infobox is. Many articles have no height (most actors and singers); athletes usually do.
+    /// </summary>
+    public async Task<double?> GetWikipediaHeightAsync(string wikipediaTitle, CancellationToken cancel = default)
+    {
+        if (string.IsNullOrWhiteSpace(wikipediaTitle) || wikipediaTitle.Length > 250) return null;
+        var url = "https://en.wikipedia.org/w/api.php?action=query&prop=revisions&rvprop=content&rvslots=main&rvsection=0&redirects=1" +
+                  "&format=json&formatversion=2&titles=" + Uri.EscapeDataString(wikipediaTitle);
+        try
+        {
+            using var doc = JsonDocument.Parse(await _http.GetStringAsync(url, cancel));
+            var text = doc.RootElement.GetProperty("query").GetProperty("pages")[0].GetProperty("revisions")[0]
+                .GetProperty("slots").GetProperty("main").GetProperty("content").GetString();
+            return text == null ? null : ParseInfoboxHeightCm(text);
+        }
+        catch (Exception e) when (e is JsonException or KeyNotFoundException or InvalidOperationException or IndexOutOfRangeException)
+        {
+            return null;   // no such page, or an answer of another shape
+        }
+    }
+
+    private static readonly Regex HeightField = new(@"(?im)^\s*\|\s*height\s*=\s*(?<v>.*)$", RegexOptions.Compiled);
+    private static readonly Regex HeightTemplate = new(@"\{\{\s*height\s*\|(?<args>[^{}]*)\}\}", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex ConvertTemplate = new(
+        @"\{\{\s*(?:convert|cvt)\s*\|\s*(?<n>\d+(?:\.\d+)?)\s*\|\s*(?<unit>cm|m|ft|in)\b(?:\s*\|\s*(?<n2>\d+(?:\.\d+)?)\s*\|\s*(?<unit2>in)\b)?",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex PlainMetric = new(@"(?<n>\d+(?:[.,]\d+)?)\s*(?<unit>cm|m)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex PlainImperial = new(@"(?<ft>\d)\s*(?:ft|feet|foot|')\s*(?:(?<in>\d{1,2}(?:\.\d+)?)\s*(?:in|inches|"")?)?", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// The height in centimetres from the "height" line of an infobox: {{height|m=1.88}}, {{height|cm=188}}, {{height|ft=6|in=2}},
+    /// {{convert|1.88|m|ftin}}, {{convert|6|ft|2|in}}, or plain text such as "1.88 m" or "6 ft 2 in". Null if there is none, or it is
+    /// not a believable height (50 to 260 cm).
+    /// </summary>
+    internal static double? ParseInfoboxHeightCm(string wikitext)
+    {
+        var line = HeightField.Match(wikitext);
+        if (!line.Success) return null;
+        var value = line.Groups["v"].Value;
+        double? cm = null;
+
+        if (HeightTemplate.Match(value) is { Success: true } template)
+        {
+            var args = template.Groups["args"].Value.Split('|')
+                .Select(a => a.Split('=', 2)).Where(a => a.Length == 2)
+                .ToDictionary(a => a[0].Trim().ToLowerInvariant(), a => a[1].Trim());
+            double Num(string key) => args.TryGetValue(key, out var s) && double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var d) ? d : 0;
+            if (args.ContainsKey("cm")) cm = Num("cm");
+            else if (args.ContainsKey("m")) cm = Num("m") * 100;
+            else if (args.ContainsKey("ft")) cm = (Num("ft") * 12 + Num("in")) * 2.54;
+        }
+        else if (ConvertTemplate.Match(value) is { Success: true } convert)
+        {
+            var n = double.Parse(convert.Groups["n"].Value, CultureInfo.InvariantCulture);
+            cm = convert.Groups["unit"].Value.ToLowerInvariant() switch
+            {
+                "cm" => n,
+                "m" => n * 100,
+                "ft" => (n * 12 + (convert.Groups["n2"].Success ? double.Parse(convert.Groups["n2"].Value, CultureInfo.InvariantCulture) : 0)) * 2.54,
+                "in" => n * 2.54,
+                _ => null
+            };
+        }
+        else
+        {
+            // Plain text, with any <ref> or template removed first so a number in a citation is never read.
+            var plain = Regex.Replace(value, @"<ref[^>]*?/>|<ref.*?(</ref>|$)|\{\{.*?\}\}", " ", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (PlainMetric.Match(plain) is { Success: true } metric)
+            {
+                var n = double.Parse(metric.Groups["n"].Value.Replace(',', '.'), CultureInfo.InvariantCulture);
+                cm = metric.Groups["unit"].Value.Equals("cm", StringComparison.OrdinalIgnoreCase) ? n : n * 100;
+            }
+            else if (PlainImperial.Match(plain) is { Success: true } imperial)
+            {
+                var inches = imperial.Groups["in"].Success ? double.Parse(imperial.Groups["in"].Value, CultureInfo.InvariantCulture) : 0;
+                cm = (double.Parse(imperial.Groups["ft"].Value, CultureInfo.InvariantCulture) * 12 + inches) * 2.54;
+            }
+        }
+        return cm is >= 50 and <= 260 ? Math.Round(cm.Value, 1) : null;
+    }
+
     // ---------- MusicBrainz ----------
 
     public async Task<MusicBrainzFacts?> GetMusicBrainzAsync(string musicBrainzId, CancellationToken cancel = default)
@@ -133,6 +217,11 @@ public sealed class PersonSources
         card.HeightCm == null || card.BirthDate == null || card.BirthPlace == null ||
         (card.DeathDate != null && (card.DeathPlace == null || card.DeathCause == null));
 
+    /// <summary>Wikipedia is asked only for a height, and only if the card has none.</summary>
+
+    /// <summary>Wikipedia is asked only for a height, and only if the card has none.</summary>
+    public static bool WorthAskingWikipedia(PersonFacts card) => card.HeightCm == null;
+
     /// <summary>MusicBrainz is asked only if the card is missing something it can give.</summary>
     public static bool WorthAskingMusicBrainz(PersonFacts card) =>
         card.BirthDate == null || card.BirthPlace == null || (card.DeathDate != null && card.DeathPlace == null);
@@ -162,9 +251,10 @@ public sealed class PersonSources
     /// Wikidata has is changed, and a fact that doesn't check out (a height of 0, a date that isn't one) is dropped, not guessed at.
     /// DBpedia is asked first, then MusicBrainz, so a fact both have is credited to DBpedia.
     /// </summary>
-    public static void Merge(PersonFacts card, DbpediaFacts? dbpedia, MusicBrainzFacts? musicBrainz)
+    public static void Merge(PersonFacts card, DbpediaFacts? dbpedia, MusicBrainzFacts? musicBrainz, double? wikipediaHeightCm = null)
     {
         if (dbpedia != null) Fill(card, "DBpedia", dbpedia.HeightCm, dbpedia.BirthDate, dbpedia.BirthPlace, dbpedia.DeathDate, dbpedia.DeathPlace, dbpedia.DeathCause);
+        if (wikipediaHeightCm != null) Fill(card, "Wikipedia", wikipediaHeightCm, null, null, null, null, null);
         if (musicBrainz != null) Fill(card, "MusicBrainz", null, musicBrainz.BirthDate, musicBrainz.BirthPlace, musicBrainz.DeathDate, musicBrainz.DeathPlace, null);
     }
 

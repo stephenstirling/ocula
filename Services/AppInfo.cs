@@ -75,6 +75,7 @@ public static class AppInfo
         new ThirdPartyNotice("OpenFreeMap, OpenMapTiles and OpenStreetMap", "Map data © OpenStreetMap contributors (ODbL)", "https://openfreemap.org", "Map tiles (credited on the map)"),
         new ThirdPartyNotice("Wikidata and Wikimedia Commons", "CC0 data; photos under their own free licences", "https://commons.wikimedia.org", "Camera photos (credited per photo) and person details (on request)"),
         new ThirdPartyNotice("DBpedia", "CC BY-SA 3.0 (derived from Wikipedia)", "https://www.dbpedia.org", "Gaps in a person's card, only when you look someone up (credited on the card)"),
+        new ThirdPartyNotice("Wikipedia", "CC BY-SA 4.0", "https://en.wikipedia.org", "A height from an article's infobox, only when you look someone up (credited on the card)"),
         new ThirdPartyNotice("MusicBrainz", "CC0", "https://musicbrainz.org", "Gaps in a musician's card, only when you look someone up (credited on the card)"),
     };
 }

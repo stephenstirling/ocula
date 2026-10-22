@@ -14,6 +14,13 @@ namespace Ocula.Services;
 /// <summary>One match in the "Look up on Wikidata" picker.</summary>
 public sealed record WikidataCandidate(string Id, string Name, string? Description);
 
+/// <summary>A child as Wikidata lists them: the name, and the birth date when the child's own item has one. Shown on the card only.</summary>
+public sealed record ChildDetail(string Name, string? Id, string? BirthDate)
+{
+    [JsonIgnore]
+    public string Display => PersonFacts.FormatDate(BirthDate) is { } born ? $"{Name} (born {born})" : Name;
+}
+
 /// <summary>A spouse or partner as Wikidata lists them, with the years when it has them.</summary>
 public sealed record Relation(string Name, string? Id, int? FromYear, int? ToYear)
 {
@@ -85,6 +92,10 @@ public sealed class PersonFacts
     /// <summary>True when the count is how many children Wikidata lists, not a number it states.</summary>
     public bool ChildrenFromList { get; set; }
 
+    /// <summary>The children Wikidata names (at most 12), with birth dates where it has them. Only on the card on this PC: it is never shared
+    /// (not in the Porta file), and a search only knows the count.</summary>
+    public List<ChildDetail> ChildrenDetails { get; set; } = new();
+
     public double? HeightCm { get; set; }
     public List<string> Languages { get; set; } = new();
 
@@ -139,7 +150,16 @@ public sealed class PersonFacts
         Add(Spouses.Count > 1 ? "Spouses" : "Spouse", string.Join(", ", Spouses.Select(s => s.Display)));
         Add("Former spouses", string.Join(", ", FormerSpouses.Select(s => s.Display)));
         Add("Partners", string.Join(", ", Partners.Select(s => s.Display)));
-        Add("Children", ChildrenText);
+        if (ChildrenDetails.Count > 0)
+        {
+            var total = Math.Max(Children ?? 0, ChildrenDetails.Count);
+            var more = total > ChildrenDetails.Count ? $" and {total - ChildrenDetails.Count} more" : string.Empty;
+            Add("Children", $"{total}: {string.Join(", ", ChildrenDetails.Select(c => c.Display))}{more}");
+        }
+        else
+        {
+            Add("Children", ChildrenText);
+        }
         Add("Languages", string.Join(", ", Languages));
         return rows;
     }
@@ -160,6 +180,7 @@ public sealed class PersonFacts
         {
             "wikidata" => "Wikidata (CC0)",
             "dbpedia" => "DBpedia (CC BY-SA)",
+            "wikipedia" => "Wikipedia (CC BY-SA)",
             "musicbrainz" => "MusicBrainz (CC0)",
             _ => source
         };
@@ -208,7 +229,7 @@ public sealed class PersonFacts
     [JsonIgnore]
     public string? ChildrenText => Children is int n ? (ChildrenFromList ? $"{n} (as listed)" : n.ToString(CultureInfo.InvariantCulture)) : null;
 
-    private static string? FormatDate(string? iso)
+    internal static string? FormatDate(string? iso)
     {
         if (iso == null) return null;
         var parts = iso.Split('-', StringSplitOptions.RemoveEmptyEntries);
@@ -313,9 +334,35 @@ public sealed class PersonLookup
 
         var wanted = ReferencedItems(entity).Concat(chainIds).Distinct().ToList();
         var labels = await LabelsAsync(wanted, cancel);
-        var facts = Build(entity, labels, chainIds, now);
+        var childBirths = await ChildBirthsAsync(ItemValues(entity, "P40", ranked: true).Distinct().Take(MaxChildren), cancel);
+        var facts = Build(entity, labels, chainIds, now, childBirths);
         await AddSecondSourcesAsync(facts, cancel);
         return facts;
+    }
+
+    private const int MaxChildren = 12;
+
+    /// <summary>The birth date of each child's own Wikidata item, where it has one (a small request each; any failure just means no date).</summary>
+    private async Task<Dictionary<string, string>> ChildBirthsAsync(IEnumerable<string> childIds, CancellationToken cancel)
+    {
+        var births = new Dictionary<string, string>();
+        var ids = childIds.ToList();
+        var answers = await Task.WhenAll(ids.Select(async id =>
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(await _http.GetStringAsync(
+                    $"{Api}?action=wbgetclaims&format=json&property=P569&entity={id}", cancel));
+                return BestTime(doc.RootElement, "P569")?.Text;
+            }
+            catch (Exception e) when (e is HttpRequestException or JsonException)
+            {
+                return null;
+            }
+        }));
+        for (var i = 0; i < ids.Count; i++)
+            if (answers[i] != null) births[ids[i]] = answers[i]!;
+        return births;
     }
 
     /// <summary>
@@ -326,14 +373,14 @@ public sealed class PersonLookup
     {
         var sources = new PersonSources(_http);
 
-        async Task<T?> Ask<T>(string name, Func<Task<T?>> call) where T : class
+        async Task<T> Ask<T>(string name, Func<Task<T>> call)
         {
             try { return await call(); }
             catch (Exception e) when (!cancel.IsCancellationRequested &&
                                       e is HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException)
             {
                 DiagnosticLog.Write($"{name} didn't answer for a person card, so it was left out ({e.GetType().Name})");
-                return null;
+                return default!;
             }
         }
 
@@ -341,7 +388,9 @@ public sealed class PersonLookup
             ? Ask("DBpedia", () => sources.GetDbpediaAsync(facts.WikipediaTitle, cancel)) : Task.FromResult<DbpediaFacts?>(null);
         var musicBrainz = facts.MusicBrainzId != null && PersonSources.WorthAskingMusicBrainz(facts)
             ? Ask("MusicBrainz", () => sources.GetMusicBrainzAsync(facts.MusicBrainzId, cancel)) : Task.FromResult<MusicBrainzFacts?>(null);
-        PersonSources.Merge(facts, await dbpedia, await musicBrainz);
+        var wikipedia = facts.WikipediaTitle != null && PersonSources.WorthAskingWikipedia(facts)
+            ? Ask("Wikipedia", async () => (double?)await sources.GetWikipediaHeightAsync(facts.WikipediaTitle, cancel)) : Task.FromResult<double?>(null);
+        PersonSources.Merge(facts, await dbpedia, await musicBrainz, await wikipedia);
     }
 
     private async Task<string?> FirstClaimItemAsync(string entityId, string property, CancellationToken cancel)
@@ -382,7 +431,7 @@ public sealed class PersonLookup
     /// <summary>The items whose names are needed to write the card: occupations, spouses, partners, languages.</summary>
     public static IEnumerable<string> ReferencedItems(JsonElement entity)
     {
-        foreach (var property in new[] { "P106", "P26", "P451", "P1412", "P20", "P509" })
+        foreach (var property in new[] { "P106", "P26", "P451", "P1412", "P20", "P509", "P40" })
             foreach (var id in ItemValues(entity, property, ranked: true))
                 yield return id;
     }
@@ -393,7 +442,8 @@ public sealed class PersonLookup
     /// Anything Wikidata doesn't list stays empty.
     /// </summary>
     public static PersonFacts Build(JsonElement entity, IReadOnlyDictionary<string, string> labels,
-                                    IReadOnlyList<string> placeChain, DateTimeOffset now)
+                                    IReadOnlyList<string> placeChain, DateTimeOffset now,
+                                    IReadOnlyDictionary<string, string>? childBirths = null)
     {
         string Label(string id) => labels.TryGetValue(id, out var l) ? l : string.Empty;
 
@@ -517,7 +567,7 @@ public sealed class PersonLookup
         facts.Partners = facts.Partners.DistinctBy(r => (r.Id, r.FromYear)).OrderBy(r => r.FromYear ?? int.MaxValue).ToList();
         if (facts.Partners.Count > 0) facts.Sources["partners"] = "Wikidata";
 
-        // Children: the number Wikidata states (P1971); failing that, how many it lists (P40). Never named.
+        // Children: the number Wikidata states (P1971); failing that, how many it lists (P40). Their names are added below.
         if (BestQuantity(entity, "P1971") is { } stated && stated >= 0 && stated <= 60 && stated == Math.Floor(stated))
         {
             facts.Children = (int)stated;
@@ -533,6 +583,17 @@ public sealed class PersonLookup
                 facts.Sources["children"] = "Wikidata";
             }
         }
+
+        // The children Wikidata names, with the birth date of each child's own item when it has one.
+        foreach (var childId in ItemValues(entity, "P40", ranked: true).Distinct().Take(MaxChildren))
+        {
+            var name = Label(childId);
+            if (name.Length == 0) continue;
+            string? childBorn = null;
+            childBirths?.TryGetValue(childId, out childBorn);
+            facts.ChildrenDetails.Add(new ChildDetail(name, childId, childBorn));
+        }
+        if (facts.ChildrenDetails.Count > 0) facts.Sources["childrenDetails"] = "Wikidata";
 
         // Height, always in centimetres. A unit that isn't recognised is left out rather than guessed.
         foreach (var statement in OrderedClaims(entity, "P2048"))

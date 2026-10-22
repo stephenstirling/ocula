@@ -108,7 +108,7 @@
                 </toolkit:SettingsCard>
 
                 <toolkit:SettingsCard Header="Look up people online"
-                                      Description="Adds a &quot;Look up on Wikidata&quot; button to People. When you press it, the name you gave a group is sent to Wikidata. If the card is then missing something, the person's Wikipedia page title or MusicBrainz id (both given by Wikidata) is sent to DBpedia or MusicBrainz to fill it. The facts are saved in Ocula on this PC. Nothing is sent otherwise, and photos and faces are never sent.">
+                                      Description="Adds a &quot;Look up on Wikidata&quot; button to People. When you press it, the name you gave a group is sent to Wikidata. If the card is then missing something, the person's Wikipedia page title or MusicBrainz id (both given by Wikidata) is sent to DBpedia, Wikipedia or MusicBrainz to fill it. The facts are saved in Ocula on this PC. Nothing is sent otherwise, and photos and faces are never sent.">
                     <toolkit:SettingsCard.HeaderIcon><FontIcon Glyph="&#xE77B;"/></toolkit:SettingsCard.HeaderIcon>
                     <ToggleSwitch x:Name="PersonLookupToggle" Toggled="PersonLookupToggle_Toggled"/>
                 </toolkit:SettingsCard>

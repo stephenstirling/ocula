@@ -43,9 +43,10 @@ Wikimedia Foundation under its own privacy policy: https://foundation.wikimedia.
 **Person details (optional).** In People, when you press "Look up on Wikidata" for a group you have named, Ocula sends
 that name to Wikidata, then asks Wikidata for the facts about the person you pick (birth date and place, death date, place and cause,
 occupation, spouse, number of children, height, languages). If the card is then missing something, Ocula asks DBpedia
-(https://dbpedia.org) or MusicBrainz (https://musicbrainz.org) to fill it, using only an address Wikidata gave for that person (their English
-Wikipedia page title, or their MusicBrainz id), never the name you typed. Those sites see your IP address and that address. DBpedia's answers are
-credited on the card (its data is CC BY-SA). Nothing is sent until you press the button, and no photos, faces or
+(https://dbpedia.org), Wikipedia (https://en.wikipedia.org, for a height in the article's infobox) or MusicBrainz (https://musicbrainz.org) to fill it,
+using only an address Wikidata gave for that person (their English Wikipedia page title, or their MusicBrainz id), never the name you typed. Those
+sites see your IP address and that address. Their answers are credited on the card (DBpedia and Wikipedia text are CC BY-SA). If Wikidata names a
+person's children, their names and birth dates are shown on that person's card, on your PC only; they are never shared with Porta. Nothing is sent until you press the button, and no photos, faces or
 file names are ever sent. The facts are kept on your PC only and you can remove each card. Wikidata is run by the
 Wikimedia Foundation under its own privacy policy (linked above). Turn it off in **Settings > Privacy > Look up people
 online**.

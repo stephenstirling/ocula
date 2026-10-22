@@ -472,8 +472,18 @@ _Still to come_
     death and Cause of death (only for someone Wikidata gives a death date; the last two are new, read from Wikidata P20 and P509, so an older card
     needs "Look up again" to get them), Occupation, Height, Spouse(s), Former spouses, Partners, Children (a count), Languages. The credit line
     (`PersonFacts.CreditText`) names every source in the card's `Sources` (today only "Wikidata (CC0)") and keeps the "can be out of date" caveat; a
-    height is followed by its source only when the card has more than one source. **Not built, and not added:** a heights site, named children with birth dates (the design here is a count only, never by name), and body-measurement fields
-    (CLAUDE.md: not wanted). A brief that described those as "already on PersonFacts" was wrong: they are not in this code.
+    height is followed by its source only when the card has more than one source. **Added after that** (see "Height and named children" below).
+    **Not built, on purpose:** body-measurement fields (bra or cup size and the like). They are intimate facts about named real people, the sites that
+    list them are guesswork, and they are not something this app should collect; a brief that listed them as "already on PersonFacts" was wrong, they were never
+    in this code. Also not built: a celebrity-heights site (no site whose terms allow this has been chosen).
+  - **Height and named children (October 2026).** *Height:* if no source has one, the English Wikipedia article's infobox is read (the introduction section
+    only, one request, `PersonSources.GetWikipediaHeightAsync`): `{{height|cm=188}}`, `{{height|ft=5|in=2}}`, `{{convert|1.88|m|ftin}}`, or plain "1.88 m",
+    "6 ft 2 in"; a number inside a citation or another template is never read; credited "Wikipedia (CC BY-SA)". Most actors and singers have no infobox
+    height (Hilary Duff, Taylor Swift and Jennifer Aniston don't); athletes usually do (Maria Sharapova: 188 cm, which Wikidata also has). *Children:*
+    the children Wikidata names (at most 12; only a child with an item of their own is named, which in practice means notable people: Hilary Duff has a
+    count of 4 and no names, Will Smith has 3 names with birth dates) are shown on the card as "N: Name (born date), ...", with "and X more" when the count is
+    higher. They are shown **on the card on this PC only**: never in the Porta file (a test puts child names in a card and checks they cannot reach it), and a
+    search still knows only the count (`has children`). The earlier design here said "a count only, never by name"; this changes it at your request.
   - **Card over a person's photos (October 2026).** When the main grid shows one person's photos (People > "Show these photos", an `ocula:person`
     link, or a name in "Who matched"), a card sits above the photos: their face, the Wikidata description, the same rows as the People window
     (`PersonFacts.Rows()`), the credit line, "Open in People" and "Open on Wikidata". A group with no saved card shows "No person card for X yet" and a
@@ -519,7 +529,7 @@ _Still to come_
     searches saved cards, runs on this PC, and says what it left out ("1 person has no height on
     record, 4 named groups haven't been looked up"). It never guesses for people with no card.
     The cards would be stored as fields (height in cm, birth date, place, occupation, spouse
-    status, child count), not just text, so these are plain database filters rather than AI. Children appear as a count only, never by name.
+    status, child count), not just text, so these are plain database filters rather than AI. Children appear as a count in a search; the card also names the ones Wikidata names (see "Height and named children").
   - How person search works (October 2026). Name: a plain word in the search box also matches photos of a visible named group whose
     name, or whose card's full name, contains it (so "Hilary Duff" finds her photos without a tag; each word is matched on its own, so
     two people named "Hilary" and "Duff" would both match). Details: `PersonQuery.Parse` reads these out of the typed text, in any

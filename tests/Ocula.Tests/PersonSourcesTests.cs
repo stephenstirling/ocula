@@ -385,4 +385,116 @@ public class PersonSourcesTests
         Assert.DoesNotContain("WikipediaTitle", card.ToJson());
         Assert.DoesNotContain("MusicBrainz", card.ToJson().Replace("\"Sources\"", ""));
     }
+
+    // ---------- Wikipedia: the infobox height ----------
+
+    [Theory]
+    [InlineData("| height = {{height|cm=188}}<ref name=\"w\">{{cite web|title=2004|url=http://x}}</ref>", 188.0)]
+    [InlineData("| height = {{height|m=1.57}}", 157.0)]
+    [InlineData("| height = {{height|ft=5|in=2}}", 157.5)]
+    [InlineData("| height = {{Height|ft=6}}", 182.9)]
+    [InlineData("| height = {{convert|1.88|m|ftin}}", 188.0)]
+    [InlineData("| height = {{convert|6|ft|2|in|cm}}", 188.0)]
+    [InlineData("| height = {{cvt|188|cm}}", 188.0)]
+    [InlineData("| height = 1.88 m (6 ft 2 in)", 188.0)]
+    [InlineData("| height = 188 cm", 188.0)]
+    [InlineData("| height = 6 ft 2 in", 188.0)]
+    [InlineData("|height=5'3\"", 160.0)]
+    [InlineData("  |  height  =  {{height|m=1,57}}", null)]                // a comma is not a decimal point in a template
+    [InlineData("| height = {{height|m=3}}", null)]                           // 3 m is not a person
+    [InlineData("| height = {{height|cm=30}}", null)]
+    [InlineData("| height =", null)]
+    [InlineData("| height = <ref>Measured in 2004</ref>", null)]            // a number in a citation is never read
+    [InlineData("| height = {{cite web|title=Height 1.88 m}}", null)]         // nor one in another template
+    [InlineData("| weight = 60 kg", null)]
+    [InlineData("no infobox at all", null)]
+    public void The_infobox_height_is_read_in_the_ways_wikipedia_writes_it(string wikitext, double? expected)
+    {
+        var infobox = "{{Infobox person\n| name = X\n" + wikitext + "\n| birth_date = 1990\n}}";
+
+        var cm = PersonSources.ParseInfoboxHeightCm(infobox);
+
+        Assert.Equal(expected, cm == null ? null : Math.Round(cm.Value, 1));
+    }
+
+    [Fact]
+    public async Task Wikipedia_is_asked_for_the_introduction_of_the_article_only()
+    {
+        var fake = new Fake
+        {
+            Answer = _ => """{"query":{"pages":[{"title":"Maria Sharapova","revisions":[{"slots":{"main":{"content":"{{Infobox tennis biography\n| height = {{height|cm=188}}\n}}"}}}]}]}}"""
+        };
+        var sources = new PersonSources(new HttpClient(fake));
+
+        var height = await sources.GetWikipediaHeightAsync("Maria Sharapova");
+
+        Assert.Equal(188.0, height);
+        var url = Assert.Single(fake.Requests);
+        Assert.StartsWith("https://en.wikipedia.org/w/api.php?", url);
+        Assert.Contains("rvsection=0", url);
+        Assert.Contains("titles=Maria%20Sharapova", url);
+    }
+
+    [Theory]
+    [InlineData("""{"query":{"pages":[{"title":"X","missing":true}]}}""")]
+    [InlineData("""{"query":{}}""")]
+    [InlineData("not json")]
+    public async Task A_missing_page_or_an_odd_answer_from_wikipedia_gives_no_height(string answer)
+    {
+        var sources = new PersonSources(new HttpClient(new Fake { Answer = _ => answer }));
+
+        Assert.Null(await sources.GetWikipediaHeightAsync("X"));
+    }
+
+    [Fact]
+    public void A_wikipedia_height_fills_a_blank_after_dbpedia_and_is_credited_to_wikipedia()
+    {
+        var card = Wikidata();
+
+        PersonSources.Merge(card, new DbpediaFacts(null, null, null, null, null, null), null, 188);
+
+        Assert.Equal(188, card.HeightCm);
+        Assert.Equal("Wikipedia", card.Sources["height"]);
+        Assert.Contains("Wikipedia (CC BY-SA)", card.CreditText);
+        Assert.Contains(card.Rows(), r => r.Label == "Height" && r.Value.EndsWith("\u00B7 Wikipedia"));
+
+        var both = Wikidata();
+        PersonSources.Merge(both, new DbpediaFacts(175, null, null, null, null, null), null, 188);
+        Assert.Equal("DBpedia", both.Sources["height"]);            // the first to answer wins
+
+        var has = Wikidata(c => { c.HeightCm = 160; c.Sources["height"] = "Wikidata"; });
+        PersonSources.Merge(has, null, null, 188);
+        Assert.Equal(160, has.HeightCm);                           // Wikidata is never overridden
+    }
+
+    [Fact]
+    public async Task A_whole_lookup_takes_a_height_from_the_wikipedia_infobox_when_nobody_else_has_one()
+    {
+        var entity = EntityJson("", "{\"enwiki\":{\"site\":\"enwiki\",\"title\":\"Sam Example\"}}");
+        var fake = new Fake
+        {
+            Answer = r => Answer(r, entity, url =>
+                url.StartsWith("https://en.wikipedia.org/") ? """{"query":{"pages":[{"revisions":[{"slots":{"main":{"content":"| height = {{height|cm=181}}"}}}]}]}}"""
+                : url.StartsWith("https://dbpedia.org/") ? """{"results":{"bindings":[]}}"""
+                : null)
+        };
+
+        var card = await new PersonLookup(new HttpClient(fake)).GetFactsAsync("Q42", Now);
+
+        Assert.Equal(181, card.HeightCm);
+        Assert.Equal("Wikipedia", card.Sources["height"]);
+        Assert.Equal(new[] { "Wikidata", "Wikipedia" }, card.SourceNames);
+    }
+
+    [Fact]
+    public async Task Wikipedia_is_not_asked_when_the_card_already_has_a_height()
+    {
+        var claims = "\"P2048\":[{\"mainsnak\":{\"snaktype\":\"value\",\"datavalue\":{\"value\":{\"amount\":\"+1.7\",\"unit\":\"http://www.wikidata.org/entity/Q11573\"}}},\"rank\":\"normal\"}]";
+        var entity = EntityJson(claims, "{\"enwiki\":{\"site\":\"enwiki\",\"title\":\"Sam Example\"}}");
+        var fake = new Fake { Answer = r => Answer(r, entity, url => url.StartsWith("https://en.wikipedia.org/") ? throw new InvalidOperationException("must not be asked") : """{"results":{"bindings":[]}}""") };
+
+        await new PersonLookup(new HttpClient(fake)).GetFactsAsync("Q42", Now);
+
+        Assert.DoesNotContain(fake.Requests, r => r.StartsWith("https://en.wikipedia.org/"));
+    }
 }

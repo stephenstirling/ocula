@@ -41,6 +41,8 @@ public class PeopleExportTests : IDisposable
             FormerSpouses = { new Relation("Former Person", "Q2", 2000, 2005) },
             Partners = { new Relation("Partner Person", "Q3", 2011, 2022) },
             DeathDate = "2099-01-01",
+            DeathPlace = "Death Place Name", DeathCause = "Death Cause Name",
+            ChildrenDetails = { new ChildDetail("Child Name One", "Q9", "2011-05-06"), new ChildDetail("Child Name Two", "Q10", null) },
             RetrievedAt = Now,
         };
         change?.Invoke(facts);
@@ -102,6 +104,7 @@ public class PeopleExportTests : IDisposable
                  {
                      "1977", "1977-02-02", "February", "Barranquilla", "Colombia", "singer", "actor", "Spanish", "English", "157", "1.57",
                      "Zed Spouse", "Former Person", "Partner Person", "female", "2099", "Q34424", "Mebarak" + "x",
+                     "Child Name One", "Child Name Two", "2011-05-06", "Death Place Name", "Death Cause Name",
                      "height", "spouse", "children", "birth", "occupation", "language", "gender", "partner",
                  })
         {
