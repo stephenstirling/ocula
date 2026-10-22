@@ -293,7 +293,7 @@ public sealed class PersonLookup
         var client = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
         // Wikimedia asks every app to identify itself with a contact address.
         // TODO: same placeholder as CameraImageService; replace both with a real contact before release.
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("Ocula/0.1");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd(ApiIdentity.UserAgent);
         return client;
     }
 
