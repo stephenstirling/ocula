@@ -33,6 +33,22 @@ public sealed class PeopleSharing : IDisposable
     public static string Folder { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Stirling", "Ocula");
 
+    /// <summary>
+    /// Where the files end up on disk when Windows redirects a packaged Ocula's writes under %LocalAppData% into its private package
+    /// folder: <c>%LocalAppData%\Packages\&lt;package family&gt;\LocalCache\Local\Stirling\Ocula</c>. Null when Ocula is not packaged.
+    /// </summary>
+    private static string? PhysicalFolder()
+    {
+        try
+        {
+            return Path.Combine(Windows.Storage.ApplicationData.Current.LocalCacheFolder.Path, "Local", "Stirling", "Ocula");
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException)
+        {
+            return null;   // no package identity
+        }
+    }
+
     /// <summary>Asks for a refresh soon. Cheap to call often; does nothing while sharing is off.</summary>
     public void RequestRefresh()
     {
@@ -52,7 +68,12 @@ public sealed class PeopleSharing : IDisposable
                 return;
             }
             var rows = await _index.GetPeopleForExportAsync().ConfigureAwait(false);
-            await Task.Run(() => PeopleExport.Write(Folder, rows, DateTimeOffset.UtcNow)).ConfigureAwait(false);
+            await Task.Run(() =>
+            {
+                // The pictures' paths in the file are the ones a reader outside Ocula can open (see PeopleExport.PublishedFolder).
+                var published = PeopleExport.PublishedFolder(Folder, PhysicalFolder());
+                PeopleExport.Write(Folder, rows, DateTimeOffset.UtcNow, published);
+            }).ConfigureAwait(false);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException)
         {

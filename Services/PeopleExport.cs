@@ -123,7 +123,11 @@ public static class PeopleExport
     /// picture are written to a temporary name and renamed over the old one, so a reader never sees half a file. A picture whose bytes
     /// have not changed is not touched; pictures of people no longer in the file are deleted last, after the new file is in place.
     /// </summary>
-    public static void Write(string folder, IReadOnlyList<PeopleExportRow> rows, DateTimeOffset now)
+    /// <param name="publishedFolder">
+    /// The folder a reader outside Ocula can open the pictures in, when that is not the folder Ocula itself writes to (see
+    /// <see cref="PublishedFolder"/>): the "thumbnail" paths in the file are built from it. Null means the same folder.
+    /// </param>
+    public static void Write(string folder, IReadOnlyList<PeopleExportRow> rows, DateTimeOffset now, string? publishedFolder = null)
     {
         Directory.CreateDirectory(folder);
         var thumbs = Path.Combine(folder, ThumbnailFolder);
@@ -150,7 +154,7 @@ public static class PeopleExport
                 }
                 if (File.Exists(path))
                 {
-                    thumbnailPath = path;
+                    thumbnailPath = Path.Combine(publishedFolder ?? folder, ThumbnailFolder, file);
                     wanted.Add(file);
                 }
             }
@@ -168,6 +172,34 @@ public static class PeopleExport
             foreach (var file in Directory.EnumerateFiles(thumbs))
                 if (!wanted.Contains(Path.GetFileName(file)))
                     TryDelete(file);
+    }
+
+    /// <summary>
+    /// Where a reader outside Ocula can actually find what Ocula writes to <paramref name="folder"/>. A packaged Ocula's writes under
+    /// %LocalAppData% are normally redirected into its private package folder (and a manifest exclusion that undoes that has proved
+    /// unreliable), so the same files are then at <paramref name="physicalFolder"/> and not at <paramref name="folder"/>. A small marker file
+    /// is written to <paramref name="folder"/> and looked for at <paramref name="physicalFolder"/>: found there means the write was
+    /// redirected and that is the folder to publish; not found means <paramref name="folder"/> is real.
+    /// </summary>
+    public static string PublishedFolder(string folder, string? physicalFolder, Func<string, bool>? existsAt = null)
+    {
+        if (physicalFolder == null || string.Equals(Path.GetFullPath(folder), Path.GetFullPath(physicalFolder), StringComparison.OrdinalIgnoreCase))
+            return folder;
+        Directory.CreateDirectory(folder);
+        var marker = Path.Combine(folder, ".location-marker");
+        try
+        {
+            File.WriteAllText(marker, "Ocula writes this to find out where its files really are. It is safe to delete.");
+            return (existsAt ?? File.Exists)(Path.Combine(physicalFolder, ".location-marker")) ? physicalFolder : folder;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return folder;
+        }
+        finally
+        {
+            TryDelete(marker);
+        }
     }
 
     /// <summary>Removes the people file and every face picture (switch turned off, or all face data deleted).</summary>
