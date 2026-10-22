@@ -610,6 +610,25 @@ _Still to come_
     10 or an older Windows 11; the Store's view of `unvirtualizedResources`; a refresh caused by a real rename, card, hide or scan (only the switch
     was exercised, and the debounce in isolation); "Delete all face data" (not run on the real library); People turned off while sharing is on; a refresh
     racing a turn-off; a very large list of named people; and what a reader sees while the file is being replaced.
+- **Phun scraper tab (wired in, October 2026; branch `phun-tab`).** `Phun/ScraperPage` (the page), `Phun/ScraperMonitor` (reads the scraper's status) and
+  `Phun/LibraryIndex` (reads the scraper's `ocula_library.db`; not used by the page yet) came from the branch `claude/phun-scraper-tab`; the scraper itself is
+  `tools/phun-scraper` (Python, runs in Docker on the NAS, not part of the app or the Store build). Ocula only **reads** the scraper's status; it doesn't run it.
+  Settings > Phun scraper has a switch (off by default), the status address (http or https only), the optional token, and the downloads folder. While the
+  switch is on the sidebar shows "Phun scraper…", which opens `PhunWindow`, which hosts the page; the page polls every 2 seconds only while the window is open
+  and treats a status older than 90 seconds as offline. Scan now needs the address (and the token if the scraper has one). The address and token are
+  kept in Ocula's settings on this PC, unencrypted. The branch's `NAV-SNIPPET.md` assumed a `NavigationView` that Ocula's main window doesn't have, so it was not used.
+  - **Tags in the saved files.** `embed_metadata` in the scraper now writes the tags with ExifTool and **reads them back**; a file whose tags are not there afterwards is
+    logged, shown in the activity list and counted (`metadata_failed`), and the page shows a warning ("Some images were saved without their tags"). Every format gets
+    `XMP:Subject` (what Windows, and so Ocula, reads as Keywords) and `XMP:Description`; JPEG and TIFF also get `IPTC:Keywords` and `EXIF:ImageDescription`; PNG and WebP
+    get XMP only, because they can't hold IPTC (the old code asked for IPTC on every file, which ExifTool refuses for those). The tags themselves
+    (the name and the words found in the thread title and first post) are chosen by code that is unchanged. The scraper's categories are not Ocula's smart
+    labels, but they are body-focused words (Pregnant, Bikini, Swimwear, Lingerie): CLAUDE.md says not to add such labels to Ocula.
+  - **Tested.** 8 unit tests for the status reader (fields, the 90-second rule, a missing or half-written file, polling and stopping; this also fixed a
+    `NullReferenceException` on a background thread when polling was stopped) and 7 Python tests for the tag writing (`python -m unittest tools/phun-scraper/test_metadata.py`)
+    against a fake ExifTool. In the deployed app: the Settings section appears, the switch adds and removes the sidebar entry.
+  - **Not tested.** The tag writing against the real ExifTool, any real file (ExifTool isn't installed on this PC); the scraper running anywhere; Ocula talking to a real
+    scraper or the NAS; opening the Phun window by clicking the sidebar entry and seeing the page (Ocula wasn't in front for the click); the settings text boxes
+    (UI Automation can't reach them while the expander is shut); Scan now; `LibraryIndex`.
 - **Smart recognition (what's in the photo)**: on-device and opt-in.
   - Uses OpenAI's CLIP (MIT licence) via ONNX Runtime to suggest scene and object tags such as
     beach, sunset, dog, car, snow, and to power natural-language search ("sunset over water").
