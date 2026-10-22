@@ -106,9 +106,8 @@ public sealed class CameraImageService
     private static HttpClient CreateClient()
     {
         var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
-        // Wikimedia asks every app to identify itself with a contact address.
-        // TODO: replace with your own app URL or email before releasing.
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("Ocula/0.1 (contact: you@example.com)");
+        // Wikimedia asks every app to identify itself with a contact (see ApiIdentity).
+        client.DefaultRequestHeaders.UserAgent.ParseAdd(ApiIdentity.UserAgent);
         return client;
     }
 
