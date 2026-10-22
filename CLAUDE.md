@@ -86,6 +86,8 @@ names for tiles and sidebar entries, a Release MSIX build, and the Map page offl
 - x64 only. Min Windows 10.0.17763.0.
 - Privacy: everything local. No telemetry. Network only for what the user starts
   (updates, web download pane, optional person lookup, model download).
+- "Share people with Porta" (people-index.json) carries only id, name, aliases, a short description, photo count and a face picture. Never add a
+  card detail (height, spouse, children, birth date or place, languages, occupations, gender) or anyone without a name. It is off by default.
 - Do not add body-focused smart labels (bikini, lingerie, pregnant, etc.). Not wanted.
 - Web download: no ad-screen, paywall, form or login circumvention. Same-site cookies only.
 - Keep the git author as `Stephen Stirling <8118368+stephenstirling@users.noreply.github.com>`.

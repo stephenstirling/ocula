@@ -527,6 +527,47 @@ _Still to come_
   - Off by default, nothing leaves the PC, a one-click "Delete all face data" button, and face
     data stays in the local library (never written into photo files). Names are written as
     tags only when you choose.
+- **Share people with Porta (built on branch `porta-people-export`, October 2026).** Settings > Privacy switch, off by default. While on,
+  `PeopleSharing` keeps `people-index.json` and a folder of 96 px face PNGs current for Porta. Files: `Services/PeopleExport.cs` (what is
+  written, and how), `Services/PeopleSharing.cs` (where, and when), `Services/RefreshDebouncer.cs`, `people.uid` in `IndexService`.
+  - **Format, version 1.** `{ "version": 1, "updated": "<UTC, yyyy-MM-ddTHH:mm:ssZ>", "people": [ { "id", "name", "aliases": [], "description"?,
+    "photoCount", "thumbnail"? } ] }`, most photos first. Written property by property, so no other field can appear. `description` and
+    `thumbnail` are left out when there is none (not null). `id` is `people.uid`: 16 lower-case hex characters made by a trigger, kept through
+    renames and card changes, backfilled for older libraries (not the internal row id). `aliases` are the card's full name and Wikidata name when
+    they differ from the name you typed. `description` is the card's Wikidata description with any parenthetical removed, and dropped
+    altogether if it still has a four-digit number or one of: born, died, married, wife, husband, spouse, partner, child(ren), mother of,
+    father of, height, tall (Wikidata descriptions like "singer-songwriter (born 1977)" exist). `photoCount` counts photos, once each.
+    `thumbnail` is the full path of the person's best face as a 96x96 PNG in `people-thumbnails\<id>-<hash>.png` (named by a hash of the
+    source picture, so an unchanged picture is not rewritten and a changed one gets a new name; ones no longer listed are deleted after the new
+    file is in place). Unnamed people, hidden groups and people with no photos are never included. Never included: birth date, birthplace,
+    height, spouse, children, languages, occupations, gender, death date, or anything else from a card.
+  - **Where.** The brief asked for `%LocalAppData%\Stirling\Ocula\people-index.json`. Ocula is a packaged (MSIX) app, and Windows redirects
+    such an app's writes under `%LocalAppData%` into its private package folder (`...\Packages\StephenStirling.Ocula_...\LocalCache\Local\...`),
+    which Porta can't see. So `Package.appxmanifest` declares a **publisher cache folder** named `Stirling` (shared by every package with the same
+    publisher; Ocula, Capta and Porta all show the publisher id `pj0sf924kbv0r` here), and Ocula writes `Stirling\Ocula\people-index.json` in it:
+    `%LocalAppData%\Publishers\pj0sf924kbv0r\Stirling\Ocula\people-index.json`. Porta (packaged, same publisher) reaches it with
+    `ApplicationData.Current.GetPublisherCacheFolder("Stirling")` and then `Ocula\people-index.json`; any other program of the same user can
+    read the path directly. An unpackaged run (a developer build) uses `%LocalAppData%\Stirling\Ocula` as asked. If a packaged build can't get
+    the shared folder it writes nothing and says so in `ocula.log`. **Porta must be packaged with the same publisher to use
+    `GetPublisherCacheFolder`; the Store re-signs packages, so check the publisher id after Store signing.**
+  - **When.** Refreshed 5 seconds after the last change and at most 60 seconds after the first (`RefreshDebouncer`), on: naming or renaming a
+    group, a merge, "Not this person", hiding a group, photos added or removed (including while faces are scanned), a card saved or removed,
+    deleting face data, clearing the library. Switching on writes at once. At startup it refreshes if on and deletes a leftover file if off.
+    Removed (file, pictures, and the folder if it is then empty) when the switch is turned off, People is off, and "Delete all face data".
+  - **Open a person from Porta.** `ocula:person?id=<id>` (the `ocula:` scheme is already registered for Capta). It shows that person's photos in
+    the grid, like People > "Show these photos", and brings Ocula forward; a cold start works too. From a prompt: `start "" "ocula:person?id=<id>"`.
+    An id that is not 8 to 32 hex characters is ignored, and an id with no person (renamed to nothing, hidden, merged, face data deleted) or
+    People being off shows a message instead. A command-line option was not added: the link is the one way in.
+  - **Tested.** 49 new unit tests: the export (exact fields, the version and UTC time, no card detail can reach the file, unnamed and hidden people
+    left out, description and alias rules, picture size, naming and clean-up, atomic replacement, deletion, other files left alone), the debounce, and
+    the link. In the deployed package, on three real named groups: the file and pictures appeared in the publisher folder with the right
+    shape and were removed when the switch was turned off; the people-id backfill gave all 2,627 groups a unique id; the link opened the right
+    person on a cold start and in a running instance, and an unknown id gave the message.
+  - **Not tested.** Anything on Porta's side (reading the file through `GetPublisherCacheFolder`, from a second package, or after Store
+    signing); a refresh caused by a real rename, card, hide or scan (only the switch was exercised, and the debounce in isolation); "Delete all
+    face data" (not run on the real library); People turned off while sharing is on; an unpackaged build; a refresh racing a turn-off; a very large
+    list of named people; and what a reader does while the file is being replaced (the replace is a rename over the old file, which should be
+    atomic on NTFS but was not observed from another process).
 - **Smart recognition (what's in the photo)**: on-device and opt-in.
   - Uses OpenAI's CLIP (MIT licence) via ONNX Runtime to suggest scene and object tags such as
     beach, sunset, dog, car, snow, and to power natural-language search ("sunset over water").
