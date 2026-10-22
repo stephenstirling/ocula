@@ -107,6 +107,27 @@ public sealed partial class MainWindow
         _people.Activate();
     }
 
+    /// <summary>
+    /// ocula:person?id=...: shows the photos of the person with that id (from people-index.json) in the grid, as "Show these photos" in
+    /// People does. Says so if the person is gone: renamed to nothing, hidden, merged into another group, or face data deleted.
+    /// </summary>
+    public async Task OpenPersonLinkAsync(string? uid)
+    {
+        if (!FaceIndexer.Enabled)
+        {
+            ShowError("People is off", "Turn on People in Settings to open someone's photos.");
+            return;
+        }
+        if (uid == null || await _index.FindPersonByUidAsync(uid) is not { } person)
+        {
+            ShowError("That person isn't in Ocula any more",
+                      "They may have been renamed to nothing, hidden, merged into another group, or their face data deleted.");
+            return;
+        }
+        var paths = await _index.GetPersonPhotoPathsAsync(person.Id);
+        await ShowPhotosAsync(person.Name, await _index.GetRowsAsync(paths));
+    }
+
     /// <summary>Adds a tag to the given library photos and writes it into the files.</summary>
     public async Task TagPhotosAsync(List<IndexRow> rows, string tag)
     {

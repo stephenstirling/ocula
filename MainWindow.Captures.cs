@@ -25,6 +25,13 @@ public sealed partial class MainWindow
 
     public async Task HandleLinkAsync(OculaLink link)
     {
+        // Not about captures at all: leave Capta's folder setting alone.
+        if (link.Verb == "person")
+        {
+            await OpenPersonLinkAsync(link.Id);
+            return;
+        }
+
         var folder = OculaLink.CaptureFolderOrDefault(link.Folder ?? AppSettings.CapturesFolder);
         AppSettings.CapturesFolder = folder;
         try

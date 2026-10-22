@@ -10,10 +10,13 @@ namespace Ocula.Services;
 ///   ocula:captures?folder=&lt;capture folder&gt;            show all captures
 ///   ocula:import?file=&lt;path&gt;&amp;folder=&lt;…&gt;          add a capture to the library, in the background
 ///   ocula:edit?file=&lt;path&gt;&amp;folder=&lt;…&gt;            open a capture in the editor
+/// and, for Porta ("Share people with Porta", see PeopleExport):
+///   ocula:person?id=&lt;id&gt;                              show the photos of a person named in People
+///                                                      (the id is the "id" in people-index.json)
 /// Values are percent-encoded (Uri.EscapeDataString). Capta checks that Ocula is installed by
 /// asking Windows whether anything handles "ocula:", so the scheme must stay registered.
 /// </summary>
-public sealed record OculaLink(string Verb, string? File, string? Folder)
+public sealed record OculaLink(string Verb, string? File, string? Folder, string? Id = null)
 {
     public const string Scheme = "ocula";
 
@@ -42,7 +45,9 @@ public sealed record OculaLink(string Verb, string? File, string? Folder)
         }
 
         string? Value(string key) => values.TryGetValue(key, out var v) && v.Length > 0 ? v : null;
-        return new OculaLink(verb, Value("file"), Value("folder"));
+        // A person's id is 8 to 32 lower-case hex characters. Anything else is dropped, so it can never reach a query as something else.
+        var id = Value("id")?.ToLowerInvariant();
+        return new OculaLink(verb, Value("file"), Value("folder"), id != null && System.Text.RegularExpressions.Regex.IsMatch(id, "^[0-9a-f]{8,32}$") ? id : null);
     }
 
     /// <summary>Capta's capture folder as the link gives it, else Capta's default: Pictures\Captures.</summary>
