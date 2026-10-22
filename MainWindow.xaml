@@ -174,6 +174,28 @@
                             <HyperlinkButton x:Name="SaveSearchButton" Content="Save as smart album" Padding="4,0"
                                              Visibility="Collapsed" Click="SaveSearch_Click"/>
                         </StackPanel>
+                        <!-- The person whose photos these are: a card from Wikidata, or a prompt to look them up -->
+                        <Border x:Name="PersonHeaderCard" Visibility="Collapsed" Margin="0,10,0,0" Padding="14,12" CornerRadius="8" Width="560"
+                                HorizontalAlignment="Left" Background="{ThemeResource LayerFillColorAltBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                            <Grid ColumnSpacing="14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <PersonPicture x:Name="PersonHeaderPicture" Width="72" Height="72" VerticalAlignment="Top"/>
+                                <StackPanel Grid.Column="1" Spacing="6">
+                                    <TextBlock x:Name="PersonHeaderDescription" TextWrapping="Wrap"/>
+                                    <StackPanel x:Name="PersonHeaderRows" Spacing="4"/>
+                                    <TextBlock x:Name="PersonHeaderNote" TextWrapping="Wrap" FontSize="12"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <Button x:Name="PersonHeaderButton" Click="PersonHeaderButton_Click"/>
+                                        <HyperlinkButton x:Name="PersonHeaderLink" Content="Open on Wikidata" Visibility="Collapsed"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
                         <!-- A search about people (height, age, birthplace...): how it was understood, and who matched -->
                         <StackPanel x:Name="PersonSearchPanel" Visibility="Collapsed" Spacing="8" Margin="0,10,0,0">
                             <StackPanel Orientation="Horizontal" Spacing="8">

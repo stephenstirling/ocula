@@ -231,6 +231,7 @@ public sealed partial class PeopleWindow : Window
                       : "Saved.";
         await RefreshAsync(survivor);
         await LoadCardAsync(survivor, name.Length == 0 ? null : name);   // a new name removes the old name's card
+        _ = _main.RefreshPersonHeaderAsync(survivor);
     }
 
     // ---------- Person card (Wikidata) ----------
@@ -277,20 +278,10 @@ public sealed partial class PeopleWindow : Window
             CardRows.Children.Add(row);
         }
 
-        Row("Full name", facts.FullName);
-        Row("Born", Join(" · ", facts.BirthDateText, facts.BirthPlace));
-        Row("Died", facts.DeathDateText);
-        Row("Occupation", string.Join(", ", facts.Occupations));
-        Row(facts.Spouses.Count > 1 ? "Spouses" : "Spouse", string.Join(", ", facts.Spouses.Select(s => s.Display)));
-        Row("Former spouses", string.Join(", ", facts.FormerSpouses.Select(s => s.Display)));
-        Row("Partners", string.Join(", ", facts.Partners.Select(s => s.Display)));
-        Row("Children", facts.ChildrenText);
-        Row("Height", facts.HeightText);
-        Row("Languages", string.Join(", ", facts.Languages));
+        foreach (var (label, value) in facts.Rows()) Row(label, value);
         if (CardRows.Children.Count == 0) Row("Wikidata has", "no facts about this person that Ocula shows.");
 
-        CardCredit.Text = $"From Wikidata (CC0), retrieved {facts.RetrievedAt.LocalDateTime:MMMM d, yyyy}. It is only what Wikidata lists, " +
-                          "can be out of date, and often leaves things out. A spouse is one with no end date there.";
+        CardCredit.Text = facts.CreditText;
         CardCredit.Visibility = Visibility.Visible;
         CardLink.NavigateUri = new Uri("https://www.wikidata.org/wiki/" + facts.WikidataId);
         CardLink.Visibility = Visibility.Visible;
@@ -356,6 +347,7 @@ public sealed partial class PeopleWindow : Window
             }
 
             await _main.Library.SavePersonCardAsync(person.Id, facts);
+            _ = _main.RefreshPersonHeaderAsync(person.Id);
             if (Selected?.Id == person.Id) ShowCard(facts, person.Name);
             CardNote.Text = "Saved on this PC.";
             await OfferNameTagsAsync(person, facts);
@@ -452,6 +444,7 @@ public sealed partial class PeopleWindow : Window
         var person = Selected;
         if (person == null) return;
         await _main.Library.DeletePersonCardAsync(person.Id);
+        _ = _main.RefreshPersonHeaderAsync(person.Id);
         ShowCard(null, person.Name);
         CardNote.Text = "Card removed. Tags already added to photos are not touched.";
     }
@@ -463,7 +456,7 @@ public sealed partial class PeopleWindow : Window
         if (person == null) return;
         var paths = await _main.Library.GetPersonPhotoPathsAsync(person.Id);
         var rows = await _main.Library.GetRowsAsync(paths);
-        await _main.ShowPhotosAsync(person.Name ?? "Unnamed group", rows);
+        await _main.ShowPhotosAsync(person.Name ?? "Unnamed group", rows, person.Name == null ? null : person.Id);
     }
 
     private async void HideGroup_Click(object sender, RoutedEventArgs e)

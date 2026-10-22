@@ -14,6 +14,13 @@ namespace Ocula.Services;
 /// <summary>One match in the "Look up on Wikidata" picker.</summary>
 public sealed record WikidataCandidate(string Id, string Name, string? Description);
 
+/// <summary>A child as Wikidata lists them: the name, and the birth date when the child's own item has one. Shown on the card only.</summary>
+public sealed record ChildDetail(string Name, string? Id, string? BirthDate)
+{
+    [JsonIgnore]
+    public string Display => PersonFacts.FormatDate(BirthDate) is { } born ? $"{Name} (born {born})" : Name;
+}
+
 /// <summary>A spouse or partner as Wikidata lists them, with the years when it has them.</summary>
 public sealed record Relation(string Name, string? Id, int? FromYear, int? ToYear)
 {
@@ -51,9 +58,18 @@ public sealed class PersonFacts
     public int? BirthYear { get; set; }
     public string? DeathDate { get; set; }
 
+    /// <summary>Where and of what they died, from Wikidata, only for a person who has a death date there.</summary>
+    public string? DeathPlace { get; set; }
+    public string? DeathCause { get; set; }
+
     /// <summary>"female" or "male" when Wikidata says so. Not shown on the card; only used so a search for "actress" can tell
     /// an actress from an actor (Wikidata files both under "actor").</summary>
     public string? Gender { get; set; }
+
+    /// <summary>Ids Wikidata gives for asking the second sources: the English Wikipedia title (DBpedia) and the MusicBrainz artist id.
+    /// Not saved with the card.</summary>
+    internal string? WikipediaTitle { get; set; }
+    internal string? MusicBrainzId { get; set; }
 
     /// <summary>Shown as "Austin, Texas, United States".</summary>
     public string? BirthPlace { get; set; }
@@ -75,6 +91,10 @@ public sealed class PersonFacts
 
     /// <summary>True when the count is how many children Wikidata lists, not a number it states.</summary>
     public bool ChildrenFromList { get; set; }
+
+    /// <summary>The children Wikidata names (at most 12), with birth dates where it has them. Only on the card on this PC: it is never shared
+    /// (not in the Porta file), and a search only knows the count.</summary>
+    public List<ChildDetail> ChildrenDetails { get; set; } = new();
 
     public double? HeightCm { get; set; }
     public List<string> Languages { get; set; } = new();
@@ -98,6 +118,84 @@ public sealed class PersonFacts
             if (parts.Length == 2) return ($"{year:0000}-{month:00}-01", $"{year:0000}-{month:00}-{DateTime.DaysInMonth(year, month):00}");
             if (!int.TryParse(parts[2], out var day) || day < 1 || day > DateTime.DaysInMonth(year, month)) return null;
             return ($"{year:0000}-{month:00}-{day:00}", $"{year:0000}-{month:00}-{day:00}");
+        }
+    }
+
+    /// <summary>
+    /// The card as label and value pairs, in the order it is shown, leaving out what Wikidata didn't have. Shared by the People window
+    /// and the header over a person's photos.
+    /// </summary>
+    public List<(string Label, string Value)> Rows()
+    {
+        var rows = new List<(string, string)>();
+        void Add(string label, string? value)
+        {
+            if (!string.IsNullOrWhiteSpace(value)) rows.Add((label, value));
+        }
+        static string? Join(string separator, params string?[] parts) =>
+            string.Join(separator, parts.Where(p => !string.IsNullOrWhiteSpace(p)));
+
+        Add("Full name", FullName);
+        Add("Date of birth", BirthDateText);
+        Add("Place of birth", BirthPlace);
+        if (DeathDate != null)   // where and of what are only shown for someone Wikidata says has died
+        {
+            Add("Date of death", DeathDateText);
+            Add("Place of death", DeathPlace);
+            Add("Cause of death", DeathCause);
+        }
+        Add("Occupation", string.Join(", ", Occupations));
+        Add("Height", HeightText is { } height && HasSeveralSources && Sources.TryGetValue("height", out var heightSource)
+            ? $"{height} \u00B7 {heightSource}" : HeightText);
+        Add(Spouses.Count > 1 ? "Spouses" : "Spouse", string.Join(", ", Spouses.Select(s => s.Display)));
+        Add("Former spouses", string.Join(", ", FormerSpouses.Select(s => s.Display)));
+        Add("Partners", string.Join(", ", Partners.Select(s => s.Display)));
+        if (ChildrenDetails.Count > 0)
+        {
+            var total = Math.Max(Children ?? 0, ChildrenDetails.Count);
+            var more = total > ChildrenDetails.Count ? $" and {total - ChildrenDetails.Count} more" : string.Empty;
+            Add("Children", $"{total}: {string.Join(", ", ChildrenDetails.Select(c => c.Display))}{more}");
+        }
+        else
+        {
+            Add("Children", ChildrenText);
+        }
+        Add("Languages", string.Join(", ", Languages));
+        return rows;
+    }
+
+    // ----- Where the card's facts came from -----
+
+    /// <summary>The sources the facts on this card came from, in the order they were first used ("Wikidata", and any other that was added).</summary>
+    [JsonIgnore]
+    public List<string> SourceNames => Sources.Values.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+    /// <summary>Whether more than one source contributed, in which case a fact says which one it came from.</summary>
+    [JsonIgnore]
+    public bool HasSeveralSources => SourceNames.Count > 1;
+
+    /// <summary>The source's name as credited under the card: Wikidata is CC0; another source is named as it was recorded.</summary>
+    private static string Credit(string source) =>
+        source.ToLowerInvariant() switch
+        {
+            "wikidata" => "Wikidata (CC0)",
+            "dbpedia" => "DBpedia (CC BY-SA)",
+            "wikipedia" => "Wikipedia (CC BY-SA)",
+            "musicbrainz" => "MusicBrainz (CC0)",
+            _ => source
+        };
+
+    /// <summary>The line under the card: every source actually used, when it was read, and that it may be out of date.</summary>
+    [JsonIgnore]
+    public string CreditText
+    {
+        get
+        {
+            var names = SourceNames;
+            var from = names.Count == 0 ? "Wikidata (CC0)" : string.Join(", ", names.Select(Credit));
+            var only = names.Count > 1 ? "sources list" : "Wikidata lists";
+            return $"From {from}, retrieved {RetrievedAt.LocalDateTime:MMMM d, yyyy}. It is only what {only}, can be out of date, " +
+                   "and often leaves things out. A spouse is one with no end date there.";
         }
     }
 
@@ -131,7 +229,7 @@ public sealed class PersonFacts
     [JsonIgnore]
     public string? ChildrenText => Children is int n ? (ChildrenFromList ? $"{n} (as listed)" : n.ToString(CultureInfo.InvariantCulture)) : null;
 
-    private static string? FormatDate(string? iso)
+    internal static string? FormatDate(string? iso)
     {
         if (iso == null) return null;
         var parts = iso.Split('-', StringSplitOptions.RemoveEmptyEntries);
@@ -216,7 +314,7 @@ public sealed class PersonLookup
         if (!IsItemId(id)) throw new ArgumentException("Not a Wikidata item id.", nameof(id));
 
         using var doc = JsonDocument.Parse(await _http.GetStringAsync(
-            $"{Api}?action=wbgetentities&format=json&props=claims|labels|descriptions&languages=en&languagefallback=1&ids={id}", cancel));
+            $"{Api}?action=wbgetentities&format=json&props=claims|labels|descriptions|sitelinks&sitefilter=enwiki&languages=en&languagefallback=1&ids={id}", cancel));
         var entity = doc.RootElement.GetProperty("entities").GetProperty(id);
 
         // Where they were born, then the regions it is in (each lookup is small; the place's own entity can be huge).
@@ -236,7 +334,63 @@ public sealed class PersonLookup
 
         var wanted = ReferencedItems(entity).Concat(chainIds).Distinct().ToList();
         var labels = await LabelsAsync(wanted, cancel);
-        return Build(entity, labels, chainIds, now);
+        var childBirths = await ChildBirthsAsync(ItemValues(entity, "P40", ranked: true).Distinct().Take(MaxChildren), cancel);
+        var facts = Build(entity, labels, chainIds, now, childBirths);
+        await AddSecondSourcesAsync(facts, cancel);
+        return facts;
+    }
+
+    private const int MaxChildren = 12;
+
+    /// <summary>The birth date of each child's own Wikidata item, where it has one (a small request each; any failure just means no date).</summary>
+    private async Task<Dictionary<string, string>> ChildBirthsAsync(IEnumerable<string> childIds, CancellationToken cancel)
+    {
+        var births = new Dictionary<string, string>();
+        var ids = childIds.ToList();
+        var answers = await Task.WhenAll(ids.Select(async id =>
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(await _http.GetStringAsync(
+                    $"{Api}?action=wbgetclaims&format=json&property=P569&entity={id}", cancel));
+                return BestTime(doc.RootElement, "P569")?.Text;
+            }
+            catch (Exception e) when (e is HttpRequestException or JsonException)
+            {
+                return null;
+            }
+        }));
+        for (var i = 0; i < ids.Count; i++)
+            if (answers[i] != null) births[ids[i]] = answers[i]!;
+        return births;
+    }
+
+    /// <summary>
+    /// Asks DBpedia and MusicBrainz, together, about the person, for what Wikidata left empty. Only when something is missing, only by the
+    /// ids Wikidata gave, and a failure of either is logged (without the person's name) and ignored.
+    /// </summary>
+    private async Task AddSecondSourcesAsync(PersonFacts facts, CancellationToken cancel)
+    {
+        var sources = new PersonSources(_http);
+
+        async Task<T> Ask<T>(string name, Func<Task<T>> call)
+        {
+            try { return await call(); }
+            catch (Exception e) when (!cancel.IsCancellationRequested &&
+                                      e is HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException)
+            {
+                DiagnosticLog.Write($"{name} didn't answer for a person card, so it was left out ({e.GetType().Name})");
+                return default!;
+            }
+        }
+
+        var dbpedia = facts.WikipediaTitle != null && PersonSources.WorthAskingDbpedia(facts)
+            ? Ask("DBpedia", () => sources.GetDbpediaAsync(facts.WikipediaTitle, cancel)) : Task.FromResult<DbpediaFacts?>(null);
+        var musicBrainz = facts.MusicBrainzId != null && PersonSources.WorthAskingMusicBrainz(facts)
+            ? Ask("MusicBrainz", () => sources.GetMusicBrainzAsync(facts.MusicBrainzId, cancel)) : Task.FromResult<MusicBrainzFacts?>(null);
+        var wikipedia = facts.WikipediaTitle != null && PersonSources.WorthAskingWikipedia(facts)
+            ? Ask("Wikipedia", async () => (double?)await sources.GetWikipediaHeightAsync(facts.WikipediaTitle, cancel)) : Task.FromResult<double?>(null);
+        PersonSources.Merge(facts, await dbpedia, await musicBrainz, await wikipedia);
     }
 
     private async Task<string?> FirstClaimItemAsync(string entityId, string property, CancellationToken cancel)
@@ -277,7 +431,7 @@ public sealed class PersonLookup
     /// <summary>The items whose names are needed to write the card: occupations, spouses, partners, languages.</summary>
     public static IEnumerable<string> ReferencedItems(JsonElement entity)
     {
-        foreach (var property in new[] { "P106", "P26", "P451", "P1412" })
+        foreach (var property in new[] { "P106", "P26", "P451", "P1412", "P20", "P509", "P40" })
             foreach (var id in ItemValues(entity, property, ranked: true))
                 yield return id;
     }
@@ -288,7 +442,8 @@ public sealed class PersonLookup
     /// Anything Wikidata doesn't list stays empty.
     /// </summary>
     public static PersonFacts Build(JsonElement entity, IReadOnlyDictionary<string, string> labels,
-                                    IReadOnlyList<string> placeChain, DateTimeOffset now)
+                                    IReadOnlyList<string> placeChain, DateTimeOffset now,
+                                    IReadOnlyDictionary<string, string>? childBirths = null)
     {
         string Label(string id) => labels.TryGetValue(id, out var l) ? l : string.Empty;
 
@@ -320,6 +475,35 @@ public sealed class PersonLookup
         {
             facts.DeathDate = died.Text;
             facts.Sources["deathDate"] = "Wikidata";
+        }
+
+        // Where and of what they died: only for someone Wikidata gives a death date.
+        if (facts.DeathDate != null)
+        {
+            if (FirstItem(entity, "P20") is { } placeId && Label(placeId) is { Length: > 0 } place)
+            {
+                facts.DeathPlace = place;
+                facts.Sources["deathPlace"] = "Wikidata";
+            }
+            if (FirstItem(entity, "P509") is { } causeId && Label(causeId) is { Length: > 0 } cause)
+            {
+                facts.DeathCause = cause;
+                facts.Sources["deathCause"] = "Wikidata";
+            }
+        }
+
+        // The ids for the second sources.
+        if (entity.TryGetProperty("sitelinks", out var siteLinks) && siteLinks.ValueKind == JsonValueKind.Object &&
+            siteLinks.TryGetProperty("enwiki", out var english))
+            facts.WikipediaTitle = Clean(Str(english, "title"));
+        foreach (var statement in OrderedClaims(entity, "P434"))
+        {
+            var value = MainValue(statement);
+            if (value.ValueKind == JsonValueKind.String && Guid.TryParse(value.GetString(), out var mb))
+            {
+                facts.MusicBrainzId = mb.ToString("D");
+                break;
+            }
         }
 
         // Gender, only for searching (see PersonFacts.Gender).
@@ -383,7 +567,7 @@ public sealed class PersonLookup
         facts.Partners = facts.Partners.DistinctBy(r => (r.Id, r.FromYear)).OrderBy(r => r.FromYear ?? int.MaxValue).ToList();
         if (facts.Partners.Count > 0) facts.Sources["partners"] = "Wikidata";
 
-        // Children: the number Wikidata states (P1971); failing that, how many it lists (P40). Never named.
+        // Children: the number Wikidata states (P1971); failing that, how many it lists (P40). Their names are added below.
         if (BestQuantity(entity, "P1971") is { } stated && stated >= 0 && stated <= 60 && stated == Math.Floor(stated))
         {
             facts.Children = (int)stated;
@@ -399,6 +583,17 @@ public sealed class PersonLookup
                 facts.Sources["children"] = "Wikidata";
             }
         }
+
+        // The children Wikidata names, with the birth date of each child's own item when it has one.
+        foreach (var childId in ItemValues(entity, "P40", ranked: true).Distinct().Take(MaxChildren))
+        {
+            var name = Label(childId);
+            if (name.Length == 0) continue;
+            string? childBorn = null;
+            childBirths?.TryGetValue(childId, out childBorn);
+            facts.ChildrenDetails.Add(new ChildDetail(name, childId, childBorn));
+        }
+        if (facts.ChildrenDetails.Count > 0) facts.Sources["childrenDetails"] = "Wikidata";
 
         // Height, always in centimetres. A unit that isn't recognised is left out rather than guessed.
         foreach (var statement in OrderedClaims(entity, "P2048"))

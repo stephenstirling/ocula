@@ -122,6 +122,7 @@ public sealed partial class MainWindow
         _view = view;
         _viewId = id;
         HidePersonSearch();
+        HidePersonHeader();
 
         _all.Clear();
         foreach (var row in rows)
@@ -147,6 +148,7 @@ public sealed partial class MainWindow
     {
         _view = ViewKind.Folder;
         HidePersonSearch();
+        HidePersonHeader();
         SaveSearchButton.Visibility = Visibility.Collapsed;
         LibraryList.SelectedItem = null;
         if (!ReferenceEquals(Thumbs.ItemsSource, _images)) Thumbs.ItemsSource = _images;

@@ -793,6 +793,24 @@ public sealed class IndexService : IDisposable
         return list;
     });
 
+    /// <summary>The name of a visible, named group, or null if it no longer exists.</summary>
+    public Task<string?> FindPersonByIdAsync(long personId) => RunAsync(() =>
+    {
+        using var cmd = _db.CreateCommand();
+        cmd.CommandText = "SELECT name FROM people WHERE id = $p AND name IS NOT NULL AND hidden = 0";
+        cmd.Parameters.AddWithValue("$p", personId);
+        return cmd.ExecuteScalar() as string;
+    });
+
+    /// <summary>The clearest face thumbnail for a group, or null.</summary>
+    public Task<byte[]?> GetPersonAvatarAsync(long personId) => RunAsync(() =>
+    {
+        using var cmd = _db.CreateCommand();
+        cmd.CommandText = "SELECT thumb FROM faces WHERE person_id = $p ORDER BY score DESC LIMIT 1";
+        cmd.Parameters.AddWithValue("$p", personId);
+        return cmd.ExecuteScalar() is byte[] bytes ? bytes : null;
+    });
+
     /// <summary>
     /// Names a group. If another group already has that name, the two are merged and the id of
     /// the surviving group is returned. An empty name makes the group unnamed again.

@@ -28,8 +28,14 @@ public class RefreshDebouncerTests
         var runs = 0;
         using var debounce = new RefreshDebouncer(() => Interlocked.Increment(ref runs), TimeSpan.FromMilliseconds(400), TimeSpan.FromMilliseconds(300));
 
-        var until = DateTime.UtcNow.AddMilliseconds(1000);
-        while (DateTime.UtcNow < until) { debounce.Request(); await Task.Delay(20); }
+        // Keep producing requests until two runs have actually happened. A fixed one-second loop
+        // can end before a timer callback gets CPU time on a busy CI runner, then assert too early.
+        var until = DateTime.UtcNow.AddSeconds(5);
+        while (Volatile.Read(ref runs) < 2 && DateTime.UtcNow < until)
+        {
+            debounce.Request();
+            await Task.Delay(20);
+        }
 
         Assert.True(Volatile.Read(ref runs) >= 2, $"ran {runs} times; the quiet time (400 ms) was never reached, so only the maximum wait can have caused these");
     }

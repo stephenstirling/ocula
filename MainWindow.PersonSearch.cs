@@ -133,7 +133,7 @@ public sealed partial class MainWindow
         name.Click += async (_, _) =>
         {
             var paths = await _index.GetPersonPhotoPathsAsync(person.Id);
-            await ShowPhotosAsync(person.Name, await _index.GetRowsAsync(paths));
+            await ShowPhotosAsync(person.Name, await _index.GetRowsAsync(paths), person.Id);
         };
         text.Children.Add(name);
         var detail = string.Join(" · ", new[] { person.Detail, person.Photos == 1 ? "1 photo" : $"{person.Photos:N0} photos" }.Where(s => s.Length > 0));

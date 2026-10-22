@@ -39,6 +39,54 @@ public class PersonLookupLiveTests
         File.WriteAllText(Path.Combine(Path.GetTempPath(), "ocula-live-card.json"), card.ToJson());
     }
 
+    [Fact(Explicit = true)]
+    public async Task Someone_who_has_died_has_a_place_and_cause_of_death()
+    {
+        var lookup = new PersonLookup(PersonLookup.CreateClient());
+
+        var matches = await lookup.SearchPeopleAsync("Whitney Houston");
+        var person = matches.First(m => m.Description?.Contains("singer", StringComparison.OrdinalIgnoreCase) == true);
+        var card = await lookup.GetFactsAsync(person.Id, DateTimeOffset.Now);
+
+        Assert.Equal("2012-02-11", card.DeathDate);
+        Assert.False(string.IsNullOrEmpty(card.DeathPlace));
+        Assert.Contains(card.Rows(), r => r.Label == "Date of death");
+        File.WriteAllText(Path.Combine(Path.GetTempPath(), "ocula-live-deceased.json"), card.ToJson());
+    }
+
+    [Fact(Explicit = true)]
+    public async Task The_second_sources_answer_in_the_shape_the_parsers_expect()
+    {
+        var sources = new PersonSources(PersonLookup.CreateClient());
+
+        var dbpedia = await sources.GetDbpediaAsync("Whitney Houston");
+        await Task.Delay(1100);   // MusicBrainz asks for no more than one request a second
+        var musicBrainz = await sources.GetMusicBrainzAsync("bf24ca37-25f4-4e34-9aec-460b94364cfc");   // Shakira
+
+        Assert.NotNull(dbpedia);
+        Assert.Equal("1963-08-09", PersonSources.CleanDate(dbpedia!.BirthDate));
+        Assert.Equal("2012-02-11", PersonSources.CleanDate(dbpedia.DeathDate));
+        Assert.NotNull(musicBrainz);
+        Assert.Equal("1977-02-02", musicBrainz!.BirthDate);
+        Assert.Equal("Barranquilla", musicBrainz.BirthPlace);
+    }
+
+    [Fact(Explicit = true)]
+    public async Task Wikipedia_has_an_infobox_height_for_an_athlete_and_a_named_child_list_reads()
+    {
+        var sources = new PersonSources(PersonLookup.CreateClient());
+        Assert.Equal(188.0, await sources.GetWikipediaHeightAsync("Maria Sharapova"));
+
+        // Counts only: the names of other people's children are not printed anywhere.
+        var lookup = new PersonLookup(PersonLookup.CreateClient());
+        var match = (await lookup.SearchPeopleAsync("Will Smith")).First(m => m.Description?.Contains("actor", StringComparison.OrdinalIgnoreCase) == true);
+        var card = await lookup.GetFactsAsync(match.Id, DateTimeOffset.Now);
+        File.WriteAllText(Path.Combine(Path.GetTempPath(), "ocula-live-children.txt"),
+            $"count={card.Children} named={card.ChildrenDetails.Count} withBirthDate={card.ChildrenDetails.Count(c => c.BirthDate != null)}");
+        // Wikidata names a child only if the child has an item of their own, so most people (Hilary Duff has a count of 4 and no names) show none.
+        Assert.True(card.ChildrenDetails.Count > 0);
+    }
+
     /// <summary>
     /// Reads a few real people from Wikidata and writes the SQL that would store their cards (the same columns as
     /// <c>IndexService.SavePersonCardAsync</c>) to the temp folder, for trying the person search on a real library by hand.
