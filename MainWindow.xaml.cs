@@ -367,7 +367,8 @@ public sealed partial class MainWindow : Window
 
     private static readonly string[] SearchHints =
     {
-        "? sunset over water", "camera:", "tag:", "label:red", "rating>=4", $"year:{DateTime.Now.Year}", "date:", "hdr", "raw", "gps", "folder:"
+        "? sunset over water", "camera:", "tag:", "label:red", "rating>=4", $"year:{DateTime.Now.Year}", "date:", "hdr", "raw", "gps", "folder:",
+        "born before ", "born in ", "taller than ", "shorter than ", "over 40", "married", "has children", "speaks "
     };
 
     private async void SearchBox_GotFocus(object sender, RoutedEventArgs e)
@@ -421,6 +422,7 @@ public sealed partial class MainWindow : Window
         _lastQuery = text.Trim();
         var rows = await _index.SearchAsync(query, limit);
         await OpenRowsAsync(rows, ViewKind.Search, 0, "Search results", query.Describe(), limit);
+        await ShowPersonSearchAsync(query);   // how a question about people was read, and who matched
     }
 
     private void Filter_Changed(object sender, SelectionChangedEventArgs e)

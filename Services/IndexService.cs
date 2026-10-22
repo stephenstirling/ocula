@@ -121,11 +121,25 @@ public sealed class IndexService : IDisposable
                 height_cm   REAL,
                 languages   TEXT,
                 retrieved   TEXT NOT NULL,
-                json        TEXT NOT NULL);
+                json        TEXT NOT NULL,
+                full_name   TEXT,
+                gender      TEXT,
+                death_date  TEXT,
+                born_min    TEXT,
+                born_max    TEXT);
             CREATE TRIGGER IF NOT EXISTS trg_people_delete_card AFTER DELETE ON people
             BEGIN
                 DELETE FROM person_cards WHERE person_id = old.id;
             END;");
+        // Cards saved before searching by person details existed lack these columns: add them and fill them from the saved card.
+        var addedBorn = false;
+        foreach (var column in new[] { "full_name TEXT", "gender TEXT", "death_date TEXT", "born_min TEXT", "born_max TEXT" })
+        {
+            try { Execute($"ALTER TABLE person_cards ADD COLUMN {column};"); addedBorn |= column.StartsWith("born_min"); }
+            catch (SqliteException) { /* already there */ }
+        }
+        if (addedBorn) BackfillPersonCards();
+        RefreshOccupations();
         // Smart recognition: one embedding per photo and model. An empty blob means "tried, nothing to read".
         Execute(@"
             CREATE TABLE IF NOT EXISTS embeddings (
@@ -818,8 +832,14 @@ public sealed class IndexService : IDisposable
     {
         using var cmd = _db.CreateCommand();
         cmd.CommandText = @"INSERT OR REPLACE INTO person_cards
-              (person_id, wikidata_id, birth_date, birth_year, birth_place, occupations, spouse, children, height_cm, languages, retrieved, json)
-            VALUES ($id, $qid, $bd, $by, $bp, $occ, $sp, $ch, $h, $lang, $at, $json)";
+              (person_id, wikidata_id, birth_date, birth_year, birth_place, occupations, spouse, children, height_cm, languages, retrieved, json,
+               full_name, gender, death_date, born_min, born_max)
+            VALUES ($id, $qid, $bd, $by, $bp, $occ, $sp, $ch, $h, $lang, $at, $json, $fn, $g, $dd, $bmin, $bmax)";
+        cmd.Parameters.AddWithValue("$fn", (object?)facts.FullName ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$g", (object?)facts.Gender ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$dd", (object?)facts.DeathDate ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$bmin", (object?)facts.BornRange?.Min ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$bmax", (object?)facts.BornRange?.Max ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$id", personId);
         cmd.Parameters.AddWithValue("$qid", facts.WikidataId);
         cmd.Parameters.AddWithValue("$bd", (object?)facts.BirthDate ?? DBNull.Value);
@@ -833,6 +853,7 @@ public sealed class IndexService : IDisposable
         cmd.Parameters.AddWithValue("$at", facts.RetrievedAt.ToString("o", CultureInfo.InvariantCulture));
         cmd.Parameters.AddWithValue("$json", facts.ToJson());
         cmd.ExecuteNonQuery();
+        RefreshOccupations();
         return true;
     });
 
@@ -847,7 +868,106 @@ public sealed class IndexService : IDisposable
     public Task DeletePersonCardAsync(long personId) => RunAsync(() =>
     {
         Execute($"DELETE FROM person_cards WHERE person_id = {personId};");
+        RefreshOccupations();
         return true;
+    });
+
+    // Fills the search columns of cards saved before they existed, from the saved card.
+    private void BackfillPersonCards()
+    {
+        var cards = new List<(long Id, string Json)>();
+        using (var read = _db.CreateCommand())
+        {
+            read.CommandText = "SELECT person_id, json FROM person_cards";
+            using var reader = read.ExecuteReader();
+            while (reader.Read()) cards.Add((reader.GetInt64(0), reader.GetString(1)));
+        }
+        foreach (var (id, json) in cards)
+        {
+            if (PersonFacts.FromJson(json) is not { } facts) continue;
+            using var update = _db.CreateCommand();
+            update.CommandText = "UPDATE person_cards SET full_name = $fn, gender = $g, death_date = $dd, born_min = $bmin, born_max = $bmax WHERE person_id = $id";
+            update.Parameters.AddWithValue("$fn", (object?)facts.FullName ?? DBNull.Value);
+            update.Parameters.AddWithValue("$g", (object?)facts.Gender ?? DBNull.Value);
+            update.Parameters.AddWithValue("$dd", (object?)facts.DeathDate ?? DBNull.Value);
+            update.Parameters.AddWithValue("$bmin", (object?)facts.BornRange?.Min ?? DBNull.Value);
+            update.Parameters.AddWithValue("$bmax", (object?)facts.BornRange?.Max ?? DBNull.Value);
+            update.Parameters.AddWithValue("$id", id);
+            update.ExecuteNonQuery();
+        }
+    }
+
+    // The occupations on saved cards, so a search can tell "singer" (an occupation) from a word to look for in file names.
+    private void RefreshOccupations()
+    {
+        var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using var cmd = _db.CreateCommand();
+        cmd.CommandText = "SELECT occupations FROM person_cards WHERE occupations IS NOT NULL";
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+            foreach (var occupation in reader.GetString(0).Split(" | ", StringSplitOptions.RemoveEmptyEntries))
+                if (occupation.Length >= 3) found.Add(occupation.Trim().ToLowerInvariant());
+        PersonQuery.KnownOccupations = found.ToList();
+    }
+
+    public sealed record PersonMatch(long Id, string Name, int Photos, string Detail, bool Matched);
+
+    /// <param name="NamedGroups">Visible named groups in People.</param>
+    /// <param name="NoCard">Named groups with no saved card, so a question can't be answered for them.</param>
+    /// <param name="Missing">Cards that lack the field a question needs (the field's name and how many cards).</param>
+    public sealed record PersonSearchReport(List<PersonMatch> People, int NamedGroups, int NoCard, Dictionary<string, int> Missing);
+
+    /// <summary>
+    /// Who a person question matched and who it couldn't be answered for. Only saved cards are used: nobody is guessed at.
+    /// </summary>
+    public Task<PersonSearchReport> GetPersonSearchReportAsync(IReadOnlyList<PersonClause> clauses, DateOnly today) => RunAsync(() =>
+    {
+        var columns = clauses.SelectMany(c => c.Requires).Distinct().ToList();
+        using var cmd = _db.CreateCommand();
+        var n = 0;
+        string Param(object value)
+        {
+            var name = "$q" + n++;
+            cmd.Parameters.AddWithValue(name, value);
+            return name;
+        }
+        var nullChecks = string.Concat(columns.Select(c => $", c.{c} IS NULL"));
+        cmd.CommandText = $@"SELECT p.id, p.name, (SELECT COUNT(DISTINCT path) FROM faces WHERE person_id = p.id),
+                                    c.person_id IS NOT NULL, c.json, ({PersonQuery.ConditionFor(clauses, Param, today)}){nullChecks}
+                             FROM people p LEFT JOIN person_cards c ON c.person_id = p.id
+                             WHERE p.name IS NOT NULL AND p.hidden = 0
+                             ORDER BY 3 DESC";
+
+        var people = new List<PersonMatch>();
+        var missing = new Dictionary<string, int>();
+        int named = 0, noCard = 0;
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            named++;
+            if (reader.GetInt64(3) == 0) { noCard++; continue; }
+            var card = PersonFacts.FromJson(reader.GetString(4));
+            if (card == null) continue;
+
+            // A card that doesn't have what a question needs can't be a match or a non-match.
+            var lacking = new List<string>();
+            foreach (var clause in clauses)
+                foreach (var column in clause.Requires)
+                {
+                    var index = 6 + columns.IndexOf(column);
+                    if (reader.GetInt64(index) != 0 && !lacking.Contains(clause.MissingName)) lacking.Add(clause.MissingName);
+                }
+            if (lacking.Count > 0)
+            {
+                foreach (var name in lacking) missing[name] = missing.GetValueOrDefault(name) + 1;
+                continue;
+            }
+
+            var matched = !reader.IsDBNull(5) && reader.GetInt64(5) != 0;
+            var detail = string.Join(" · ", clauses.Select(c => c.Detail(card)).Where(d => !string.IsNullOrEmpty(d)).Distinct());
+            people.Add(new PersonMatch(reader.GetInt64(0), reader.GetString(1), reader.GetInt32(2), detail, matched));
+        }
+        return new PersonSearchReport(people, named, noCard, missing);
     });
 
     /// <summary>"Not this person": moves one face into a new group of its own and keeps it there.</summary>

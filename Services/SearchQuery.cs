@@ -20,6 +20,11 @@ namespace Ocula.Services;
 ///   capture            hastext             app:Terminal          (Capta captures)
 ///   text:invoice       text:"order confirmation"                  (only the text found in a screenshot)
 ///
+/// A name typed as plain words also finds the photos of a named person in People (their group name, or the full name on their
+/// card). Saved person cards can be asked about in plain English, alone or combined: "taller than 5'3\"", "born before 1990",
+/// "over 40", "born in Texas", "married", "has children", "actress", "speaks Spanish" (see <see cref="PersonQuery"/>). They only
+/// look at cards saved on this PC, and they only apply while People is on.
+///
 /// Every condition must match (AND). Values are passed as SQL parameters, never pasted in.
 /// </summary>
 public sealed class SearchQuery
@@ -32,12 +37,22 @@ public sealed class SearchQuery
 
     public string Text { get; }
 
-    public bool IsEmpty => _filters.Count == 0 && _words.Count == 0;
+    /// <summary>The questions about people found in the text ("born in Texas"), if People is on.</summary>
+    public IReadOnlyList<PersonClause> PersonClauses { get; } = Array.Empty<PersonClause>();
+
+    public bool IsEmpty => _filters.Count == 0 && _words.Count == 0 && PersonClauses.Count == 0;
 
     public SearchQuery(string text)
     {
         Text = text.Trim();
-        foreach (Match m in Token.Matches(Text))
+        var scan = Text;
+        if (FaceIndexer.Enabled)
+        {
+            var people = PersonQuery.Parse(Text, PersonQuery.KnownOccupations);
+            PersonClauses = people.Clauses;
+            scan = people.Remaining;
+        }
+        foreach (Match m in Token.Matches(scan))
         {
             var key = m.Groups["key"].Value.ToLowerInvariant();
             var op = m.Groups["op"].Value;
@@ -84,10 +99,15 @@ public sealed class SearchQuery
             // File name, tags and camera by substring; a Capta screenshot's app, window title and text by whole
             // word or start of a word (FTS5). The word is quoted whole, so nothing typed acts as an FTS5 operator.
             var clause = $"{Like("path", word)} OR {Like("tags", word)} OR {Like("camera", word)}";
+            // A named person in People: the group's name, or the full name on its card.
+            if (FaceIndexer.Enabled) clause += " OR " + PersonQuery.NameSql(word, Param);
             if (CaptureTextIndex.MatchExpression(word, includeText) is { } match)
                 clause += $" OR path IN (SELECT path FROM capture_fts WHERE capture_fts MATCH {Param(match)})";
             parts.Add($"({clause})");
         }
+
+        if (PersonClauses.Count > 0)
+            parts.Add(PersonQuery.PhotosSql(PersonClauses, Param, DateOnly.FromDateTime(DateTime.Today)));
 
         foreach (var (key, op, value) in _filters)
         {
@@ -163,6 +183,7 @@ public sealed class SearchQuery
                 _ => $"{key} {value}"
             });
         }
+        bits.AddRange(PersonClauses.Select(c => c.Label));
         bits.AddRange(_words.Select(w => $"“{w}”"));
         return string.Join(" · ", bits);
     }

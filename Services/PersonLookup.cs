@@ -51,6 +51,10 @@ public sealed class PersonFacts
     public int? BirthYear { get; set; }
     public string? DeathDate { get; set; }
 
+    /// <summary>"female" or "male" when Wikidata says so. Not shown on the card; only used so a search for "actress" can tell
+    /// an actress from an actor (Wikidata files both under "actor").</summary>
+    public string? Gender { get; set; }
+
     /// <summary>Shown as "Austin, Texas, United States".</summary>
     public string? BirthPlace { get; set; }
 
@@ -79,6 +83,23 @@ public sealed class PersonFacts
 
     /// <summary>Which source each field came from. Only "Wikidata" today; kept so another source can fill gaps later.</summary>
     public Dictionary<string, string> Sources { get; set; } = new();
+
+    /// <summary>The earliest and latest day the person can have been born, from how precisely Wikidata knows the date.</summary>
+    [JsonIgnore]
+    public (string Min, string Max)? BornRange
+    {
+        get
+        {
+            if (BirthDate == null) return null;
+            var parts = BirthDate.Split('-');
+            if (!int.TryParse(parts[0], out var year) || year < 1) return null;
+            if (parts.Length == 1) return ($"{year:0000}-01-01", $"{year:0000}-12-31");
+            if (!int.TryParse(parts[1], out var month) || month is < 1 or > 12) return null;
+            if (parts.Length == 2) return ($"{year:0000}-{month:00}-01", $"{year:0000}-{month:00}-{DateTime.DaysInMonth(year, month):00}");
+            if (!int.TryParse(parts[2], out var day) || day < 1 || day > DateTime.DaysInMonth(year, month)) return null;
+            return ($"{year:0000}-{month:00}-{day:00}", $"{year:0000}-{month:00}-{day:00}");
+        }
+    }
 
     public string ToJson() => JsonSerializer.Serialize(this);
 
@@ -299,6 +320,21 @@ public sealed class PersonLookup
         {
             facts.DeathDate = died.Text;
             facts.Sources["deathDate"] = "Wikidata";
+        }
+
+        // Gender, only for searching (see PersonFacts.Gender).
+        foreach (var statement in OrderedClaims(entity, "P21"))
+        {
+            var gender = ItemId(MainValue(statement)) switch
+            {
+                "Q6581072" or "Q1052281" or "Q15145779" => "female",
+                "Q6581097" or "Q2449503" or "Q15145778" => "male",
+                _ => null
+            };
+            if (gender == null) continue;
+            facts.Gender = gender;
+            facts.Sources["gender"] = "Wikidata";
+            break;
         }
 
         // Place.

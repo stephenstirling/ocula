@@ -421,7 +421,7 @@ Test on copies of your photos first.
 |---|---|
 | Photo windows with snap spots | Tested on one 3440x1440 monitor; second monitor, mixed scaling and other taskbar positions untested. Default is 6 spots (decided) |
 | Person card and lookup | Wikidata part built (`PersonLookup.cs`, `PeopleWindow`); 37 unit tests on hand-written JSON, a by-hand test against real Wikidata, and the window run once on a real library (October 2026): search, picker, card, saved row, rename removes the card. "Look up again", "Remove card", the no-match message and ticking tag chips were not tried. DBpedia and MusicBrainz fill-ins not built |
-| Search by person details | Not built |
+| Search by person details | Built (`PersonQuery.cs`, `MainWindow.PersonSearch.cs`); 56 unit tests (parser, and the SQL run on a small in-memory library) and tried by hand in the real app on three real Wikidata cards (October 2026). Name search ("Hilary Duff") works without writing tags |
 | Screenshot text search | Built and tested: FTS5 search, Ocula's text switch, "Remove saved text" button, untrusted-text handling, and Capta's own switch (on its own branch, `claude/capta-text-switch`, not yet merged). Checked with real Capta PNGs for Window captures only |
 | Camera firmware (detect only) | Research tool written (`tools/CameraProbe`), not yet run on a real camera; no UI. See `docs/CAMERA-FIRMWARE.md` |
 | Porta integration | Not built; blocked until the `stirling-shared` source is available |
@@ -488,7 +488,7 @@ _Still to come_
   - Skipped on purpose: TMDB (needs an API key that can't be hidden in a distributed app, and
     non-commercial terms), IMDb datasets (non-commercial, little data), Google Knowledge Graph
     (terms don't allow storing the results).
-  - **Search by person details (not built).** Once a card is saved, the normal search box understands things
+  - **Search by person details (built; see "How it works" below).** Once a card is saved, the normal search box understands things
     like `people taller than 5'3"`, `born before 1990`, `over 40`, `married`, `has children`,
     `actress`, `born in Texas` or `speaks Spanish`, and they can be combined. Ocula shows how it read the query
     ("Understood as" chips you can remove) and returns photos of the matching people. It only
@@ -496,6 +496,28 @@ _Still to come_
     record, 4 named groups haven't been looked up"). It never guesses for people with no card.
     The cards would be stored as fields (height in cm, birth date, place, occupation, spouse
     status, child count), not just text, so these are plain database filters rather than AI. Children appear as a count only, never by name.
+  - How person search works (October 2026). Name: a plain word in the search box also matches photos of a visible named group whose
+    name, or whose card's full name, contains it (so "Hilary Duff" finds her photos without a tag; each word is matched on its own, so
+    two people named "Hilary" and "Duff" would both match). Details: `PersonQuery.Parse` reads these out of the typed text, in any
+    combination, and what it does not recognise is left for the normal search: height (`taller than 5'3"`, `shorter than 5 ft 6`,
+    `over 160 cm`), age (`over 40`, `under 30`, `aged 30`, `older than 40`), birth (`born before 1990`, `born after 1990`,
+    `born in 1985`), birthplace (`born in Texas`: any level of the saved place chain), `married`, `has children`, `speaks Spanish`,
+    `actress` and any occupation that is saved on some card (`singer`, `film actor`; plurals work). Every question has to hold for the
+    same person. A word in quotes is never read as a question. Only visible named groups with a saved card count, and only while People is on.
+    Under the title the search shows "Understood as" chips (each removes its words from the search box and searches again), "Who matched"
+    (every card that could answer, with what the card says, and Match or Not a match; a name opens that person's photos), and "Not counted"
+    (people whose card lacks the needed field, for example "1 person has no height on record", and named groups with no card, with a
+    "Look them up..." link to People). Dates: a birth date is stored as the earliest and latest day it can be (`born_min`, `born_max`),
+    so a year-only date never counts as a certain age; age counts living people only (a death date excludes them).
+    Choices to review: "actress" needs the card's gender (Wikidata files actresses under "actor"), so the card now keeps `Gender` ("female" or
+    "male"; not shown on the card). Cards saved before this have no gender until "Look up again". "married" means a current spouse is on
+    record, and nobody is counted as unmarried (Wikidata can't say that). Over 40 means older than 40. Height comparisons are strict.
+    An occupation word is a question only if a saved card has it (so ordinary searches don't change), and the list of occupations is
+    refreshed when a card is saved or removed.
+  - Tried in the real app (October 2026, three real cards written into the library by hand, then removed): "Hilary Duff", "over 40"
+    (only Shakira, 49), "actresses born in Texas" (only Hilary Duff), "taller than 5'3" born in Pennsylvania", "speaks Spanish", "married",
+    "has children", "born in 1987", "singer", and quoted words; removing chips; the Not counted note. Not tried: "Look them up..."
+    opening People, a screen reader on the new panel, a very large result set, and saving such a search as a smart album.
   - The Wikidata picker lists people only (items that are instances of "human"); given names,
     disambiguation pages and other non-person entries are filtered out. The name tags it offers
     are chips you choose from, for example "Shakira" (ticked) and her full name (not ticked),

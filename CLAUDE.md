@@ -57,7 +57,8 @@ names for tiles and sidebar entries, a Release MSIX build, and the Map page offl
   unresolved (docs/KNOWN-ISSUES.md): settle before release.
   The Wikidata person card ("Look up on Wikidata", `Services/PersonLookup.cs`) is built and was checked against real
   Wikidata and run once in the People window (search, picker, card, rename removes it). Not tried: "Look up again", "Remove card",
-  ticking a tag chip, offline. DBpedia, MusicBrainz and search by person details are not built.
+  ticking a tag chip, offline. Search by person details ("Hilary Duff", "taller than 5'3\"", "actresses born in Texas") is built
+  (`Services/PersonQuery.cs`) and was tried in the real app on three real cards. DBpedia and MusicBrainz are not built.
 - Capta hand-off: ocula: links (import, edit; `captures` was exercised) with a real Capta. Screenshot text search
   (FTS5, Settings switch, Remove button, untrusted-text handling) was checked in October 2026 on generated
   Capta-format PNGs and, for Window captures only, on PNGs from a real Capta (with and without Capta's new "Save
