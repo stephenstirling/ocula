@@ -22,12 +22,12 @@ information. In short: your photos and personal data stay on your computer.
   the people you have named in People. It holds, for each person you have named: the name you typed, other names Wikidata gave for
   them (only if you looked them up), a short description such as "American actress and singer" (only if you looked them up; any
   description with a birth year or other personal detail is left out), how many photos they are in, and the location of a small
-  picture of their face. Those pictures (about 96 pixels, cut from your photos) are saved next to the file. People you have not
-  named, and groups you have hidden, are not included. Nothing else from a person's card is shared: no birth date, birthplace, height,
-  spouse, children, languages or occupations. The files are saved in a folder that every app from the same publisher on this Windows
-  account can read (`%LOCALAPPDATA%\Publishers\<publisher id>\Stirling\Ocula`), and they are not encrypted, so anything running as you
-  can read them. Nothing is sent over the internet. Turning the switch off, turning People off, or choosing "Delete all face data"
-  deletes the file and the pictures. Ocula also never writes them while the switch is off.
+  picture of their face. Those pictures (about 96 pixels, cut from your photos) are saved next to the file, in a folder called
+  `people-thumbs`. People you have not named, and groups you have hidden, are not included. Nothing else from a person's card is
+  shared: no birth date, birthplace, height, spouse, children, languages or occupations. The files are saved in
+  `%LOCALAPPDATA%\Stirling\Ocula`, a normal folder in your user profile that other programs running as you can read; they are not
+  encrypted. Nothing is sent over the internet. Turning the switch off, turning People off, or choosing "Delete all face data" deletes
+  the file and the pictures. Ocula never writes them while the switch is off.
 - **Settings** (theme, folders, export presets) are stored on your PC.
 
 Ocula has no accounts, no advertising, and no analytics or tracking.
