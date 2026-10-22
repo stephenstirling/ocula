@@ -258,19 +258,47 @@ public sealed partial class PeopleWindow : Window
         }
 
         Row("Full name", facts.FullName);
-        Row("Born", Join(" · ", facts.BirthDateText, facts.BirthPlace));
-        Row("Died", facts.DeathDateText);
+        Row("Date of birth", facts.BirthDateText);
+        Row("Place of birth", facts.BirthPlace);
+
+        Row("Date of death", facts.DeathDateText);
+        Row("Place of death", facts.DeathPlace);
+        Row("Cause of death", facts.CauseOfDeath);
+
         Row("Occupation", string.Join(", ", facts.Occupations));
-        Row(facts.Spouses.Count > 1 ? "Spouses" : "Spouse", string.Join(", ", facts.Spouses.Select(s => s.Display)));
-        Row("Former spouses", string.Join(", ", facts.FormerSpouses.Select(s => s.Display)));
-        Row("Partners", string.Join(", ", facts.Partners.Select(s => s.Display)));
-        Row("Children", facts.ChildrenText);
-        Row("Height", facts.HeightText);
+
+        Row("Height", facts.HeightText is { } ht
+            ? (facts.Sources.TryGetValue("height", out var hs) ? $"{ht} · {hs}" : ht)
+            : null);
+        Row("Bra size", facts.BraSize is { Length: > 0 } bs
+            ? (facts.BraSizeEvidence is { Length: > 0 } ev
+                ? $"{bs} ({ev})" + (facts.Sources.TryGetValue("braSize", out var bsSrc) ? $" · {bsSrc}" : "")
+                : bs)
+            : null);
+
+        Row(facts.Spouses.Count > 1 ? "Spouses" : "Spouse",
+            string.Join(", ", facts.Spouses.Select(s => s.Display)));
+        Row(facts.FormerSpouses.Count > 1 ? "Former spouses" : "Former spouse",
+            string.Join(", ", facts.FormerSpouses.Select(s => s.Display)));
+        Row(facts.Partners.Count > 1 ? "Partners" : "Partner",
+            string.Join(", ", facts.Partners.Select(s => s.Display)));
+        Row(facts.FormerPartners.Count > 1 ? "Former partners" : "Former partner",
+            string.Join(", ", facts.FormerPartners.Select(s => s.Display)));
+
+        if (facts.ChildrenDetails.Count > 0)
+            Row("Children", string.Join("\n", facts.ChildrenDetails.Select(c => c.Display)));
+        else
+            Row("Children", facts.ChildrenText);
+
         Row("Languages", string.Join(", ", facts.Languages));
         if (CardRows.Children.Count == 0) Row("Wikidata has", "no facts about this person that Ocula shows.");
 
-        CardCredit.Text = $"From Wikidata (CC0), retrieved {facts.RetrievedAt.LocalDateTime:MMMM d, yyyy}. It is only what Wikidata lists, " +
-                          "can be out of date, and often leaves things out. A spouse is one with no end date there.";
+        var sources = new List<string> { "Wikidata (CC0)" };
+        if (facts.Sources.Values.Any(v => v == "CelebHeights")) sources.Add("CelebHeights");
+        if (facts.Sources.TryGetValue("braSize", out var braSrc)) sources.Add(braSrc);
+        CardCredit.Text = $"From {string.Join(", ", sources)}, retrieved {facts.RetrievedAt.LocalDateTime:MMMM d, yyyy}. " +
+                          "Only what those sources list. Death fields appear only when Wikidata has a death date. " +
+                          "A spouse is one with no end date on Wikidata.";
         CardCredit.Visibility = Visibility.Visible;
         CardLink.NavigateUri = new Uri("https://www.wikidata.org/wiki/" + facts.WikidataId);
         CardLink.Visibility = Visibility.Visible;
@@ -333,6 +361,30 @@ public sealed partial class PeopleWindow : Window
                 DiagnosticLog.Write("Wikidata read failed: " + ex.GetType().Name);
                 CardNote.Text = "Couldn't read that person from Wikidata. Try again in a moment.";
                 return;
+            }
+            // Enrich height (CelebHeights) and bra size when online lookup is allowed.
+            try
+            {
+                var ch = new CelebHeightsLookup(WikidataClient);
+                var (chHeight, _) = await ch.LookupAsync(name);
+                if (chHeight != null)
+                    CelebHeightsLookup.ApplyHeight(facts, chHeight);
+            }
+            catch (Exception ex) when (ex is System.Net.Http.HttpRequestException or TaskCanceledException)
+            {
+                DiagnosticLog.Write("CelebHeights lookup failed: " + ex.GetType().Name);
+            }
+
+            try
+            {
+                var bra = new BraSizeLookup(WikidataClient);
+                var braResult = await bra.LookupAsync(name);
+                if (braResult != null)
+                    BraSizeLookup.Apply(facts, braResult);
+            }
+            catch (Exception ex) when (ex is System.Net.Http.HttpRequestException or TaskCanceledException)
+            {
+                DiagnosticLog.Write("Bra size lookup failed: " + ex.GetType().Name);
             }
 
             await _main.Library.SavePersonCardAsync(person.Id, facts);

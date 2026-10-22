@@ -30,6 +30,13 @@ public sealed record Relation(string Name, string? Id, int? FromYear, int? ToYea
     public string Display => Years.Length == 0 ? Name : $"{Name} ({Years})";
 }
 
+/// <summary>A child as publicly listed (name, optional birth date text).</summary>
+public sealed record ChildInfo(string Name, string? Id, string? BirthDate)
+{
+    [JsonIgnore]
+    public string Display => string.IsNullOrWhiteSpace(BirthDate) ? Name : $"{Name} · {BirthDate}";
+}
+
 /// <summary>
 /// What Wikidata says about one person. Every field is either something Wikidata listed or empty: nothing is guessed.
 /// Wikidata is edited by anyone, so every text here has been cleaned (see <see cref="CaptureTextIndex.CleanLine"/>) before it
@@ -50,6 +57,9 @@ public sealed class PersonFacts
     public string? BirthDate { get; set; }
     public int? BirthYear { get; set; }
     public string? DeathDate { get; set; }
+    public string? DeathPlace { get; set; }
+    /// <summary>Cause(s) of death from Wikidata P509 labels, when present.</summary>
+    public string? CauseOfDeath { get; set; }
 
     /// <summary>Shown as "Austin, Texas, United States".</summary>
     public string? BirthPlace { get; set; }
@@ -63,21 +73,37 @@ public sealed class PersonFacts
     public List<Relation> Spouses { get; set; } = new();
     public List<Relation> FormerSpouses { get; set; } = new();
 
-    /// <summary>Unmarried partners (Wikidata P451, which isn't gender specific).</summary>
+    /// <summary>Current unmarried partners (Wikidata P451, no end date).</summary>
     public List<Relation> Partners { get; set; } = new();
 
-    /// <summary>A number only; children are never named.</summary>
+    /// <summary>Former unmarried partners (Wikidata P451 with an end date).</summary>
+    public List<Relation> FormerPartners { get; set; } = new();
+
+    /// <summary>How many children Wikidata states or lists.</summary>
     public int? Children { get; set; }
 
     /// <summary>True when the count is how many children Wikidata lists, not a number it states.</summary>
     public bool ChildrenFromList { get; set; }
 
+    /// <summary>Public children from Wikidata P40 (name + birth date when the child item has P569).</summary>
+    public List<ChildInfo> ChildrenDetails { get; set; } = new();
+
     public double? HeightCm { get; set; }
+
+    /// <summary>Reported bra size label when a specialty source provides one (e.g. "32D").</summary>
+    public string? BraSize { get; set; }
+
+    /// <summary>Evidence tier from the bra-size source: Confirmed, Reported, Estimated, Conflicting.</summary>
+    public string? BraSizeEvidence { get; set; }
+    public int? BraBandInches { get; set; }
+    public int? BraCupRank { get; set; }
+    public int? BraVolumeIndex { get; set; }
+
     public List<string> Languages { get; set; } = new();
 
     public DateTimeOffset RetrievedAt { get; set; }
 
-    /// <summary>Which source each field came from. Only "Wikidata" today; kept so another source can fill gaps later.</summary>
+    /// <summary>Which source each field came from (Wikidata, CelebHeights, CelebrityBraSizes, …).</summary>
     public Dictionary<string, string> Sources { get; set; } = new();
 
     public string ToJson() => JsonSerializer.Serialize(this);
@@ -95,6 +121,9 @@ public sealed class PersonFacts
     [JsonIgnore]
     public string? DeathDateText => FormatDate(DeathDate);
 
+    [JsonIgnore]
+    public string? CauseOfDeathText => string.IsNullOrWhiteSpace(CauseOfDeath) ? null : CauseOfDeath;
+
     /// <summary>For example 5′3″ (160 cm).</summary>
     [JsonIgnore]
     public string? HeightText
@@ -108,7 +137,27 @@ public sealed class PersonFacts
     }
 
     [JsonIgnore]
-    public string? ChildrenText => Children is int n ? (ChildrenFromList ? $"{n} (as listed)" : n.ToString(CultureInfo.InvariantCulture)) : null;
+    public string? ChildrenText
+    {
+        get
+        {
+            if (ChildrenDetails.Count > 0)
+                return string.Join("; ", ChildrenDetails.Select(c => c.Display));
+            if (Children is int n)
+                return ChildrenFromList ? $"{n} (as listed)" : n.ToString(CultureInfo.InvariantCulture);
+            return null;
+        }
+    }
+
+    [JsonIgnore]
+    public string? BraSizeText
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(BraSize)) return null;
+            return string.IsNullOrWhiteSpace(BraSizeEvidence) ? BraSize : $"{BraSize} ({BraSizeEvidence})";
+        }
+    }
 
     private static string? FormatDate(string? iso)
     {
@@ -142,7 +191,7 @@ public sealed class PersonLookup
         var client = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
         // Wikimedia asks every app to identify itself with a contact address.
         // TODO: same placeholder as CameraImageService; replace both with a real contact before release.
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("Ocula/0.1 (contact: you@example.com)");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("Ocula/0.1");
         return client;
     }
 
@@ -215,7 +264,32 @@ public sealed class PersonLookup
 
         var wanted = ReferencedItems(entity).Concat(chainIds).Distinct().ToList();
         var labels = await LabelsAsync(wanted, cancel);
-        return Build(entity, labels, chainIds, now);
+        var facts = Build(entity, labels, chainIds, now);
+
+        // Public birth dates for children (P569 on each child item), when Wikidata has them.
+        if (facts.ChildrenDetails.Count > 0)
+        {
+            var withDates = new List<ChildInfo>();
+            foreach (var child in facts.ChildrenDetails)
+            {
+                string? birthText = null;
+                if (child.Id is { } cid)
+                {
+                    try
+                    {
+                        using var childDoc = JsonDocument.Parse(await _http.GetStringAsync(
+                            $"{Api}?action=wbgetclaims&format=json&property=P569&entity={cid}", cancel));
+                        if (BestTime(childDoc.RootElement, "P569") is { } born)
+                            birthText = FormatChildDate(born.Text);
+                    }
+                    catch (HttpRequestException) { /* leave date empty */ }
+                }
+                withDates.Add(child with { BirthDate = birthText });
+            }
+            facts.ChildrenDetails = withDates;
+        }
+
+        return facts;
     }
 
     private async Task<string?> FirstClaimItemAsync(string entityId, string property, CancellationToken cancel)
@@ -256,7 +330,7 @@ public sealed class PersonLookup
     /// <summary>The items whose names are needed to write the card: occupations, spouses, partners, languages.</summary>
     public static IEnumerable<string> ReferencedItems(JsonElement entity)
     {
-        foreach (var property in new[] { "P106", "P26", "P451", "P1412" })
+        foreach (var property in new[] { "P106", "P26", "P451", "P40", "P1412", "P20", "P509" })
             foreach (var id in ItemValues(entity, property, ranked: true))
                 yield return id;
     }
@@ -301,6 +375,29 @@ public sealed class PersonLookup
             facts.Sources["deathDate"] = "Wikidata";
         }
 
+        // Place of death (P20) — only meaningful when there is a death date.
+        if (facts.DeathDate != null && FirstItem(entity, "P20") is { } deathPlaceId)
+        {
+            var dp = Label(deathPlaceId);
+            if (dp.Length > 0)
+            {
+                facts.DeathPlace = dp;
+                facts.Sources["deathPlace"] = "Wikidata";
+            }
+        }
+
+        // Cause of death (P509) labels.
+        if (facts.DeathDate != null)
+        {
+            var causes = ItemValues(entity, "P509", ranked: true).Select(Label)
+                .Where(s => s.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).Take(4).ToList();
+            if (causes.Count > 0)
+            {
+                facts.CauseOfDeath = string.Join("; ", causes);
+                facts.Sources["causeOfDeath"] = "Wikidata";
+            }
+        }
+
         // Place.
         var chain = placeChain.Select(Label).Where(s => s.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         if (chain.Count > 0)
@@ -336,21 +433,43 @@ public sealed class PersonLookup
         if (facts.Spouses.Count > 0) facts.Sources["spouse"] = "Wikidata";
         if (facts.FormerSpouses.Count > 0) facts.Sources["formerSpouses"] = "Wikidata";
 
-        // Unmarried partners.
+        // Unmarried partners: with an end date they are "former"; without, current.
         foreach (var statement in Claims(entity, "P451"))
         {
             if (IsDeprecated(statement) || ItemId(MainValue(statement)) is not { } pid) continue;
             var name = Label(pid);
             if (name.Length == 0) continue;
-            facts.Partners.Add(new Relation(name, pid, QualifierYear(statement, "P580"), QualifierYear(statement, "P582")));
+            var relation = new Relation(name, pid, QualifierYear(statement, "P580"), QualifierYear(statement, "P582"));
+            var ended = relation.ToYear != null || HasQualifier(statement, "P582");
+            (ended ? facts.FormerPartners : facts.Partners).Add(relation);
         }
         facts.Partners = facts.Partners.DistinctBy(r => (r.Id, r.FromYear)).OrderBy(r => r.FromYear ?? int.MaxValue).ToList();
+        facts.FormerPartners = facts.FormerPartners.DistinctBy(r => (r.Id, r.FromYear)).OrderBy(r => r.FromYear ?? int.MaxValue).ToList();
         if (facts.Partners.Count > 0) facts.Sources["partners"] = "Wikidata";
+        if (facts.FormerPartners.Count > 0) facts.Sources["formerPartners"] = "Wikidata";
 
-        // Children: the number Wikidata states (P1971); failing that, how many it lists (P40). Never named.
+        // Children: public names from P40 when labelled; birth dates filled in GetFactsAsync when available.
+        foreach (var statement in Claims(entity, "P40"))
+        {
+            if (IsDeprecated(statement) || ItemId(MainValue(statement)) is not { } cid) continue;
+            var name = Label(cid);
+            if (name.Length == 0) continue;
+            facts.ChildrenDetails.Add(new ChildInfo(name, cid, null));
+        }
+        facts.ChildrenDetails = facts.ChildrenDetails
+            .GroupBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .ToList();
+
         if (BestQuantity(entity, "P1971") is { } stated && stated >= 0 && stated <= 60 && stated == Math.Floor(stated))
         {
             facts.Children = (int)stated;
+            facts.Sources["children"] = "Wikidata";
+        }
+        else if (facts.ChildrenDetails.Count > 0)
+        {
+            facts.Children = facts.ChildrenDetails.Count;
+            facts.ChildrenFromList = true;
             facts.Sources["children"] = "Wikidata";
         }
         else

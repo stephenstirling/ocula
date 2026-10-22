@@ -135,6 +135,13 @@ public sealed class IndexService : IDisposable
                 vec      BLOB NOT NULL,
                 PRIMARY KEY (path, model));");
     }
+            // Person-detail search columns (idempotent on older libraries).
+        foreach (var column in new[] { "bra_size TEXT", "cup_rank INTEGER" })
+        {
+            try { Execute($"ALTER TABLE person_cards ADD COLUMN {column};");
+}
+            catch (SqliteException) { /* already there */ }
+        }
 
     // ================= Reading =================
 
@@ -811,32 +818,34 @@ public sealed class IndexService : IDisposable
         return survivor;
     });
 
-    // ----- Person cards (Wikidata) -----
+// ----- Person cards (Wikidata) -----
 
-    /// <summary>Saves (or replaces) the card for a named group. Kept in the library only, never written into photos.</summary>
-    public Task SavePersonCardAsync(long personId, PersonFacts facts) => RunAsync(() =>
-    {
-        using var cmd = _db.CreateCommand();
-        cmd.CommandText = @"INSERT OR REPLACE INTO person_cards
-              (person_id, wikidata_id, birth_date, birth_year, birth_place, occupations, spouse, children, height_cm, languages, retrieved, json)
-            VALUES ($id, $qid, $bd, $by, $bp, $occ, $sp, $ch, $h, $lang, $at, $json)";
-        cmd.Parameters.AddWithValue("$id", personId);
-        cmd.Parameters.AddWithValue("$qid", facts.WikidataId);
-        cmd.Parameters.AddWithValue("$bd", (object?)facts.BirthDate ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$by", (object?)facts.BirthYear ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$bp", facts.BirthPlaceChain.Count == 0 ? DBNull.Value : string.Join(" | ", facts.BirthPlaceChain));
-        cmd.Parameters.AddWithValue("$occ", facts.Occupations.Count == 0 ? DBNull.Value : string.Join(" | ", facts.Occupations));
-        cmd.Parameters.AddWithValue("$sp", facts.Spouses.Count == 0 ? DBNull.Value : string.Join(" | ", facts.Spouses.Select(s => s.Name)));
-        cmd.Parameters.AddWithValue("$ch", (object?)facts.Children ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$h", (object?)facts.HeightCm ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$lang", facts.Languages.Count == 0 ? DBNull.Value : string.Join(" | ", facts.Languages));
-        cmd.Parameters.AddWithValue("$at", facts.RetrievedAt.ToString("o", CultureInfo.InvariantCulture));
-        cmd.Parameters.AddWithValue("$json", facts.ToJson());
-        cmd.ExecuteNonQuery();
-        return true;
-    });
+/// <summary>Saves (or replaces) the card for a named group. Kept in the library only, never written into photos.</summary>
+public Task SavePersonCardAsync(long personId, PersonFacts facts) => RunAsync(() =>
+{
+    using var cmd = _db.CreateCommand();
+    cmd.CommandText = @"INSERT OR REPLACE INTO person_cards
+              (person_id, wikidata_id, birth_date, birth_year, birth_place, occupations, spouse, children, height_cm, languages, retrieved, json, bra_size, cup_rank)
+            VALUES ($id, $qid, $bd, $by, $bp, $occ, $sp, $ch, $h, $lang, $at, $json, $bra, $cup)";
+    cmd.Parameters.AddWithValue("$id", personId);
+    cmd.Parameters.AddWithValue("$qid", facts.WikidataId);
+    cmd.Parameters.AddWithValue("$bd", (object?)facts.BirthDate ?? DBNull.Value);
+    cmd.Parameters.AddWithValue("$by", (object?)facts.BirthYear ?? DBNull.Value);
+    cmd.Parameters.AddWithValue("$bp", facts.BirthPlaceChain.Count == 0 ? DBNull.Value : string.Join(" | ", facts.BirthPlaceChain));
+    cmd.Parameters.AddWithValue("$occ", facts.Occupations.Count == 0 ? DBNull.Value : string.Join(" | ", facts.Occupations));
+    cmd.Parameters.AddWithValue("$sp", facts.Spouses.Count == 0 ? DBNull.Value : string.Join(" | ", facts.Spouses.Select(s => s.Name)));
+    cmd.Parameters.AddWithValue("$ch", (object?)facts.Children ?? DBNull.Value);
+    cmd.Parameters.AddWithValue("$h", (object?)facts.HeightCm ?? DBNull.Value);
+    cmd.Parameters.AddWithValue("$lang", facts.Languages.Count == 0 ? DBNull.Value : string.Join(" | ", facts.Languages));
+    cmd.Parameters.AddWithValue("$at", facts.RetrievedAt.ToString("o", CultureInfo.InvariantCulture));
+    cmd.Parameters.AddWithValue("$json", facts.ToJson());
+    cmd.Parameters.AddWithValue("$bra", (object?)facts.BraSize ?? DBNull.Value);
+    cmd.Parameters.AddWithValue("$cup", (object?)facts.BraCupRank ?? DBNull.Value);
+    cmd.ExecuteNonQuery();
+    return true;
+});
 
-    public Task<PersonFacts?> GetPersonCardAsync(long personId) => RunAsync(() =>
+public Task<PersonFacts?> GetPersonCardAsync(long personId) => RunAsync(() =>
     {
         using var cmd = _db.CreateCommand();
         cmd.CommandText = "SELECT json FROM person_cards WHERE person_id = $id";
@@ -844,7 +853,83 @@ public sealed class IndexService : IDisposable
         return cmd.ExecuteScalar() is string json ? PersonFacts.FromJson(json) : null;
     });
 
-    public Task DeletePersonCardAsync(long personId) => RunAsync(() =>
+/// <summary>
+/// Saved person cards whose group name matches any of <paramref name="names"/>
+/// (case-insensitive), or whose card JSON Name/FullName matches.
+/// </summary>
+public Task<List<ResolvedPersonCard>> GetPersonCardsMatchingNamesAsync(IReadOnlyList<string> names) => RunAsync(() =>
+{
+    var result = new List<ResolvedPersonCard>();
+    if (names.Count == 0) return result;
+
+    using (var cmd = _db.CreateCommand())
+    {
+        cmd.CommandText = @"
+                SELECT p.id, p.name, c.json
+                FROM people p
+                INNER JOIN person_cards c ON c.person_id = p.id
+                WHERE p.name IS NOT NULL AND length(trim(p.name)) > 0";
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            var id = reader.GetInt64(0);
+            var groupName = reader.GetString(1);
+            var json = reader.GetString(2);
+            var facts = PersonFacts.FromJson(json);
+            if (facts == null) continue;
+
+            foreach (var tag in names)
+            {
+                if (PersonCardResolver.NamesMatch(tag, groupName) ||
+                    PersonCardResolver.NamesMatch(tag, facts.Name) ||
+                    PersonCardResolver.NamesMatch(tag, facts.FullName))
+                {
+                    if (result.Any(r => r.PersonId == id)) break;
+                    result.Add(new ResolvedPersonCard
+                    {
+                        PersonId = id,
+                        GroupName = groupName,
+                        Facts = facts,
+                        MatchedTag = tag
+                    });
+                    break;
+                }
+            }
+        }
+    }
+
+    return result;
+});
+
+/// <summary>Person ids whose saved cards match structured person-detail filters.</summary>
+public Task<List<long>> FindPersonIdsMatchingDetailAsync(PersonDetailQuery d) => RunAsync(() =>
+{
+    using var cmd = _db.CreateCommand();
+    var clauses = new List<string> { "1=1" };
+
+    void Bind(string name, object? value) =>
+        cmd.Parameters.AddWithValue(name, value ?? DBNull.Value);
+
+    if (d.HeightMinCm is double hMin) { clauses.Add("height_cm > $hMin"); Bind("$hMin", hMin); }
+    if (d.HeightMaxCm is double hMax) { clauses.Add("height_cm < $hMax"); Bind("$hMax", hMax); }
+    if (d.CupMinRank is int cMin) { clauses.Add("cup_rank >= $cMin"); Bind("$cMin", cMin); }
+    if (d.CupMaxRank is int cMax) { clauses.Add("cup_rank <= $cMax"); Bind("$cMax", cMax); }
+    if (d.BraSizeExact is string be) { clauses.Add("upper(trim(bra_size)) = upper($bra)"); Bind("$bra", be); }
+    if (d.BirthPlaceContains is string pl) { clauses.Add("birth_place LIKE $place"); Bind("$place", "%" + pl + "%"); }
+    if (d.OccupationContains is string oc) { clauses.Add("occupations LIKE $occ"); Bind("$occ", "%" + oc + "%"); }
+    if (d.HasSpouse == true) clauses.Add("spouse IS NOT NULL AND length(spouse) > 0");
+    if (d.HasChildren == true) clauses.Add("children IS NOT NULL AND children >= 1");
+    if (d.MinChildren is int mc) { clauses.Add("children >= $mc"); Bind("$mc", mc); }
+    if (d.BirthYearMin is int y0) { clauses.Add("birth_year >= $y0"); Bind("$y0", y0); }
+    if (d.BirthYearMax is int y1) { clauses.Add("birth_year <= $y1"); Bind("$y1", y1); }
+
+    cmd.CommandText = "SELECT person_id FROM person_cards WHERE " + string.Join(" AND ", clauses);
+    var ids = new List<long>();
+    using var reader = cmd.ExecuteReader();
+    while (reader.Read()) ids.Add(reader.GetInt64(0));
+    return ids;
+});
+public Task DeletePersonCardAsync(long personId) => RunAsync(() =>
     {
         Execute($"DELETE FROM person_cards WHERE person_id = {personId};");
         return true;
