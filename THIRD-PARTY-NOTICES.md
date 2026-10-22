@@ -42,6 +42,10 @@ Camera photos are downloaded at run time from Wikimedia Commons, found through W
 user asks, and are credited on the card. Each photo is under its own free licence and is credited in the
 app with a link to its Commons page.
 
+When a person's card is missing a fact Wikidata doesn't have, Ocula may fill it, only when the user asks for the look-up, from DBpedia
+(https://www.dbpedia.org, data derived from Wikipedia, available under CC BY-SA 3.0; the card credits it and says which facts came from it) and
+MusicBrainz (https://musicbrainz.org, core data in the public domain under CC0). Facts taken from DBpedia stay under CC BY-SA.
+
 ---
 
 ## Licence texts

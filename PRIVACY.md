@@ -41,11 +41,14 @@ metadata. Downloaded camera images are cached on your PC. These services are run
 Wikimedia Foundation under its own privacy policy: https://foundation.wikimedia.org/wiki/Policy:Privacy_policy
 
 **Person details (optional).** In People, when you press "Look up on Wikidata" for a group you have named, Ocula sends
-that name to Wikidata, then asks Wikidata for the facts about the person you pick (birth date and place, occupation,
-spouse, number of children, height, languages). Nothing is sent until you press the button, and no photos, faces or
+that name to Wikidata, then asks Wikidata for the facts about the person you pick (birth date and place, death date, place and cause,
+occupation, spouse, number of children, height, languages). If the card is then missing something, Ocula asks DBpedia
+(https://dbpedia.org) or MusicBrainz (https://musicbrainz.org) to fill it, using only an address Wikidata gave for that person (their English
+Wikipedia page title, or their MusicBrainz id), never the name you typed. Those sites see your IP address and that address. DBpedia's answers are
+credited on the card (its data is CC BY-SA). Nothing is sent until you press the button, and no photos, faces or
 file names are ever sent. The facts are kept on your PC only and you can remove each card. Wikidata is run by the
 Wikimedia Foundation under its own privacy policy (linked above). Turn it off in **Settings > Privacy > Look up people
-on Wikidata**.
+online**.
 
 You can turn camera photos off in **Settings > Privacy > Show camera photos**. With this, person lookups, the map and
 automatic update checks turned off, Ocula makes no internet requests of its own.

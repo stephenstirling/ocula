@@ -444,7 +444,7 @@ _Still to come_
     before release.
   - Similar faces are grouped; you name a group once and Ocula offers that name as a tag on
     every matching photo, including in the web downloader's "Suggested tags".
-  - **Person card and lookup (Wikidata part built; DBpedia and MusicBrainz not built).** Optional "Look up on Wikidata" when you name someone: Ocula lists matches with a short
+  - **Person card and lookup (built: Wikidata, then DBpedia and MusicBrainz for gaps).** Optional "Look up on Wikidata" when you name someone: Ocula lists matches with a short
     description (many people share a name) and you pick one. The person card (full name including
     middle names, from Wikidata's "birth name" when it has one; date and place of
     birth, occupation, current spouse, number of children, height and languages spoken when Wikidata has them) comes from Wikidata (CC0), is kept in the local library only, and only the
@@ -472,8 +472,7 @@ _Still to come_
     death and Cause of death (only for someone Wikidata gives a death date; the last two are new, read from Wikidata P20 and P509, so an older card
     needs "Look up again" to get them), Occupation, Height, Spouse(s), Former spouses, Partners, Children (a count), Languages. The credit line
     (`PersonFacts.CreditText`) names every source in the card's `Sources` (today only "Wikidata (CC0)") and keeps the "can be out of date" caveat; a
-    height is followed by its source only when the card has more than one source. **Not built, and not added: second sources** (DBpedia,
-    MusicBrainz, a heights site), named children with birth dates (the design here is a count only, never by name), and body-measurement fields
+    height is followed by its source only when the card has more than one source. **Not built, and not added:** a heights site, named children with birth dates (the design here is a count only, never by name), and body-measurement fields
     (CLAUDE.md: not wanted). A brief that described those as "already on PersonFacts" was wrong: they are not in this code.
   - **Card over a person's photos (October 2026).** When the main grid shows one person's photos (People > "Show these photos", an `ocula:person`
     link, or a name in "Who matched"), a card sits above the photos: their face, the Wikidata description, the same rows as the People window
@@ -486,9 +485,20 @@ _Still to come_
     (full name, born February 2, 1977 in Barranquilla, Atlántico Department, Colombia, occupations, partners with years, 2 children, 5'2"
     (157 cm), languages, credit line and link), the tag-chip dialog offered the birth name unticked, the `person_cards` row was written, no
     tag reached any photo, and clearing the name removed the card. Not tried: "Look up again", "Remove card", the no-match and
-    offline messages, ticking a tag chip (that writes into photos), a person with a current spouse. Not built: search by person details,
-    DBpedia and MusicBrainz fill-ins, the two notices they would need, and a contact address in the Wikimedia User-Agent (the same
-    placeholder as camera photos, to replace before release).
+    offline messages, ticking a tag chip (that writes into photos), a person with a current spouse. Still to do: a contact address in the
+    Wikimedia, DBpedia and MusicBrainz User-Agent (the same placeholder as camera photos, to replace before release).
+  - **Second sources (built, October 2026; `Services/PersonSources.cs`).** After Wikidata, and only if the card is missing something the source can
+    give, DBpedia (one SPARQL request) and MusicBrainz (one request, at most one a second) are asked together, by ids Wikidata gave: the English
+    Wikipedia title (`sitelinks`) and the MusicBrainz artist id (P434). The name typed is never sent. They fill only blanks, never change what
+    Wikidata has, drop a fact that doesn't check out (a height outside 50 to 260 cm, a date that isn't real, a death before the birth, a place or
+    cause with no death date) and record the source per field (`Sources`), so the card credits "Wikidata (CC0), DBpedia (CC BY-SA), MusicBrainz (CC0)"
+    and a height says which source it came from once there are several. DBpedia gives height, birth date and place, death date, place and cause;
+    MusicBrainz (people only, not bands) gives birth and death dates and places. A failure of either is logged without the name and ignored.
+    Both notices are in `THIRD-PARTY-NOTICES.md` and `AppInfo.Notices`; PRIVACY.md and the Settings text (now "Look up people online") say what is sent.
+    **How much this adds is small.** Probed live: DBpedia's `dbo:height` was empty for every person tried except one that said 0.0 (which is
+    dropped), and `dbp:height` was empty too, so **DBpedia does not fill the height gap**; Wikidata already has the birth and death facts for
+    most people, so these sources mostly return nothing new. A real height source would be a separate site (not built: its terms haven't been
+    checked). Tested with 42 unit tests on hand-written answers and by hand against both real services (explicit live test).
   - Lookup order: Wikidata first. Any field it leaves empty (height and former partners most
     often) is filled from DBpedia's public endpoint (CC BY-SA, no key). For musicians,
     MusicBrainz (CC0, needs a User-Agent, about one request a second) can add more. Anything still
@@ -498,7 +508,7 @@ _Still to come_
     requires), and Ocula stores the source per field internally. DBpedia is itself derived from
     Wikipedia, so it fills gaps and is not an independent second opinion. When this is built it
     needs two new entries in both `THIRD-PARTY-NOTICES.md` and `AppInfo.Notices`: DBpedia
-    (CC BY-SA) and MusicBrainz (CC0). Wikidata is already listed there.
+    (CC BY-SA) and MusicBrainz (CC0). Wikidata is already listed there. (Done.)
   - Skipped on purpose: TMDB (needs an API key that can't be hidden in a distributed app, and
     non-commercial terms), IMDb datasets (non-commercial, little data), Google Knowledge Graph
     (terms don't allow storing the results).

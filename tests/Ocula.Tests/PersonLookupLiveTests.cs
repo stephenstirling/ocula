@@ -54,6 +54,23 @@ public class PersonLookupLiveTests
         File.WriteAllText(Path.Combine(Path.GetTempPath(), "ocula-live-deceased.json"), card.ToJson());
     }
 
+    [Fact(Explicit = true)]
+    public async Task The_second_sources_answer_in_the_shape_the_parsers_expect()
+    {
+        var sources = new PersonSources(PersonLookup.CreateClient());
+
+        var dbpedia = await sources.GetDbpediaAsync("Whitney Houston");
+        await Task.Delay(1100);   // MusicBrainz asks for no more than one request a second
+        var musicBrainz = await sources.GetMusicBrainzAsync("bf24ca37-25f4-4e34-9aec-460b94364cfc");   // Shakira
+
+        Assert.NotNull(dbpedia);
+        Assert.Equal("1963-08-09", PersonSources.CleanDate(dbpedia!.BirthDate));
+        Assert.Equal("2012-02-11", PersonSources.CleanDate(dbpedia.DeathDate));
+        Assert.NotNull(musicBrainz);
+        Assert.Equal("1977-02-02", musicBrainz!.BirthDate);
+        Assert.Equal("Barranquilla", musicBrainz.BirthPlace);
+    }
+
     /// <summary>
     /// Reads a few real people from Wikidata and writes the SQL that would store their cards (the same columns as
     /// <c>IndexService.SavePersonCardAsync</c>) to the temp folder, for trying the person search on a real library by hand.

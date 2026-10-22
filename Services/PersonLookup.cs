@@ -59,6 +59,11 @@ public sealed class PersonFacts
     /// an actress from an actor (Wikidata files both under "actor").</summary>
     public string? Gender { get; set; }
 
+    /// <summary>Ids Wikidata gives for asking the second sources: the English Wikipedia title (DBpedia) and the MusicBrainz artist id.
+    /// Not saved with the card.</summary>
+    internal string? WikipediaTitle { get; set; }
+    internal string? MusicBrainzId { get; set; }
+
     /// <summary>Shown as "Austin, Texas, United States".</summary>
     public string? BirthPlace { get; set; }
 
@@ -151,7 +156,13 @@ public sealed class PersonFacts
 
     /// <summary>The source's name as credited under the card: Wikidata is CC0; another source is named as it was recorded.</summary>
     private static string Credit(string source) =>
-        source.Equals("Wikidata", StringComparison.OrdinalIgnoreCase) ? "Wikidata (CC0)" : source;
+        source.ToLowerInvariant() switch
+        {
+            "wikidata" => "Wikidata (CC0)",
+            "dbpedia" => "DBpedia (CC BY-SA)",
+            "musicbrainz" => "MusicBrainz (CC0)",
+            _ => source
+        };
 
     /// <summary>The line under the card: every source actually used, when it was read, and that it may be out of date.</summary>
     [JsonIgnore]
@@ -282,7 +293,7 @@ public sealed class PersonLookup
         if (!IsItemId(id)) throw new ArgumentException("Not a Wikidata item id.", nameof(id));
 
         using var doc = JsonDocument.Parse(await _http.GetStringAsync(
-            $"{Api}?action=wbgetentities&format=json&props=claims|labels|descriptions&languages=en&languagefallback=1&ids={id}", cancel));
+            $"{Api}?action=wbgetentities&format=json&props=claims|labels|descriptions|sitelinks&sitefilter=enwiki&languages=en&languagefallback=1&ids={id}", cancel));
         var entity = doc.RootElement.GetProperty("entities").GetProperty(id);
 
         // Where they were born, then the regions it is in (each lookup is small; the place's own entity can be huge).
@@ -302,7 +313,35 @@ public sealed class PersonLookup
 
         var wanted = ReferencedItems(entity).Concat(chainIds).Distinct().ToList();
         var labels = await LabelsAsync(wanted, cancel);
-        return Build(entity, labels, chainIds, now);
+        var facts = Build(entity, labels, chainIds, now);
+        await AddSecondSourcesAsync(facts, cancel);
+        return facts;
+    }
+
+    /// <summary>
+    /// Asks DBpedia and MusicBrainz, together, about the person, for what Wikidata left empty. Only when something is missing, only by the
+    /// ids Wikidata gave, and a failure of either is logged (without the person's name) and ignored.
+    /// </summary>
+    private async Task AddSecondSourcesAsync(PersonFacts facts, CancellationToken cancel)
+    {
+        var sources = new PersonSources(_http);
+
+        async Task<T?> Ask<T>(string name, Func<Task<T?>> call) where T : class
+        {
+            try { return await call(); }
+            catch (Exception e) when (!cancel.IsCancellationRequested &&
+                                      e is HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException)
+            {
+                DiagnosticLog.Write($"{name} didn't answer for a person card, so it was left out ({e.GetType().Name})");
+                return null;
+            }
+        }
+
+        var dbpedia = facts.WikipediaTitle != null && PersonSources.WorthAskingDbpedia(facts)
+            ? Ask("DBpedia", () => sources.GetDbpediaAsync(facts.WikipediaTitle, cancel)) : Task.FromResult<DbpediaFacts?>(null);
+        var musicBrainz = facts.MusicBrainzId != null && PersonSources.WorthAskingMusicBrainz(facts)
+            ? Ask("MusicBrainz", () => sources.GetMusicBrainzAsync(facts.MusicBrainzId, cancel)) : Task.FromResult<MusicBrainzFacts?>(null);
+        PersonSources.Merge(facts, await dbpedia, await musicBrainz);
     }
 
     private async Task<string?> FirstClaimItemAsync(string entityId, string property, CancellationToken cancel)
@@ -400,6 +439,20 @@ public sealed class PersonLookup
             {
                 facts.DeathCause = cause;
                 facts.Sources["deathCause"] = "Wikidata";
+            }
+        }
+
+        // The ids for the second sources.
+        if (entity.TryGetProperty("sitelinks", out var siteLinks) && siteLinks.ValueKind == JsonValueKind.Object &&
+            siteLinks.TryGetProperty("enwiki", out var english))
+            facts.WikipediaTitle = Clean(Str(english, "title"));
+        foreach (var statement in OrderedClaims(entity, "P434"))
+        {
+            var value = MainValue(statement);
+            if (value.ValueKind == JsonValueKind.String && Guid.TryParse(value.GetString(), out var mb))
+            {
+                facts.MusicBrainzId = mb.ToString("D");
+                break;
             }
         }
 

@@ -74,5 +74,7 @@ public static class AppInfo
         new ThirdPartyNotice("MapLibre GL JS 4.7.1", "BSD-3-Clause", "https://github.com/maplibre/maplibre-gl-js", "Map view"),
         new ThirdPartyNotice("OpenFreeMap, OpenMapTiles and OpenStreetMap", "Map data © OpenStreetMap contributors (ODbL)", "https://openfreemap.org", "Map tiles (credited on the map)"),
         new ThirdPartyNotice("Wikidata and Wikimedia Commons", "CC0 data; photos under their own free licences", "https://commons.wikimedia.org", "Camera photos (credited per photo) and person details (on request)"),
+        new ThirdPartyNotice("DBpedia", "CC BY-SA 3.0 (derived from Wikipedia)", "https://www.dbpedia.org", "Gaps in a person's card, only when you look someone up (credited on the card)"),
+        new ThirdPartyNotice("MusicBrainz", "CC0", "https://musicbrainz.org", "Gaps in a musician's card, only when you look someone up (credited on the card)"),
     };
 }
