@@ -9,7 +9,7 @@ public sealed partial class ScraperPage : Page
 {
     // TODO: read these from Ocula's settings instead of hard-coding.
     private const string DownloadsFolder = @"Z:\Babes";
-    private const string ScraperUrl = "http://192.168.86.62:8765";   // set to null to use the status file only
+    private static readonly string? ScraperUrl = "http://192.168.86.62:8765";   // set to null to use the status file only
     private const string? ScraperToken = null;                        // same value as STATUS_TOKEN, if you set one
 
     private ScraperMonitor? _monitor;
