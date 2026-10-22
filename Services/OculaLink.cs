@@ -50,6 +50,17 @@ public sealed record OculaLink(string Verb, string? File, string? Folder, string
         return new OculaLink(verb, Value("file"), Value("folder"), id != null && System.Text.RegularExpressions.Regex.IsMatch(id, "^[0-9a-f]{8,32}$") ? id : null);
     }
 
+    /// <summary>
+    /// The first argument that is an ocula: link, as an unpackaged Ocula is launched by the HKCU protocol registration
+    /// (<c>Ocula.exe "ocula:person?id=..."</c>). Quotes around it are ignored.
+    /// </summary>
+    public static OculaLink? FromArguments(IEnumerable<string> arguments)
+    {
+        foreach (var argument in arguments)
+            if (Parse(argument.Trim().Trim('"')) is { } link) return link;
+        return null;
+    }
+
     /// <summary>Capta's capture folder as the link gives it, else Capta's default: Pictures\Captures.</summary>
     public static string CaptureFolderOrDefault(string? folder) =>
         !string.IsNullOrWhiteSpace(folder) && Path.IsPathFullyQualified(folder)

@@ -57,6 +57,9 @@ public sealed partial class PeopleWindow : Window
     /// <summary>The group whose details are showing, so a refresh that re-selects it can leave them alone.</summary>
     private long? _detailId;
 
+    /// <summary>A group to select as soon as the list has it (ocula:person links, which can arrive before the list has loaded).</summary>
+    private long? _pendingSelect;
+
     public PeopleWindow(MainWindow main)
     {
         InitializeComponent();
@@ -90,6 +93,13 @@ public sealed partial class PeopleWindow : Window
     }
 
     private PersonCard? Selected => Groups.SelectedItem as PersonCard;
+
+    /// <summary>Selects a group, scrolls to it and shows its details, once the list has it.</summary>
+    public void ShowPerson(long id)
+    {
+        _pendingSelect = id;
+        _ = RefreshAsync(id);
+    }
 
     private async Task RefreshAsync(long? select = null)
     {
@@ -130,6 +140,16 @@ public sealed partial class PeopleWindow : Window
                            : $"{people.Count:N0} groups · {unnamed:N0} still need a name";
 
             if (keep != null) Groups.SelectedItem = _cards.FirstOrDefault(c => c.Id == keep);
+
+            if (_pendingSelect is long want)
+            {
+                if (_cards.FirstOrDefault(c => c.Id == want) is { } target)
+                {
+                    Groups.SelectedItem = target;
+                    Groups.ScrollIntoView(target);
+                }
+                _pendingSelect = null;
+            }
 
             // The group in the details may have been merged away or deleted; otherwise show its current name.
             if (_detailId is long shown)

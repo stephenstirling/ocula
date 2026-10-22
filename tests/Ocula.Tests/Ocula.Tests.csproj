@@ -36,6 +36,7 @@
     <Compile Include="..\..\Services\PersonQuery.cs" Link="App\PersonQuery.cs" />
     <Compile Include="..\..\Services\PeopleExport.cs" Link="App\PeopleExport.cs" />
     <Compile Include="..\..\Services\RefreshDebouncer.cs" Link="App\RefreshDebouncer.cs" />
+    <Compile Include="..\..\Services\ProtocolRegistration.cs" Link="App\ProtocolRegistration.cs" />
     <None Include="TestData\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

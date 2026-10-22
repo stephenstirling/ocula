@@ -45,6 +45,24 @@ public class PersonLinkTests
         Assert.Null(link.Id);
     }
 
+    [Theory]
+    [InlineData("ocula:person?id=b65e86ce6eb973c3")]
+    [InlineData("\"ocula:person?id=b65e86ce6eb973c3\"")]     // as the registry command passes it: "%1" in quotes
+    public void A_link_given_as_a_command_line_argument_is_found(string argument)
+    {
+        var link = OculaLink.FromArguments(new[] { @"C:\Some\File.jpg", argument });
+
+        Assert.Equal("person", link!.Verb);
+        Assert.Equal("b65e86ce6eb973c3", link.Id);
+    }
+
+    [Fact]
+    public void Ordinary_arguments_are_not_links()
+    {
+        Assert.Null(OculaLink.FromArguments(new[] { @"D:\Photos", "--flag" }));
+        Assert.Null(OculaLink.FromArguments(Array.Empty<string>()));
+    }
+
     [Fact]
     public void Capta_links_are_unchanged()
     {

@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -26,6 +27,7 @@ public static class Program
     private static int Main(string[] args)
     {
         WinRT.ComWrappersSupport.InitializeComWrappers();
+        RegisterProtocolIfUnpackaged();
 
         if (RedirectToRunningInstance()) return 0;
         if (ImportInBackground()) return 0;
@@ -37,6 +39,33 @@ public static class Program
             _ = new App();
         });
         return 0;
+    }
+
+    /// <summary>
+    /// An unpackaged Ocula (a developer build) isn't registered for ocula: links by a package, so it registers itself under
+    /// HKCU\Software\Classes\ocula, which needs no administrator rights. A packaged Ocula is registered by Windows from its manifest (that
+    /// is the same HKCU key), and is left alone: writing a command there would replace the package's own registration.
+    /// </summary>
+    private static void RegisterProtocolIfUnpackaged()
+    {
+        try
+        {
+            if (IsPackaged()) return;
+            var exe = Environment.ProcessPath;
+            if (exe == null) return;
+            using var classes = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(@"Software\Classes");
+            ProtocolRegistration.Register(classes, exe);
+        }
+        catch (Exception e) when (e is UnauthorizedAccessException or System.Security.SecurityException or IOException)
+        {
+            DiagnosticLog.Write("Couldn't register the ocula: link for this unpackaged build", e);
+        }
+    }
+
+    private static bool IsPackaged()
+    {
+        try { _ = Windows.ApplicationModel.Package.Current.Id; return true; }
+        catch (Exception e) when (e is InvalidOperationException or COMException) { return false; }
     }
 
     private static bool RedirectToRunningInstance()

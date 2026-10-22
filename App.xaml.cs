@@ -34,7 +34,7 @@ public partial class App : Application
         _window.Activate();
 
         var startup = AppInstance.GetCurrent().GetActivatedEventArgs();
-        if (GetLink(startup) is { } link)
+        if ((GetLink(startup) ?? OculaLink.FromArguments(Environment.GetCommandLineArgs().Skip(1))) is { } link)
         {
             await _window.HandleLinkAsync(link);
             return;
@@ -72,7 +72,11 @@ public partial class App : Application
     internal static OculaLink? GetLink(AppActivationArguments args) =>
         args.Kind == ExtendedActivationKind.Protocol && args.Data is IProtocolActivatedEventArgs protocol
             ? OculaLink.Parse(protocol.Uri?.OriginalString)
-            : null;
+            // An unpackaged build is started by the HKCU registration with the link as its argument.
+            : args.Kind == ExtendedActivationKind.Launch && args.Data is ILaunchActivatedEventArgs launch &&
+              !string.IsNullOrWhiteSpace(launch.Arguments)
+                ? OculaLink.FromArguments(SplitArguments(launch.Arguments))
+                : null;
 
     /// <summary>The file or folder a launch refers to: "Open with" or command-line arguments.</summary>
     private static string? GetPath(AppActivationArguments args)
