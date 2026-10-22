@@ -133,16 +133,16 @@ public sealed class IndexService : IDisposable
             END;");
         // Cards saved before searching by person details existed lack these columns: add them and fill them from the saved card.
         var addedBorn = false;
-        foreach (var column in new[] { "full_name TEXT", "gender TEXT", "death_date TEXT", "born_min TEXT", "born_max TEXT" })
+        foreach (var column in new[] {
+            "full_name TEXT", "gender TEXT", "death_date TEXT", "born_min TEXT", "born_max TEXT",
+            "bra_size TEXT", "cup_rank INTEGER" })
         {
             try { Execute($"ALTER TABLE person_cards ADD COLUMN {column};"); addedBorn |= column.StartsWith("born_min"); }
             catch (SqliteException) { /* already there */ }
         }
         if (addedBorn) BackfillPersonCards();
         RefreshOccupations();
-        // A stable id for each group that other apps can refer to ("Share people with Porta", ocula:person?id=...). The row id is
-        // not used: it is an internal number. The id stays with the group through renames and card changes, and a group that
-        // another is merged into keeps its own.
+        // Stable public ids let companion apps refer to a group without exposing SQLite's internal row id.
         try { Execute("ALTER TABLE people ADD COLUMN uid TEXT;"); }
         catch (SqliteException) { /* already there */ }
         Execute(@"
@@ -722,36 +722,35 @@ public sealed class IndexService : IDisposable
     /// <summary>Replaces a photo's faces with the ones just found and records that it has been scanned.</summary>
     public Task SaveFacesAsync(string path, long modified, IReadOnlyList<(FaceResult Face, long PersonId)> faces,
                                IReadOnlyDictionary<long, (float[] Centroid, int Count)> updatedGroups) => RunAsync(() =>
-    {
-        using var tx = _db.BeginTransaction();
+                               {
+                                   using var tx = _db.BeginTransaction();
 
-        void Run(string sql, params (string Name, object Value)[] args)
-        {
-            using var cmd = _db.CreateCommand();
-            cmd.Transaction = tx;
-            cmd.CommandText = sql;
-            foreach (var (name, value) in args) cmd.Parameters.AddWithValue(name, value);
-            cmd.ExecuteNonQuery();
-        }
+                                   void Run(string sql, params (string Name, object Value)[] args)
+                                   {
+                                       using var cmd = _db.CreateCommand();
+                                       cmd.Transaction = tx;
+                                       cmd.CommandText = sql;
+                                       foreach (var (name, value) in args) cmd.Parameters.AddWithValue(name, value);
+                                       cmd.ExecuteNonQuery();
+                                   }
 
-        Run("DELETE FROM faces WHERE path = $path", ("$path", path));
-        foreach (var (face, personId) in faces)
-        {
-            Run(@"INSERT INTO faces (path, modified, x, y, w, h, score, emb, thumb, person_id)
+                                   Run("DELETE FROM faces WHERE path = $path", ("$path", path));
+                                   foreach (var (face, personId) in faces)
+                                   {
+                                       Run(@"INSERT INTO faces (path, modified, x, y, w, h, score, emb, thumb, person_id)
                   VALUES ($path, $modified, $x, $y, $w, $h, $score, $emb, $thumb, $person)",
-                ("$path", path), ("$modified", modified), ("$x", face.X), ("$y", face.Y), ("$w", face.Width),
-                ("$h", face.Height), ("$score", face.Score), ("$emb", ToBytes(face.Embedding)),
-                ("$thumb", face.Thumbnail), ("$person", personId));
-        }
-        foreach (var (id, group) in updatedGroups)
-            Run("UPDATE people SET centroid = $c, face_count = $n WHERE id = $id",
-                ("$c", ToBytes(group.Centroid)), ("$n", group.Count), ("$id", id));
-        Run("INSERT INTO face_scans (path, modified) VALUES ($path, $modified) ON CONFLICT(path) DO UPDATE SET modified = excluded.modified",
-            ("$path", path), ("$modified", modified));
-        tx.Commit();
-        RaisePeopleChanged();
-        return true;
-    });
+                                           ("$path", path), ("$modified", modified), ("$x", face.X), ("$y", face.Y), ("$w", face.Width),
+                                           ("$h", face.Height), ("$score", face.Score), ("$emb", ToBytes(face.Embedding)),
+                                           ("$thumb", face.Thumbnail), ("$person", personId));
+                                   }
+                                   foreach (var (id, group) in updatedGroups)
+                                       Run("UPDATE people SET centroid = $c, face_count = $n WHERE id = $id",
+                                           ("$c", ToBytes(group.Centroid)), ("$n", group.Count), ("$id", id));
+                                   Run("INSERT INTO face_scans (path, modified) VALUES ($path, $modified) ON CONFLICT(path) DO UPDATE SET modified = excluded.modified",
+                                       ("$path", path), ("$modified", modified));
+                                   tx.Commit();
+                                   return true;
+                               });
 
     /// <summary>Groups to show: named ones first, then by size. Each comes with its clearest face as an avatar.</summary>
     public Task<List<PersonSummary>> GetPeopleAsync(bool includeHidden = false) => RunAsync(() =>
@@ -841,18 +840,15 @@ public sealed class IndexService : IDisposable
         return survivor;
     });
 
-    /// <summary>
-    /// Raised (on a background thread) after something changes that "Share people with Porta" would show: a name, a photo count,
-    /// a card, a hidden group, or all face data being deleted. Subscribers must be quick and thread-safe.
-    /// </summary>
+    /// <summary>Raised when the named people list, their photos, or saved cards change.</summary>
     public event Action? PeopleChanged;
 
     private void RaisePeopleChanged() => PeopleChanged?.Invoke();
 
-    /// <summary>The named, visible people for the export file, read under the library lock.</summary>
+    /// <summary>The named, visible people for the optional companion-app export.</summary>
     public Task<List<PeopleExportRow>> GetPeopleForExportAsync() => RunAsync(() => PeopleExport.ReadRows(_db));
 
-    /// <summary>The group an ocula:person link or the export file's id refers to, or null if it is gone.</summary>
+    /// <summary>Finds a visible person by the stable id used in the export and ocula:person links.</summary>
     public Task<(long Id, string Name)?> FindPersonByUidAsync(string uid) => RunAsync(() =>
     {
         using var cmd = _db.CreateCommand();
@@ -870,8 +866,8 @@ public sealed class IndexService : IDisposable
         using var cmd = _db.CreateCommand();
         cmd.CommandText = @"INSERT OR REPLACE INTO person_cards
               (person_id, wikidata_id, birth_date, birth_year, birth_place, occupations, spouse, children, height_cm, languages, retrieved, json,
-               full_name, gender, death_date, born_min, born_max)
-            VALUES ($id, $qid, $bd, $by, $bp, $occ, $sp, $ch, $h, $lang, $at, $json, $fn, $g, $dd, $bmin, $bmax)";
+               full_name, gender, death_date, born_min, born_max, bra_size, cup_rank)
+            VALUES ($id, $qid, $bd, $by, $bp, $occ, $sp, $ch, $h, $lang, $at, $json, $fn, $g, $dd, $bmin, $bmax, $bra, $cup)";
         cmd.Parameters.AddWithValue("$fn", (object?)facts.FullName ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$g", (object?)facts.Gender ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$dd", (object?)facts.DeathDate ?? DBNull.Value);
@@ -889,6 +885,8 @@ public sealed class IndexService : IDisposable
         cmd.Parameters.AddWithValue("$lang", facts.Languages.Count == 0 ? DBNull.Value : string.Join(" | ", facts.Languages));
         cmd.Parameters.AddWithValue("$at", facts.RetrievedAt.ToString("o", CultureInfo.InvariantCulture));
         cmd.Parameters.AddWithValue("$json", facts.ToJson());
+        cmd.Parameters.AddWithValue("$bra", (object?)facts.BraSize ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$cup", (object?)facts.BraCupRank ?? DBNull.Value);
         cmd.ExecuteNonQuery();
         RefreshOccupations();
         RaisePeopleChanged();
@@ -901,6 +899,83 @@ public sealed class IndexService : IDisposable
         cmd.CommandText = "SELECT json FROM person_cards WHERE person_id = $id";
         cmd.Parameters.AddWithValue("$id", personId);
         return cmd.ExecuteScalar() is string json ? PersonFacts.FromJson(json) : null;
+    });
+
+    /// <summary>
+    /// Saved person cards whose group name matches any of <paramref name="names"/>
+    /// (case-insensitive), or whose card JSON Name/FullName matches.
+    /// </summary>
+    public Task<List<ResolvedPersonCard>> GetPersonCardsMatchingNamesAsync(IReadOnlyList<string> names) => RunAsync(() =>
+    {
+        var result = new List<ResolvedPersonCard>();
+        if (names.Count == 0) return result;
+
+        using (var cmd = _db.CreateCommand())
+        {
+            cmd.CommandText = @"
+                SELECT p.id, p.name, c.json
+                FROM people p
+                INNER JOIN person_cards c ON c.person_id = p.id
+                WHERE p.name IS NOT NULL AND length(trim(p.name)) > 0";
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                var id = reader.GetInt64(0);
+                var groupName = reader.GetString(1);
+                var json = reader.GetString(2);
+                var facts = PersonFacts.FromJson(json);
+                if (facts == null) continue;
+
+                foreach (var tag in names)
+                {
+                    if (PersonCardResolver.NamesMatch(tag, groupName) ||
+                        PersonCardResolver.NamesMatch(tag, facts.Name) ||
+                        PersonCardResolver.NamesMatch(tag, facts.FullName))
+                    {
+                        if (result.Any(r => r.PersonId == id)) break;
+                        result.Add(new ResolvedPersonCard
+                        {
+                            PersonId = id,
+                            GroupName = groupName,
+                            Facts = facts,
+                            MatchedTag = tag
+                        });
+                        break;
+                    }
+                }
+            }
+        }
+
+        return result;
+    });
+
+    /// <summary>Person ids whose saved cards match structured person-detail filters.</summary>
+    public Task<List<long>> FindPersonIdsMatchingDetailAsync(PersonDetailQuery d) => RunAsync(() =>
+    {
+        using var cmd = _db.CreateCommand();
+        var clauses = new List<string> { "1=1" };
+
+        void Bind(string name, object? value) =>
+            cmd.Parameters.AddWithValue(name, value ?? DBNull.Value);
+
+        if (d.HeightMinCm is double hMin) { clauses.Add("height_cm > $hMin"); Bind("$hMin", hMin); }
+        if (d.HeightMaxCm is double hMax) { clauses.Add("height_cm < $hMax"); Bind("$hMax", hMax); }
+        if (d.CupMinRank is int cMin) { clauses.Add("cup_rank >= $cMin"); Bind("$cMin", cMin); }
+        if (d.CupMaxRank is int cMax) { clauses.Add("cup_rank <= $cMax"); Bind("$cMax", cMax); }
+        if (d.BraSizeExact is string be) { clauses.Add("upper(trim(bra_size)) = upper($bra)"); Bind("$bra", be); }
+        if (d.BirthPlaceContains is string pl) { clauses.Add("birth_place LIKE $place"); Bind("$place", "%" + pl + "%"); }
+        if (d.OccupationContains is string oc) { clauses.Add("occupations LIKE $occ"); Bind("$occ", "%" + oc + "%"); }
+        if (d.HasSpouse == true) clauses.Add("spouse IS NOT NULL AND length(spouse) > 0");
+        if (d.HasChildren == true) clauses.Add("children IS NOT NULL AND children >= 1");
+        if (d.MinChildren is int mc) { clauses.Add("children >= $mc"); Bind("$mc", mc); }
+        if (d.BirthYearMin is int y0) { clauses.Add("birth_year >= $y0"); Bind("$y0", y0); }
+        if (d.BirthYearMax is int y1) { clauses.Add("birth_year <= $y1"); Bind("$y1", y1); }
+
+        cmd.CommandText = "SELECT person_id FROM person_cards WHERE " + string.Join(" AND ", clauses);
+        var ids = new List<long>();
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read()) ids.Add(reader.GetInt64(0));
+        return ids;
     });
 
     public Task DeletePersonCardAsync(long personId) => RunAsync(() =>
