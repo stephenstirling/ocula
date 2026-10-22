@@ -157,6 +157,13 @@ public sealed class PersonFacts
         Add("Occupation", string.Join(", ", Occupations));
         Add("Height", HeightText is { } height && HasSeveralSources && Sources.TryGetValue("height", out var heightSource)
             ? $"{height} \u00B7 {heightSource}" : HeightText);
+        if (!string.IsNullOrWhiteSpace(BraSize))
+        {
+            var value = BraSizeText;
+            if (HasSeveralSources && Sources.TryGetValue("braSize", out var measurementSource))
+                value = $"{value} · {measurementSource}";
+            Add("Bra size", value);
+        }
         Add(Spouses.Count > 1 ? "Spouses" : "Spouse", string.Join(", ", Spouses.Select(s => s.Display)));
         Add("Former spouses", string.Join(", ", FormerSpouses.Select(s => s.Display)));
         Add("Partners", string.Join(", ", Partners.Select(s => s.Display)));
@@ -192,6 +199,11 @@ public sealed class PersonFacts
             "dbpedia" => "DBpedia (CC BY-SA)",
             "wikipedia" => "Wikipedia (CC BY-SA)",
             "musicbrainz" => "MusicBrainz (CC0)",
+            "celebheights" => "CelebHeights",
+            "celebritybrasizes" => "CelebrityBraSizes",
+            "boobpedia" => "Boobpedia",
+            "celebrityinside" => "CelebrityInside",
+            "babepedia" => "Babepedia",
             _ => source
         };
 
