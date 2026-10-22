@@ -5,6 +5,12 @@
 //   2. File   <downloads>\scraper_status.json (works even if the port isn't reachable)
 // The monitor tries HTTP first and falls back to the file. If the data is older than 90 s,
 // the container is treated as offline.
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Serialization;

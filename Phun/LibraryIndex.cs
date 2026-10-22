@@ -3,6 +3,12 @@
 //
 // The scraper writes ocula_library.db into its downloads folder. Paths inside are RELATIVE
 // (forward slashes), so Ocula joins them onto whatever root the user picks (Z:\..., \\NAS\...).
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
 using System.Text.Json;
 
