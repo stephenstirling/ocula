@@ -2,7 +2,6 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using Windows.Storage;
 
 namespace Ocula.Services;
 
@@ -27,33 +26,12 @@ public sealed class PeopleSharing : IDisposable
     }
 
     /// <summary>
-    /// The folder Porta reads. A packaged Ocula can't use %LocalAppData%\Stirling\Ocula: Windows redirects a packaged app's writes there to
-    /// its own private package folder, which no other app sees. So a packaged build uses the publisher cache folder "Stirling" (declared in
-    /// Package.appxmanifest, shared by every app from the same publisher, here Ocula, Capta and Porta) and a subfolder "Ocula"; on disk that is
-    /// %LocalAppData%\Publishers\&lt;publisher id&gt;\Stirling\Ocula. An unpackaged run (a developer build) uses %LocalAppData%\Stirling\Ocula as is.
-    /// Null if a packaged build can't get the shared folder, in which case nothing is written.
+    /// %LocalAppData%\Stirling\Ocula, where Porta reads people-index.json and people-thumbs\&lt;id&gt;.png. Windows normally redirects a packaged
+    /// app's writes under %LocalAppData% into its private package folder, so Package.appxmanifest excludes %LocalAppData%\Stirling from that
+    /// redirection (it needs the unvirtualizedResources capability); without the exclusion the files would exist only in Ocula's view of the disk.
     /// </summary>
-    public static string? Folder { get; } = ResolveFolder();
-
-    private static string? ResolveFolder()
-    {
-        bool packaged;
-        try { _ = Windows.ApplicationModel.Package.Current.Id; packaged = true; }
-        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { packaged = false; }
-
-        if (!packaged)
-            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Stirling", "Ocula");
-
-        try
-        {
-            return Path.Combine(ApplicationData.Current.GetPublisherCacheFolder("Stirling").Path, "Ocula");
-        }
-        catch (Exception e) when (e is InvalidOperationException or ArgumentException or IOException or System.Runtime.InteropServices.COMException)
-        {
-            DiagnosticLog.Write("Share people with Porta: the shared publisher folder isn't available, so nothing is written", e);
-            return null;
-        }
-    }
+    public static string Folder { get; } = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Stirling", "Ocula");
 
     /// <summary>Asks for a refresh soon. Cheap to call often; does nothing while sharing is off.</summary>
     public void RequestRefresh()
@@ -68,14 +46,13 @@ public sealed class PeopleSharing : IDisposable
         await _work.WaitAsync().ConfigureAwait(false);
         try
         {
-            if (Folder is not { } folder) return;
             if (!AppSettings.SharePeopleWithPorta || !FaceIndexer.Enabled)
             {
-                await Task.Run(() => PeopleExport.Delete(folder)).ConfigureAwait(false);
+                await Task.Run(() => PeopleExport.Delete(Folder)).ConfigureAwait(false);
                 return;
             }
             var rows = await _index.GetPeopleForExportAsync().ConfigureAwait(false);
-            await Task.Run(() => PeopleExport.Write(folder, rows, DateTimeOffset.UtcNow)).ConfigureAwait(false);
+            await Task.Run(() => PeopleExport.Write(Folder, rows, DateTimeOffset.UtcNow)).ConfigureAwait(false);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException)
         {
@@ -91,9 +68,8 @@ public sealed class PeopleSharing : IDisposable
     public async Task RemoveAllAsync()
     {
         _debounce.Cancel();
-        if (Folder is not { } folder) return;
         await _work.WaitAsync().ConfigureAwait(false);
-        try { PeopleExport.Delete(folder); }
+        try { PeopleExport.Delete(Folder); }
         finally { _work.Release(); }
     }
 

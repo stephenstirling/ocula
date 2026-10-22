@@ -267,7 +267,7 @@ public class PeopleExportTests : IDisposable
         Assert.EndsWith(".png", path);
         Assert.Equal(PeopleExport.ThumbnailSize, info.Width);
         Assert.Equal(PeopleExport.ThumbnailSize, info.Height);
-        Assert.StartsWith("0123456789abcdef-", Path.GetFileName(path));
+        Assert.Equal(Path.Combine(_folder, "people-thumbs", "0123456789abcdef.png"), path);   // people-thumbs\<id>.png, exactly
     }
 
     [Fact]
@@ -279,7 +279,7 @@ public class PeopleExportTests : IDisposable
     }
 
     [Fact]
-    public void An_unchanged_picture_is_not_written_again_and_a_changed_one_replaces_the_old()
+    public void An_unchanged_picture_is_not_written_again_and_a_changed_one_replaces_the_old_under_the_same_name()
     {
         var red = new PeopleExportRow("0123456789abcdef", "Ann", null, 3, FaceJpeg(Color.Red));
         var first = Written(new[] { red }).GetProperty("people")[0].GetProperty("thumbnail").GetString()!;
@@ -293,9 +293,11 @@ public class PeopleExportTests : IDisposable
 
         var blue = red with { Thumbnail = FaceJpeg(Color.Blue) };
         var changed = Written(new[] { blue }).GetProperty("people")[0].GetProperty("thumbnail").GetString()!;
-        Assert.NotEqual(first, changed);
-        Assert.False(File.Exists(first));                        // the old picture is gone
-        Assert.True(File.Exists(changed));
+        Assert.Equal(first, changed);                            // the name is always <id>.png
+        Assert.NotEqual(marked, File.GetLastWriteTimeUtc(changed));
+        using var image = Image.Load<Rgba32>(changed);
+        Assert.True(image[48, 48].B > 150 && image[48, 48].R < 100);   // now the blue face
+        Assert.Single(Directory.GetFiles(Path.Combine(_folder, "people-thumbs")));   // no leftovers
     }
 
     [Fact]

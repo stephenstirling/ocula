@@ -8,7 +8,8 @@
   xmlns:desktop5="http://schemas.microsoft.com/appx/manifest/desktop/windows10/5"
   xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-  IgnorableNamespaces="uap uap3 desktop desktop4 desktop5 com rescap">
+  xmlns:virtualization="http://schemas.microsoft.com/appx/manifest/virtualization/windows10"
+  IgnorableNamespaces="uap uap3 desktop desktop4 desktop5 com rescap virtualization">
 
   <!-- Placeholder identity: replace via Project > Publish > Associate App with the Store. -->
   <Identity
@@ -20,6 +21,13 @@
     <DisplayName>Ocula</DisplayName>
     <PublisherDisplayName>Stephen Stirling</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
+    <!-- Windows redirects a packaged app's writes under %LocalAppData% into its private package folder. This folder is the exception:
+         "Share people with Porta" writes %LocalAppData%\Stirling\Ocula\people-index.json (and people-thumbs) where Porta can read it. -->
+    <virtualization:FileSystemWriteVirtualization>
+      <virtualization:ExcludedDirectories>
+        <virtualization:ExcludedDirectory>$(KnownFolder:LocalAppData)\Stirling</virtualization:ExcludedDirectory>
+      </virtualization:ExcludedDirectories>
+    </virtualization:FileSystemWriteVirtualization>
   </Properties>
 
   <Dependencies>
@@ -112,15 +120,7 @@
 
   <Capabilities>
     <rescap:Capability Name="runFullTrust" />
+    <!-- Needed for the excluded folder above. -->
+    <rescap:Capability Name="unvirtualizedResources" />
   </Capabilities>
-
-  <!-- A folder shared by every app from this publisher (Ocula, Capta, Porta). Ocula writes the "Share people with Porta" file here
-       (Stirling\Ocula\people-index.json) only while that switch is on. -->
-  <Extensions>
-    <Extension Category="windows.publisherCacheFolders">
-      <PublisherCacheFolders>
-        <Folder Name="Stirling" />
-      </PublisherCacheFolders>
-    </Extension>
-  </Extensions>
 </Package>

@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -34,7 +33,7 @@ public static class PeopleExport
 {
     public const int Version = 1;
     public const string FileName = "people-index.json";
-    public const string ThumbnailFolder = "people-thumbnails";
+    public const string ThumbnailFolder = "people-thumbs";
     public const int ThumbnailSize = 96;
 
     // ---------- Reading the library ----------
@@ -120,9 +119,9 @@ public static class PeopleExport
     // ---------- Writing ----------
 
     /// <summary>
-    /// Writes the people file and the face pictures into <paramref name="folder"/>. The file is written to a temporary name and renamed
-    /// over the old one, so a reader never sees half a file. Pictures are named by person and a hash of the picture, so an unchanged
-    /// picture is not written again and a changed one gets a new name; pictures no longer in the file are deleted last.
+    /// Writes the people file and the face pictures (<c>people-thumbs\&lt;id&gt;.png</c>) into <paramref name="folder"/>. The file and each
+    /// picture are written to a temporary name and renamed over the old one, so a reader never sees half a file. A picture whose bytes
+    /// have not changed is not touched; pictures of people no longer in the file are deleted last, after the new file is in place.
     /// </summary>
     public static void Write(string folder, IReadOnlyList<PeopleExportRow> rows, DateTimeOffset now)
     {
@@ -140,9 +139,9 @@ public static class PeopleExport
             string? thumbnailPath = null;
             if (row.Thumbnail is { Length: > 0 } source)
             {
-                var file = $"{row.Uid}-{Convert.ToHexString(SHA256.HashData(source))[..8].ToLowerInvariant()}.png";
+                var file = row.Uid + ".png";
                 var path = Path.Combine(thumbs, file);
-                if (!File.Exists(path) && ToThumbnail(source) is { } png)
+                if (ToThumbnail(source) is { } png && !(File.Exists(path) && File.ReadAllBytes(path).AsSpan().SequenceEqual(png)))
                 {
                     Directory.CreateDirectory(thumbs);
                     var temporary = path + ".tmp";
