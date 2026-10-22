@@ -325,6 +325,24 @@ public class PersonLookupTests
         Assert.Null(new PersonFacts().HeightText);
     }
 
+    // ---------- Gender (kept only so a search for "actress" works) ----------
+
+    [Theory]
+    [InlineData("Q6581072", "female")]
+    [InlineData("Q6581097", "male")]
+    [InlineData("Q1052281", "female")]     // trans woman
+    [InlineData("Q2449503", "male")]       // trans man
+    [InlineData("Q48270", null)]           // non-binary: not mapped, left empty
+    public void Gender_is_read_as_female_or_male_or_left_empty(string item, string? expected)
+    {
+        var entity = Entity("Q9", "P", null, Claims(("P21", new[] { Statement(Item(item)) })));
+
+        var card = PersonLookup.Build(entity, Labels, Array.Empty<string>(), Now);
+
+        Assert.Equal(expected, card.Gender);
+        Assert.Equal(expected != null, card.Sources.ContainsKey("gender"));
+    }
+
     // ---------- Birth place ----------
 
     [Fact]

@@ -33,6 +33,7 @@
     <Compile Include="..\..\Services\WebImage.cs" Link="App\WebImage.cs" />
     <Compile Include="..\..\Services\TagSuggester.cs" Link="App\TagSuggester.cs" />
     <Compile Include="..\..\Services\PersonLookup.cs" Link="App\PersonLookup.cs" />
+    <Compile Include="..\..\Services\PersonQuery.cs" Link="App\PersonQuery.cs" />
     <None Include="TestData\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

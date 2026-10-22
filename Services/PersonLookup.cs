@@ -62,6 +62,9 @@ public sealed class PersonFacts
     public string? CauseOfDeath { get; set; }
 
     /// <summary>Shown as "Austin, Texas, United States".</summary>
+    /// <summary>"female" or "male" when Wikidata says so. Not shown on the card; used for search (actress vs actor).</summary>
+    public string? Gender { get; set; }
+
     public string? BirthPlace { get; set; }
 
     /// <summary>The place, then the regions it is in, then the country, so "born in Texas" can be matched.</summary>
@@ -398,6 +401,21 @@ public sealed class PersonLookup
             }
         }
 
+        // Gender, only for searching (see PersonFacts.Gender).
+        foreach (var statement in OrderedClaims(entity, "P21"))
+        {
+            var gender = ItemId(MainValue(statement)) switch
+            {
+                "Q6581072" or "Q1052281" or "Q15145779" => "female",
+                "Q6581097" or "Q2449503" or "Q15145778" => "male",
+                _ => null
+            };
+            if (gender == null) continue;
+            facts.Gender = gender;
+            facts.Sources["gender"] = "Wikidata";
+            break;
+        }
+
         // Place.
         var chain = placeChain.Select(Label).Where(s => s.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         if (chain.Count > 0)
@@ -594,6 +612,20 @@ public sealed class PersonLookup
         foreach (var statement in OrderedClaims(entity, property))
             if (Amount(MainValue(statement)) is double d) return d;
         return null;
+    }
+
+
+    private static string? FormatChildDate(string? iso)
+    {
+        if (string.IsNullOrWhiteSpace(iso)) return null;
+        var parts = iso.Split('-', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0 || !int.TryParse(parts[0], out var year)) return iso;
+        if (parts.Length == 1) return year.ToString(CultureInfo.InvariantCulture);
+        if (!int.TryParse(parts[1], out var month) || month is < 1 or > 12)
+            return year.ToString(CultureInfo.InvariantCulture);
+        var monthName = CultureInfo.CurrentCulture.DateTimeFormat.GetMonthName(month);
+        if (parts.Length == 2) return $"{monthName} {year}";
+        return int.TryParse(parts[2], out var day) ? $"{monthName} {day}, {year}" : $"{monthName} {year}";
     }
 
     private static double? HeightInCm(JsonElement value)

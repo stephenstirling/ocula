@@ -174,6 +174,31 @@
                             <HyperlinkButton x:Name="SaveSearchButton" Content="Save as smart album" Padding="4,0"
                                              Visibility="Collapsed" Click="SaveSearch_Click"/>
                         </StackPanel>
+                        <!-- A search about people (height, age, birthplace...): how it was understood, and who matched -->
+                        <StackPanel x:Name="PersonSearchPanel" Visibility="Collapsed" Spacing="8" Margin="0,10,0,0">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="Understood as:" VerticalAlignment="Center"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                <StackPanel x:Name="PersonChips" Orientation="Horizontal" Spacing="8"/>
+                            </StackPanel>
+                            <Expander x:Name="PersonWho" Header="Who matched" IsExpanded="True" HorizontalAlignment="Left"
+                                      HorizontalContentAlignment="Stretch" Width="560">
+                                <StackPanel x:Name="PersonWhoRows" Spacing="8"/>
+                            </Expander>
+                            <Border x:Name="PersonNotCounted" Visibility="Collapsed" Padding="12,8" CornerRadius="6" Width="560"
+                                    HorizontalAlignment="Left" Background="{ThemeResource LayerFillColorAltBrush}"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="Not counted" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                    <StackPanel x:Name="PersonNotCountedRows" Spacing="2"/>
+                                    <HyperlinkButton x:Name="PersonLookThemUp" Content="Look them up…" Padding="0"
+                                                     Click="PersonLookThemUp_Click"/>
+                                </StackPanel>
+                            </Border>
+                            <TextBlock TextWrapping="Wrap" Width="560" FontSize="12" HorizontalAlignment="Left"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       Text="You can ask about height, age or birth year, birthplace, occupation, languages, married, and children, and combine them: “actresses born in Texas”. This searches only the person cards saved on this PC, and people without a card are never guessed at. Put a word in quotes to search for it literally."/>
+                        </StackPanel>
                     </StackPanel>
                     <ComboBox Grid.Column="1" x:Name="RatingFilter" SelectedIndex="0" VerticalAlignment="Center"
                               SelectionChanged="Filter_Changed" AutomationProperties.Name="Filter by rating">
