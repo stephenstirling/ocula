@@ -43,6 +43,7 @@ public sealed class ScraperStatus
     [JsonPropertyName("duplicates_skipped")] public int DuplicatesSkipped { get; set; }
     [JsonPropertyName("failed_downloads")]   public int FailedDownloads { get; set; }
     [JsonPropertyName("threads_skipped")]    public int ThreadsSkipped { get; set; }
+    [JsonPropertyName("metadata_failed")]    public int MetadataFailed { get; set; }   // saved, but the tags couldn't be written or read back
     [JsonPropertyName("last_error")]         public string? LastError { get; set; }
     [JsonPropertyName("events")]             public List<ScraperEvent> Events { get; set; } = new();
 
@@ -81,14 +82,27 @@ public sealed class ScraperMonitor : IDisposable
     public void Start(TimeSpan? interval = null)
     {
         Stop();
-        _cts = new CancellationTokenSource();
+        // The loop keeps its own copy: Stop() sets the field to null while a read may still be running, and the loop must not
+        // touch the field again (it threw a NullReferenceException on a background thread).
+        var cts = _cts = new CancellationTokenSource();
         var every = interval ?? TimeSpan.FromSeconds(2);
         _ = Task.Run(async () =>
         {
-            using var timer = new PeriodicTimer(every);
-            do { StatusChanged?.Invoke(await ReadOnceAsync(_cts.Token)); }
-            while (await timer.WaitForNextTickAsync(_cts.Token));
-        }, _cts.Token);
+            try
+            {
+                using var timer = new PeriodicTimer(every);
+                do
+                {
+                    var status = await ReadOnceAsync(cts.Token);
+                    if (!cts.IsCancellationRequested) StatusChanged?.Invoke(status);   // nothing is reported after Stop()
+                }
+                while (await timer.WaitForNextTickAsync(cts.Token));
+            }
+            catch (OperationCanceledException)
+            {
+                // Stopped.
+            }
+        }, cts.Token);
     }
 
     public void Stop() { _cts?.Cancel(); _cts = null; }

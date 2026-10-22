@@ -47,6 +47,8 @@
                      Message="No recent update from the container. Check that it is running in Container Manager."/>
             <InfoBar x:Name="ErrorBar" Severity="Warning" IsOpen="False" IsClosable="False"
                      Title="Last scan problem"/>
+            <InfoBar x:Name="TagBar" Severity="Warning" IsOpen="False" IsClosable="False"
+                     Title="Some images were saved without their tags"/>
 
             <!-- Progress -->
             <StackPanel Spacing="6">

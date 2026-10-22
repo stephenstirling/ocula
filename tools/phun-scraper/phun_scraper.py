@@ -384,6 +384,7 @@ class ScraperStatus:
             "upgrades": 0,
             "duplicates_skipped": 0,
             "failed_downloads": 0,
+            "metadata_failed": 0,         # saved, but the tags could not be written or read back
             "threads_skipped": 0,
             "last_error": None,
         }
@@ -692,21 +693,48 @@ def resolve_image_host_url(link_url):
     return None
 
 
+IPTC_EXTS = (".jpg", ".jpeg", ".tif", ".tiff")  # IPTC keywords can only be written into these; PNG and WebP carry XMP only
+
+
+def metadata_tags_for(file_path, keywords_list):
+    """The tags to write for a file. XMP:Subject is written for every format (it is what Windows reads as Keywords for PNG
+    and WebP); the IPTC keywords are only written where the format has them."""
+    tags = {
+        "XMP:Subject": keywords_list,
+        "XMP:Description": ", ".join(keywords_list),
+    }
+    if os.path.splitext(file_path)[1].lower() in IPTC_EXTS:
+        tags["IPTC:Keywords"] = keywords_list
+        tags["EXIF:ImageDescription"] = ", ".join(keywords_list)
+    return tags
+
+
+def _as_list(value):
+    if value is None:
+        return []
+    return [str(v) for v in value] if isinstance(value, (list, tuple)) else [str(value)]
+
+
 def embed_metadata(file_path, keywords_list):
+    """Writes the tags into the file, reads them back, and returns True only if they are there.
+    A failure is logged, shown in the scraper's activity list and counted (metadata_failed), because a file
+    without its tags can't be found by tag in Ocula."""
+    wanted = {k.lower() for k in keywords_list}
     with exif_lock:
         try:
+            tags = metadata_tags_for(file_path, keywords_list)
             with ExifToolHelper() as et:
-                et.set_tags(
-                    [file_path],
-                    tags={
-                        "IPTC:Keywords": keywords_list,
-                        "XMP:Subject": keywords_list,
-                        "EXIF:ImageDescription": ", ".join(keywords_list),
-                    },
-                    params=["-overwrite_original"],
-                )
+                et.set_tags([file_path], tags=tags, params=["-overwrite_original"])
+                back = et.get_tags([file_path], tags=["XMP:Subject"])
+            found = {k.lower() for k in _as_list(back[0].get("XMP:Subject") if back else None)}
+            if not wanted <= found:
+                raise ValueError("tags not found after writing: %s" % ", ".join(sorted(wanted - found)))
+            return True
         except Exception as e:
             logging.error("Metadata error tagging %s: %s", file_path, e)
+            status.bump("metadata_failed")
+            status.add_event("ERROR", "Couldn't tag %s: %s" % (os.path.basename(file_path), e))
+            return False
 
 
 def download_file(url, celeb_root_folder, history, keywords_list, meta=None):

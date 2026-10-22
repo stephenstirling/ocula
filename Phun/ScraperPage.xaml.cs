@@ -13,10 +13,10 @@ namespace Ocula.Views;
 
 public sealed partial class ScraperPage : Page
 {
-    // TODO: read these from Ocula's settings instead of hard-coding.
-    private const string DownloadsFolder = @"Z:\Babes";
-    private static readonly string? ScraperUrl = "http://192.168.86.62:8765";   // set to null to use the status file only
-    private const string? ScraperToken = null;                        // same value as STATUS_TOKEN, if you set one
+    // Read from Settings > Phun scraper each time the page opens.
+    private string _downloadsFolder = string.Empty;
+    private string? _scraperUrl;
+    private string? _scraperToken;
 
     private ScraperMonitor? _monitor;
 
@@ -25,12 +25,18 @@ public sealed partial class ScraperPage : Page
     // Poll only while the tab is visible.
     protected override void OnNavigatedTo(NavigationEventArgs e)
     {
-        _monitor = new ScraperMonitor(DownloadsFolder, ScraperUrl, ScraperToken);
+        _downloadsFolder = Ocula.Services.AppSettings.PhunDownloadsFolder;
+        _scraperUrl = Ocula.Services.AppSettings.PhunScraperUrl is { Length: > 0 } url ? url : null;
+        _scraperToken = Ocula.Services.AppSettings.PhunScraperToken is { Length: > 0 } token ? token : null;
+        _monitor = new ScraperMonitor(_downloadsFolder, _scraperUrl, _scraperToken);
         _monitor.StatusChanged += s => DispatcherQueue.TryEnqueue(() => Render(s));
         _monitor.Start();
     }
 
-    protected override void OnNavigatedFrom(NavigationEventArgs e)
+    protected override void OnNavigatedFrom(NavigationEventArgs e) => Stop();
+
+    /// <summary>Stops polling the scraper. Also called when the window that hosts the page closes.</summary>
+    public void Stop()
     {
         _monitor?.Dispose();
         _monitor = null;
@@ -46,6 +52,11 @@ public sealed partial class ScraperPage : Page
         ErrorBar.IsOpen = !s.Offline && !string.IsNullOrEmpty(s.LastError);
         ErrorBar.Message = s.LastError ?? "";
 
+        TagBar.IsOpen = !s.Offline && s.MetadataFailed > 0;
+        TagBar.Message = s.MetadataFailed == 1
+            ? "1 image couldn't be tagged, so it can't be found by tag. The activity list below says which."
+            : $"{s.MetadataFailed} images couldn't be tagged, so they can't be found by tag. The activity list below says which.";
+
         ScanBar.Value = s.ThreadProgress;
         ScanCountText.Text = $"{s.ThreadsDone} / {s.ThreadsTotal} threads";
         ThreadText.Text = string.IsNullOrEmpty(s.ThreadTitle) ? "Waiting for next scan" : s.ThreadTitle;
@@ -60,7 +71,7 @@ public sealed partial class ScraperPage : Page
         // newest first
         EventList.ItemsSource = Enumerable.Reverse(s.Events).Take(60).ToList();
 
-        ScanNowButton.IsEnabled = !s.Offline && s.State != "scanning" && ScraperUrl is not null;
+        ScanNowButton.IsEnabled = !s.Offline && s.State != "scanning" && _scraperUrl is not null;
     }
 
     private async void ScanNow_Click(object sender, RoutedEventArgs e)
