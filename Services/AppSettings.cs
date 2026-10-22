@@ -44,6 +44,34 @@ public static class AppSettings
         set => Store.Values["SharePeopleWithPorta"] = value;
     }
 
+    /// <summary>Whether the sidebar shows "Phun scraper…": a live view of the forum scraper running on your NAS. Off by default.</summary>
+    public static bool PhunTabEnabled
+    {
+        get => Store.Values["PhunTabEnabled"] as bool? ?? false;
+        set => Store.Values["PhunTabEnabled"] = value;
+    }
+
+    /// <summary>The scraper's status address on your network, for example http://192.168.1.10:8765. Empty: read the status file only.</summary>
+    public static string PhunScraperUrl
+    {
+        get => Store.Values["PhunScraperUrl"] as string ?? string.Empty;
+        set => Store.Values["PhunScraperUrl"] = value;
+    }
+
+    /// <summary>The scraper's STATUS_TOKEN, if it has one. Kept in Ocula's settings on this PC, unencrypted.</summary>
+    public static string PhunScraperToken
+    {
+        get => Store.Values["PhunScraperToken"] as string ?? string.Empty;
+        set => Store.Values["PhunScraperToken"] = value;
+    }
+
+    /// <summary>The folder the scraper saves into (it also holds scraper_status.json), as this PC sees it, for example Z:\Babes.</summary>
+    public static string PhunDownloadsFolder
+    {
+        get => Store.Values["PhunDownloadsFolder"] as string ?? string.Empty;
+        set => Store.Values["PhunDownloadsFolder"] = value;
+    }
+
     /// <summary>Whether the map may download map tiles from OpenFreeMap.</summary>
     public static bool OnlineMaps
     {

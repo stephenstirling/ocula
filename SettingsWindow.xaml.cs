@@ -43,6 +43,10 @@ public sealed partial class SettingsWindow : Window
         CameraToggle.IsOn = AppSettings.OnlineCameraLookup;
         PersonLookupToggle.IsOn = AppSettings.OnlinePersonLookup;
         SharePeopleToggle.IsOn = AppSettings.SharePeopleWithPorta;
+        PhunToggle.IsOn = AppSettings.PhunTabEnabled;
+        PhunUrlBox.Text = AppSettings.PhunScraperUrl;
+        PhunTokenBox.Password = AppSettings.PhunScraperToken;
+        PhunFolderBox.Text = AppSettings.PhunDownloadsFolder;
         ColourToggle.IsOn = AppSettings.ColourManaged;
         MapToggle.IsOn = AppSettings.OnlineMaps;
         CaptureTextToggle.IsOn = AppSettings.CaptureTextSearch;
@@ -259,6 +263,40 @@ public sealed partial class SettingsWindow : Window
     {
         if (_loading) return;
         AppSettings.OnlinePersonLookup = PersonLookupToggle.IsOn;
+    }
+
+    // ---------- Phun scraper ----------
+
+    private void PhunToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        AppSettings.PhunTabEnabled = PhunToggle.IsOn;
+        _main.PhunSettingsChanged();
+    }
+
+    private void PhunUrlBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        var text = PhunUrlBox.Text.Trim();
+        // Only an http or https address on the network: the monitor sends one GET (and, for Scan now, one POST) there.
+        if (text.Length > 0 && !(Uri.TryCreate(text, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https"))
+        {
+            PhunNote.Text = "That isn't an address Ocula can use. Use the form http://192.168.1.10:8765.";
+            PhunNoteCard.Visibility = Visibility.Visible;
+            return;
+        }
+        PhunNoteCard.Visibility = Visibility.Collapsed;
+        AppSettings.PhunScraperUrl = text;
+    }
+
+    private void PhunTokenBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (!_loading) AppSettings.PhunScraperToken = PhunTokenBox.Password;
+    }
+
+    private void PhunFolderBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (!_loading) AppSettings.PhunDownloadsFolder = PhunFolderBox.Text.Trim();
     }
 
     private void SharePeopleToggle_Toggled(object sender, RoutedEventArgs e)

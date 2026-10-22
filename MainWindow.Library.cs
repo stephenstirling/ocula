@@ -77,6 +77,8 @@ public sealed partial class MainWindow
         }));
         entries.Add(new() { Kind = SidebarEntry.Kinds.Action, Name = "New collection…", Glyph = "\uE710" });
         entries.Add(new() { Kind = SidebarEntry.Kinds.Action, Name = "People…", Glyph = "\uE716" });
+        if (AppSettings.PhunTabEnabled)
+            entries.Add(new() { Kind = SidebarEntry.Kinds.Action, Name = "Phun scraper…", Glyph = "\uE896" });
         entries.Add(new() { Kind = SidebarEntry.Kinds.Heading, Name = "SMART ALBUMS" });
         entries.AddRange(albums.Select(a => new SidebarEntry
         {
@@ -102,6 +104,9 @@ public sealed partial class MainWindow
             case SidebarEntry.Kinds.SmartAlbum:
                 var query = new SearchQuery(entry.Query);
                 await OpenRowsAsync(await _index.SearchAsync(query), ViewKind.SmartAlbum, entry.Id, entry.Name, query.Describe());
+                break;
+            case SidebarEntry.Kinds.Action when entry.Name.StartsWith("Phun"):
+                OpenPhun();
                 break;
             case SidebarEntry.Kinds.Action when entry.Name.StartsWith("People"):
                 OpenPeople();
