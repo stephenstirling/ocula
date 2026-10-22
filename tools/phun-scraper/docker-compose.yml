@@ -1,0 +1,15 @@
+services:
+  phun-scraper:
+    build: .
+    container_name: phun-scraper
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    environment:
+      - TZ=America/New_York
+      - STATUS_PORT=8765
+      # - STATUS_TOKEN=change-me      # optional: protects POST /scan-now
+    volumes:
+      # Left side = the NAS folder that Windows sees as Z:\Babes. CHANGE it to the real path
+      # (e.g. /volume1/<share>/Babes). Each thread then lands in <that folder>/<Celebrity Name>/
+      - /volume1/CHANGE-ME/Babes:/downloads
