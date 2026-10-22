@@ -584,8 +584,12 @@ _Still to come_
     redeployed and re-registered, no longer excluded the folder: the app, and a probe run inside the package (`Invoke-CommandInDesktopPackage`),
     both wrote to `...\Packages\StephenStirling.Ocula_...\LocalCache\Local\Stirling` instead, and a second excluded folder added as a test behaved the
     same. Nothing in the manifest or the code had changed in between; the cause is not known (a Windows update or a reboot are the guesses).
-    So **the exact path cannot be relied on in a packaged build yet, and Porta may find no file.** Not done: finding the cause, or a fallback (for
-    example also writing to the publisher cache folder, which did work), which the contract would have to allow. **Risks:** the manifest feature is newer than Ocula's minimum Windows 10
+    So **the exact path cannot be relied on in a packaged build.** What was done about it (October 2026): Ocula still writes where it always did, then writes a
+    marker file and looks for it in its own package folder (`PeopleExport.PublishedFolder`); if the write was redirected, the `thumbnail` paths in
+    `people-index.json` are written as the physical package-folder paths, so a reader outside Ocula can open them. Porta looks in both places and reads the
+    most recently written file (stephenstirling/porta#15): the real `%LocalAppData%\Stirling\Ocula` and
+    `%LocalAppData%\Packages\StephenStirling.Ocula_*\LocalCache\Local\Stirling\Ocula`. Checked with a real Ocula: its file was in the package folder and Porta's reader
+    found 3 people and 3 thumbnails there. Not found: the cause of the exclusion stopping. **Risks:** the manifest feature is newer than Ocula's minimum Windows 10
     1809 (the namespace is in `IgnorableNamespaces`, so older Windows should install it and ignore the exclusion, in which case the files stay
     invisible to Porta; not tried); and a restricted capability needs a justification when the package is submitted to the Store. An earlier
     version of this branch used a publisher cache folder instead; it was dropped to match the contract.
