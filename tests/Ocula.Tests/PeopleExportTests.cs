@@ -359,4 +359,66 @@ public class PeopleExportTests : IDisposable
         Assert.True(File.Exists(Path.Combine(_folder, "someone-elses.txt")));
         Assert.True(Directory.Exists(_folder));            // not empty, so it stays
     }
+
+    // ---------- Where a reader outside Ocula can find the pictures ----------
+
+    [Fact]
+    public void The_picture_paths_in_the_file_use_the_published_folder_when_it_differs_from_the_one_written_to()
+    {
+        var published = Path.Combine(Path.GetTempPath(), "ocula-published-" + Guid.NewGuid().ToString("N"));
+
+        PeopleExport.Write(_folder, new[] { new PeopleExportRow("0123456789abcdef", "Ann", null, 3, FaceJpeg(Color.Red)) }, Now, published);
+
+        var root = JsonDocument.Parse(File.ReadAllText(Path.Combine(_folder, PeopleExport.FileName))).RootElement;
+        Assert.Equal(Path.Combine(published, "people-thumbs", "0123456789abcdef.png"), root.GetProperty("people")[0].GetProperty("thumbnail").GetString());
+        Assert.True(File.Exists(Path.Combine(_folder, "people-thumbs", "0123456789abcdef.png")));   // still written where Ocula writes
+    }
+
+    [Fact]
+    public void With_no_published_folder_the_paths_are_the_written_folder()
+    {
+        var root = Written(new[] { new PeopleExportRow("0123456789abcdef", "Ann", null, 3, FaceJpeg(Color.Red)) });
+
+        Assert.Equal(Path.Combine(_folder, "people-thumbs", "0123456789abcdef.png"), root.GetProperty("people")[0].GetProperty("thumbnail").GetString());
+    }
+
+    [Fact]
+    public void A_write_that_was_redirected_is_published_from_where_it_really_landed()
+    {
+        var physical = Path.Combine(Path.GetTempPath(), "ocula-physical-" + Guid.NewGuid().ToString("N"));
+        string? asked = null;
+
+        var result = PeopleExport.PublishedFolder(_folder, physical, path => { asked = path; return true; });
+
+        Assert.Equal(physical, result);
+        Assert.Equal(Path.Combine(physical, ".location-marker"), asked);   // the marker is looked for in the physical folder
+    }
+
+    [Fact]
+    public void A_write_that_was_not_redirected_is_published_from_the_folder_itself()
+    {
+        var physical = Path.Combine(Path.GetTempPath(), "ocula-physical-" + Guid.NewGuid().ToString("N"));
+
+        Assert.Equal(_folder, PeopleExport.PublishedFolder(_folder, physical, _ => false));
+        Assert.Equal(_folder, PeopleExport.PublishedFolder(_folder, physical));   // really looks, finds nothing
+    }
+
+    [Fact]
+    public void Without_a_physical_folder_or_when_it_is_the_same_folder_nothing_is_probed()
+    {
+        Assert.Equal(_folder, PeopleExport.PublishedFolder(_folder, null));
+        Assert.Equal(_folder, PeopleExport.PublishedFolder(_folder, _folder.ToUpperInvariant()));
+        Assert.False(Directory.Exists(_folder));   // not even created
+    }
+
+    [Fact]
+    public void The_marker_is_always_removed_and_other_files_are_left_alone()
+    {
+        Directory.CreateDirectory(_folder);
+        File.WriteAllText(Path.Combine(_folder, "keep.txt"), "x");
+
+        PeopleExport.PublishedFolder(_folder, Path.Combine(_folder, "elsewhere"), _ => true);
+
+        Assert.Equal(new[] { "keep.txt" }, Directory.GetFiles(_folder).Select(Path.GetFileName));
+    }
 }
