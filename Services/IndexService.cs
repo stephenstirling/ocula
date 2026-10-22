@@ -753,6 +753,24 @@ public sealed class IndexService : IDisposable
         return true;
     });
 
+    /// <summary>The name of a group that is named and not hidden, or null.</summary>
+    public Task<string?> FindPersonByIdAsync(long personId) => RunAsync(() =>
+    {
+        using var cmd = _db.CreateCommand();
+        cmd.CommandText = "SELECT name FROM people WHERE id = $p AND name IS NOT NULL AND hidden = 0";
+        cmd.Parameters.AddWithValue("$p", personId);
+        return cmd.ExecuteScalar() as string;
+    });
+
+    /// <summary>The clearest face of a group (a small JPEG), or null.</summary>
+    public Task<byte[]?> GetPersonAvatarAsync(long personId) => RunAsync(() =>
+    {
+        using var cmd = _db.CreateCommand();
+        cmd.CommandText = "SELECT thumb FROM faces WHERE person_id = $p ORDER BY score DESC LIMIT 1";
+        cmd.Parameters.AddWithValue("$p", personId);
+        return cmd.ExecuteScalar() as byte[];
+    });
+
     /// <summary>Groups to show: named ones first, then by size. Each comes with its clearest face as an avatar.</summary>
     public Task<List<PersonSummary>> GetPeopleAsync(bool includeHidden = false) => RunAsync(() =>
     {

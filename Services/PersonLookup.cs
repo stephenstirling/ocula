@@ -101,6 +101,33 @@ public sealed class PersonFacts
         }
     }
 
+    /// <summary>
+    /// The card as label and value pairs, in the order it is shown, leaving out what Wikidata didn't have. Shared by the People window
+    /// and the header over a person's photos.
+    /// </summary>
+    public List<(string Label, string Value)> Rows()
+    {
+        var rows = new List<(string, string)>();
+        void Add(string label, string? value)
+        {
+            if (!string.IsNullOrWhiteSpace(value)) rows.Add((label, value));
+        }
+        static string? Join(string separator, params string?[] parts) =>
+            string.Join(separator, parts.Where(p => !string.IsNullOrWhiteSpace(p)));
+
+        Add("Full name", FullName);
+        Add("Born", Join(" \u00B7 ", BirthDateText, BirthPlace));
+        Add("Died", DeathDateText);
+        Add("Occupation", string.Join(", ", Occupations));
+        Add(Spouses.Count > 1 ? "Spouses" : "Spouse", string.Join(", ", Spouses.Select(s => s.Display)));
+        Add("Former spouses", string.Join(", ", FormerSpouses.Select(s => s.Display)));
+        Add("Partners", string.Join(", ", Partners.Select(s => s.Display)));
+        Add("Children", ChildrenText);
+        Add("Height", HeightText);
+        Add("Languages", string.Join(", ", Languages));
+        return rows;
+    }
+
     public string ToJson() => JsonSerializer.Serialize(this);
 
     public static PersonFacts? FromJson(string json)

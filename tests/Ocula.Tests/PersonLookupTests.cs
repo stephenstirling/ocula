@@ -81,6 +81,29 @@ public class PersonLookupTests
     // ---------- The whole card ----------
 
     [Fact]
+    public void The_card_rows_are_in_display_order_and_leave_out_what_wikidata_did_not_have()
+    {
+        var previous = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = new CultureInfo("en-US");
+        try
+        {
+            var rows = PersonLookup.Build(FullPerson(), Labels, Chain, Now).Rows();
+
+            Assert.Equal(
+                new[] { "Full name", "Born", "Occupation", "Spouse", "Former spouses", "Partners", "Children", "Height", "Languages" },
+                rows.Select(r => r.Label));
+            Assert.Equal("February 2, 1977 · Austin, Texas, United States", rows.Single(r => r.Label == "Born").Value);
+            Assert.Equal("Alex Rivera (2009–2014)", rows.Single(r => r.Label == "Former spouses").Value);
+            Assert.Equal("5′3″ (160 cm)", rows.Single(r => r.Label == "Height").Value);
+            Assert.Empty(PersonLookup.Build(Entity("Q7", "Nobody", null, "{}"), Labels, Array.Empty<string>(), Now).Rows());
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previous;
+        }
+    }
+
+    [Fact]
     public void A_person_with_every_attribute_gets_a_full_card()
     {
         var card = PersonLookup.Build(FullPerson(), Labels, Chain, Now);

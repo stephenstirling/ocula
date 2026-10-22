@@ -467,6 +467,12 @@ _Still to come_
     as tag chips with none ticked. All Wikidata text is cleaned before use, because anyone can edit Wikidata.
     Real Wikidata needs `languagefallback=1`: many items (Shakira's among them) have their name only under the "mul" label, and a plain
     English request returned no name.
+  - **Card over a person's photos (October 2026).** When the main grid shows one person's photos (People > "Show these photos", an `ocula:person`
+    link, or a name in "Who matched"), a card sits above the photos: their face, the Wikidata description, the same rows as the People window
+    (`PersonFacts.Rows()`), the credit line, "Open in People" and "Open on Wikidata". A group with no saved card shows "No person card for X yet" and a
+    "Look up on Wikidata" button that opens People on them, where the lookup is (the lookup flow was not duplicated). The card refreshes when a card is
+    saved or removed, or the person is renamed, in the People window. Tried in the real app on a named group with no card, then after looking her up.
+    Not tried: renaming or hiding the person while their photos are on show, and the card in a narrow window.
   - Checked in the real window (October 2026, People switched on, 280+ groups): a group named "Shakira" (with "Add the name as a tag" off)
     gave a picker of five people with descriptions (the given name, album and crater were filtered out), "Use this person" saved the card
     (full name, born February 2, 1977 in Barranquilla, Atlántico Department, Colombia, occupations, partners with years, 2 children, 5'2"
