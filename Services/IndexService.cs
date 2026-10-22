@@ -142,6 +142,16 @@ public sealed class IndexService : IDisposable
         }
         if (addedBorn) BackfillPersonCards();
         RefreshOccupations();
+        // Stable public ids let companion apps refer to a group without exposing SQLite's internal row id.
+        try { Execute("ALTER TABLE people ADD COLUMN uid TEXT;"); }
+        catch (SqliteException) { /* already there */ }
+        Execute(@"
+            UPDATE people SET uid = lower(hex(randomblob(8))) WHERE uid IS NULL;
+            CREATE UNIQUE INDEX IF NOT EXISTS ix_people_uid ON people(uid);
+            CREATE TRIGGER IF NOT EXISTS trg_people_uid AFTER INSERT ON people WHEN new.uid IS NULL
+            BEGIN
+                UPDATE people SET uid = lower(hex(randomblob(8))) WHERE id = new.id;
+            END;");
         // Smart recognition: one embedding per photo and model. An empty blob means "tried, nothing to read".
         Execute(@"
             CREATE TABLE IF NOT EXISTS embeddings (
@@ -361,6 +371,7 @@ public sealed class IndexService : IDisposable
             tx.Commit();
         }
         foreach (var id in groups) RecomputeGroup(id);
+        if (groups.Count > 0) RaisePeopleChanged();
         return true;
     });
 
@@ -805,6 +816,7 @@ public sealed class IndexService : IDisposable
                 Execute($"UPDATE faces SET person_id = {other} WHERE person_id = {personId};");
                 Execute($"DELETE FROM people WHERE id = {personId};");
                 RecomputeGroup(other);
+                RaisePeopleChanged();
                 return survivor;
             }
         }
@@ -824,7 +836,26 @@ public sealed class IndexService : IDisposable
         cmd.Parameters.AddWithValue("$n", (object?)name ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$id", personId);
         cmd.ExecuteNonQuery();
+        RaisePeopleChanged();
         return survivor;
+    });
+
+    /// <summary>Raised when the named people list, their photos, or saved cards change.</summary>
+    public event Action? PeopleChanged;
+
+    private void RaisePeopleChanged() => PeopleChanged?.Invoke();
+
+    /// <summary>The named, visible people for the optional companion-app export.</summary>
+    public Task<List<PeopleExportRow>> GetPeopleForExportAsync() => RunAsync(() => PeopleExport.ReadRows(_db));
+
+    /// <summary>Finds a visible person by the stable id used in the export and ocula:person links.</summary>
+    public Task<(long Id, string Name)?> FindPersonByUidAsync(string uid) => RunAsync(() =>
+    {
+        using var cmd = _db.CreateCommand();
+        cmd.CommandText = "SELECT id, name FROM people WHERE uid = $u AND name IS NOT NULL AND hidden = 0";
+        cmd.Parameters.AddWithValue("$u", uid);
+        using var reader = cmd.ExecuteReader();
+        return reader.Read() ? ((long, string)?)(reader.GetInt64(0), reader.GetString(1)) : null;
     });
 
     // ----- Person cards (Wikidata) -----
@@ -858,6 +889,7 @@ public sealed class IndexService : IDisposable
         cmd.Parameters.AddWithValue("$cup", (object?)facts.BraCupRank ?? DBNull.Value);
         cmd.ExecuteNonQuery();
         RefreshOccupations();
+        RaisePeopleChanged();
         return true;
     });
 
@@ -950,6 +982,7 @@ public sealed class IndexService : IDisposable
     {
         Execute($"DELETE FROM person_cards WHERE person_id = {personId};");
         RefreshOccupations();
+        RaisePeopleChanged();
         return true;
     });
 
@@ -1075,6 +1108,7 @@ public sealed class IndexService : IDisposable
         }
         Execute($"UPDATE faces SET person_id = {newId}, locked = 1 WHERE id = {faceId};");
         if (oldId != 0) RecomputeGroup(oldId);
+        RaisePeopleChanged();
         return true;
     });
 
@@ -1082,6 +1116,7 @@ public sealed class IndexService : IDisposable
     public Task HidePersonAsync(long personId) => RunAsync(() =>
     {
         Execute($"UPDATE people SET hidden = 1 WHERE id = {personId};");
+        RaisePeopleChanged();
         return true;
     });
 
@@ -1089,6 +1124,7 @@ public sealed class IndexService : IDisposable
     public Task DeleteFaceDataAsync() => RunAsync(() =>
     {
         Execute("DELETE FROM faces; DELETE FROM people; DELETE FROM face_scans;");
+        RaisePeopleChanged();
         return true;
     });
 
@@ -1147,6 +1183,7 @@ public sealed class IndexService : IDisposable
         Execute("DELETE FROM embeddings;");
         Execute("DELETE FROM faces; DELETE FROM people; DELETE FROM face_scans;");
         Execute("PRAGMA wal_checkpoint(TRUNCATE); VACUUM;");
+        RaisePeopleChanged();
         return true;
     });
 

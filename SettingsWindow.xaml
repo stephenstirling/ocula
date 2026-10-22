@@ -113,6 +113,12 @@
                     <ToggleSwitch x:Name="PersonLookupToggle" Toggled="PersonLookupToggle_Toggled"/>
                 </toolkit:SettingsCard>
 
+                <toolkit:SettingsCard Header="Share people with Porta"
+                                      Description="Lets Porta (the Start menu replacement) find your photos of the people you have named. When on, Ocula saves a small file on this PC with each named person's name, other names Wikidata gave for them, a short description if you looked them up, how many photos they are in, and a small picture of their face. Nothing else from a person's card is shared, and nothing is sent over the internet. Turning this off, or deleting face data, removes the file and pictures.">
+                    <toolkit:SettingsCard.HeaderIcon><FontIcon Glyph="&#xE716;"/></toolkit:SettingsCard.HeaderIcon>
+                    <ToggleSwitch x:Name="SharePeopleToggle" Toggled="SharePeopleToggle_Toggled"/>
+                </toolkit:SettingsCard>
+
                 <toolkit:SettingsCard Header="Map"
                                       Description="Downloads map images from OpenFreeMap when you open the map. The map provider can see which areas you view, which are where your photos were taken. Photos and their exact locations are never sent.">
                     <toolkit:SettingsCard.HeaderIcon><FontIcon Glyph="&#xE707;"/></toolkit:SettingsCard.HeaderIcon>
