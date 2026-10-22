@@ -17,7 +17,37 @@ namespace Ocula.Library;
 public record IndexedImage(
     long Id, string FullPath, string? Celebrity, string? Category, IReadOnlyList<string> Tags,
     string? SourceUrl, string? ThreadTitle, string? ThreadUrl, string? PostDate,
-    int Width, int Height, long FileSize, bool Upgraded, DateTime? DownloadedAt);
+    int Width, int Height, long FileSize, bool Upgraded, DateTime? DownloadedAt)
+{
+    public string Name => Path.GetFileName(FullPath);
+
+    /// <summary>"Upgraded" when the scraper replaced the picture with a larger copy, otherwise "Saved".</summary>
+    public string Badge => Upgraded ? "Upgraded" : "Saved";
+
+    /// <summary>For example "3.2 MB · 4000 × 3000".</summary>
+    public string SizeText
+    {
+        get
+        {
+            var size = FileSize switch
+            {
+                >= 1_000_000 => $"{FileSize / 1_000_000.0:0.#} MB",
+                >= 1_000 => $"{FileSize / 1_000.0:0} KB",
+                > 0 => $"{FileSize} bytes",
+                _ => null
+            };
+            var pixels = Width > 0 && Height > 0 ? $"{Width} × {Height}" : null;
+            return string.Join(" · ", new[] { size, pixels }.Where(s => s != null));
+        }
+    }
+
+    /// <summary>The tags the scraper meant to write that are not in <paramref name="tagsInFile"/> (compared without regard to case).</summary>
+    public IReadOnlyList<string> MissingFrom(IEnumerable<string> tagsInFile)
+    {
+        var have = new HashSet<string>(tagsInFile, StringComparer.OrdinalIgnoreCase);
+        return Tags.Where(t => !have.Contains(t)).ToList();
+    }
+}
 
 public sealed class LibraryIndex
 {
@@ -28,7 +58,10 @@ public sealed class LibraryIndex
     public LibraryIndex(string libraryRoot)
     {
         _root = libraryRoot;
-        _localCopy = Path.Combine(Path.GetTempPath(), "ocula_library_cache.db");
+        // One snapshot per library folder, so two folders (or two copies of the app) never overwrite each other's.
+        var id = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(Path.GetFullPath(libraryRoot).ToLowerInvariant())))[..12].ToLowerInvariant();
+        _localCopy = Path.Combine(Path.GetTempPath(), $"ocula_library_cache_{id}.db");
     }
 
     public bool Exists => File.Exists(Path.Combine(_root, DbName));
@@ -42,7 +75,8 @@ public sealed class LibraryIndex
             File.Copy(src, _localCopy, overwrite: true);
     }
 
-    public IEnumerable<IndexedImage> Query(string? celebrity = null, string? category = null, string? tag = null)
+    /// <param name="limit">At most this many rows, newest first (null: all).</param>
+    public IEnumerable<IndexedImage> Query(string? celebrity = null, string? category = null, string? tag = null, int? limit = null)
     {
         if (!Exists) yield break;
         RefreshSnapshot();
@@ -57,23 +91,30 @@ public sealed class LibraryIndex
             WHERE ($celeb IS NULL OR i.celebrity = $celeb)
               AND ($cat   IS NULL OR i.category  = $cat)
               AND ($tag   IS NULL OR EXISTS (SELECT 1 FROM image_tags t WHERE t.image_id = i.id AND t.tag = $tag))
-            ORDER BY i.downloaded_at DESC";
+            ORDER BY i.downloaded_at DESC, i.id DESC
+            LIMIT $limit";
         cmd.Parameters.AddWithValue("$celeb", (object?)celebrity ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$cat", (object?)category ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$tag", (object?)tag ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$limit", limit ?? -1);   // SQLite: a negative limit means no limit
 
         using var r = cmd.ExecuteReader();
         while (r.Read())
         {
             string? S(int i) => r.IsDBNull(i) ? null : r.GetString(i);
             var tags = JsonSerializer.Deserialize<List<string>>(S(4) ?? "[]") ?? new();
+            // The file is on a network share that another program writes: a row must never point outside the library folder.
+            var full = Path.GetFullPath(Path.Combine(_root, r.GetString(1).Replace('/', Path.DirectorySeparatorChar)));
+            if (!full.StartsWith(Path.GetFullPath(_root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                continue;
             yield return new IndexedImage(
                 r.GetInt64(0),
-                Path.Combine(_root, r.GetString(1).Replace('/', Path.DirectorySeparatorChar)),
+                full,
                 S(2), S(3), tags, S(5), S(6), S(7), S(8),
                 r.IsDBNull(9) ? 0 : r.GetInt32(9), r.IsDBNull(10) ? 0 : r.GetInt32(10),
                 r.IsDBNull(11) ? 0 : r.GetInt64(11), !r.IsDBNull(12) && r.GetInt32(12) == 1,
-                DateTime.TryParse(S(13), out var d) ? d : null);
+                DateTime.TryParse(S(13), System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out var d) ? d : null);   // the scraper writes UTC
         }
     }
 }

@@ -34,6 +34,7 @@
     <Compile Include="..\..\Services\TagSuggester.cs" Link="App\TagSuggester.cs" />
     <Compile Include="..\..\Services\PersonLookup.cs" Link="App\PersonLookup.cs" />
     <Compile Include="..\..\Phun\ScraperMonitor.cs" Link="App\ScraperMonitor.cs" />
+    <Compile Include="..\..\Phun\LibraryIndex.cs" Link="App\LibraryIndex.cs" />
     <Compile Include="..\..\Services\PersonSources.cs" Link="App\PersonSources.cs" />
     <Compile Include="..\..\Services\PersonQuery.cs" Link="App\PersonQuery.cs" />
     <Compile Include="..\..\Services\PeopleExport.cs" Link="App\PeopleExport.cs" />

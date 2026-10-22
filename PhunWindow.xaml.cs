@@ -22,7 +22,7 @@ public sealed partial class PhunWindow : Window
         AppWindow.TitleBar.ButtonForegroundColor = dark ? Colors.White : Colors.Black;
         AppWindow.TitleBar.ButtonBackgroundColor = Colors.Transparent;
 
-        ContentFrame.Navigate(typeof(Ocula.Views.ScraperPage));
+        ContentFrame.Navigate(typeof(Ocula.Views.ScraperPage), main);
         Closed += (_, _) => (ContentFrame.Content as Ocula.Views.ScraperPage)?.Stop();   // closing the window doesn't navigate away, so stop the polling here
     }
 }

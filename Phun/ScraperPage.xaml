@@ -5,7 +5,8 @@
     x:Class="Ocula.Views.ScraperPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:lib="using:Ocula.Library">
+    xmlns:lib="using:Ocula.Library"
+    xmlns:local="using:Ocula.Views">
 
     <Page.Resources>
         <Style x:Key="StatCard" TargetType="Border">
@@ -84,6 +85,43 @@
                     <TextBlock x:Name="FailedText" FontSize="28" FontWeight="SemiBold"/>
                     <TextBlock Text="Failed" Opacity="0.7"/></StackPanel></Border>
             </Grid>
+
+            <!-- Recently saved pictures, from the scraper's library file -->
+            <Grid>
+                <TextBlock Text="Recently saved" FontWeight="SemiBold"/>
+                <TextBlock x:Name="RecentNote" HorizontalAlignment="Right" Opacity="0.7"/>
+            </Grid>
+            <GridView x:Name="RecentGrid" SelectionMode="Single" SelectionChanged="RecentGrid_SelectionChanged" MaxHeight="440"
+                      AutomationProperties.Name="Recently saved pictures">
+                <GridView.ItemTemplate>
+                    <DataTemplate x:DataType="local:RecentImage">
+                        <StackPanel Width="132" Spacing="4" Padding="4">
+                            <Grid Width="124" Height="94" Background="{ThemeResource ControlFillColorSecondaryBrush}" CornerRadius="6">
+                                <Image Source="{x:Bind Thumb, Mode=OneWay}" Stretch="UniformToFill"/>
+                                <Border Background="{ThemeResource SolidBackgroundFillColorBaseBrush}" CornerRadius="4" Padding="6,1"
+                                        HorizontalAlignment="Left" VerticalAlignment="Top" Margin="6">
+                                    <TextBlock Text="{x:Bind Badge}" FontSize="11"/>
+                                </Border>
+                            </Grid>
+                            <TextBlock Text="{x:Bind Name}" FontSize="12" TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </GridView.ItemTemplate>
+            </GridView>
+            <Border x:Name="DetailCard" Style="{StaticResource StatCard}" Visibility="Collapsed">
+                <StackPanel Spacing="8">
+                    <TextBlock x:Name="DetailName" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="DetailMeta" Opacity="0.7" TextWrapping="Wrap"/>
+                    <TextBlock Text="Tags in the file" FontWeight="SemiBold" Margin="0,6,0,0"/>
+                    <TextBlock x:Name="DetailTags" TextWrapping="Wrap" IsTextSelectionEnabled="True"/>
+                    <InfoBar x:Name="DetailTagWarning" Severity="Warning" IsOpen="False" IsClosable="False"
+                             Title="Some tags are missing from the file"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Open in Ocula" Click="OpenInOcula_Click"/>
+                        <Button Content="Show in folder" Click="ShowInFolder_Click"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
 
             <!-- Activity log -->
             <TextBlock Text="Recent activity" FontWeight="SemiBold"/>
