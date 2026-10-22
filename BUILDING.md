@@ -579,8 +579,13 @@ _Still to come_
     Windows redirects such an app's writes under `%LocalAppData%` into its private package folder (that is why the library is under
     `...\Packages\StephenStirling.Ocula_...\LocalCache\Local\Ocula`), where Porta couldn't see them. `Package.appxmanifest` therefore excludes
     `%LocalAppData%\Stirling` from that redirection (`virtualization:ExcludedDirectory`, which needs the restricted capability
-    `unvirtualizedResources`), so the files are real files at the real path. Checked on this PC (Windows 11): switching on wrote the files at the
-    real path and nothing appeared in the package's private folder. **Risks:** the manifest feature is newer than Ocula's minimum Windows 10
+    `unvirtualizedResources`), so the files are real files at the real path. Checked on this PC (Windows 11) on 21 October 2026: switching on wrote the files at the
+    real path and nothing appeared in the package's private folder. **That did not hold the next day.** On 22 October the same manifest,
+    redeployed and re-registered, no longer excluded the folder: the app, and a probe run inside the package (`Invoke-CommandInDesktopPackage`),
+    both wrote to `...\Packages\StephenStirling.Ocula_...\LocalCache\Local\Stirling` instead, and a second excluded folder added as a test behaved the
+    same. Nothing in the manifest or the code had changed in between; the cause is not known (a Windows update or a reboot are the guesses).
+    So **the exact path cannot be relied on in a packaged build yet, and Porta may find no file.** Not done: finding the cause, or a fallback (for
+    example also writing to the publisher cache folder, which did work), which the contract would have to allow. **Risks:** the manifest feature is newer than Ocula's minimum Windows 10
     1809 (the namespace is in `IgnorableNamespaces`, so older Windows should install it and ignore the exclusion, in which case the files stay
     invisible to Porta; not tried); and a restricted capability needs a justification when the package is submitted to the Store. An earlier
     version of this branch used a publisher cache folder instead; it was dropped to match the contract.
