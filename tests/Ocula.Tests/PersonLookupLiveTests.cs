@@ -39,6 +39,21 @@ public class PersonLookupLiveTests
         File.WriteAllText(Path.Combine(Path.GetTempPath(), "ocula-live-card.json"), card.ToJson());
     }
 
+    [Fact(Explicit = true)]
+    public async Task Someone_who_has_died_has_a_place_and_cause_of_death()
+    {
+        var lookup = new PersonLookup(PersonLookup.CreateClient());
+
+        var matches = await lookup.SearchPeopleAsync("Whitney Houston");
+        var person = matches.First(m => m.Description?.Contains("singer", StringComparison.OrdinalIgnoreCase) == true);
+        var card = await lookup.GetFactsAsync(person.Id, DateTimeOffset.Now);
+
+        Assert.Equal("2012-02-11", card.DeathDate);
+        Assert.False(string.IsNullOrEmpty(card.DeathPlace));
+        Assert.Contains(card.Rows(), r => r.Label == "Date of death");
+        File.WriteAllText(Path.Combine(Path.GetTempPath(), "ocula-live-deceased.json"), card.ToJson());
+    }
+
     /// <summary>
     /// Reads a few real people from Wikidata and writes the SQL that would store their cards (the same columns as
     /// <c>IndexService.SavePersonCardAsync</c>) to the temp folder, for trying the person search on a real library by hand.

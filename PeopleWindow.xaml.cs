@@ -281,8 +281,7 @@ public sealed partial class PeopleWindow : Window
         foreach (var (label, value) in facts.Rows()) Row(label, value);
         if (CardRows.Children.Count == 0) Row("Wikidata has", "no facts about this person that Ocula shows.");
 
-        CardCredit.Text = $"From Wikidata (CC0), retrieved {facts.RetrievedAt.LocalDateTime:MMMM d, yyyy}. It is only what Wikidata lists, " +
-                          "can be out of date, and often leaves things out. A spouse is one with no end date there.";
+        CardCredit.Text = facts.CreditText;
         CardCredit.Visibility = Visibility.Visible;
         CardLink.NavigateUri = new Uri("https://www.wikidata.org/wiki/" + facts.WikidataId);
         CardLink.Visibility = Visibility.Visible;

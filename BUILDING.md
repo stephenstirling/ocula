@@ -467,6 +467,14 @@ _Still to come_
     as tag chips with none ticked. All Wikidata text is cleaned before use, because anyone can edit Wikidata.
     Real Wikidata needs `languagefallback=1`: many items (Shakira's among them) have their name only under the "mul" label, and a plain
     English request returned no name.
+  - **Card rows (October 2026).** Both card surfaces (the People window and the card over a person's photos) show the same rows, from
+    `PersonFacts.Rows()`, in this order, leaving out what is blank: Full name, Date of birth, Place of birth (separate rows), Date of death, Place of
+    death and Cause of death (only for someone Wikidata gives a death date; the last two are new, read from Wikidata P20 and P509, so an older card
+    needs "Look up again" to get them), Occupation, Height, Spouse(s), Former spouses, Partners, Children (a count), Languages. The credit line
+    (`PersonFacts.CreditText`) names every source in the card's `Sources` (today only "Wikidata (CC0)") and keeps the "can be out of date" caveat; a
+    height is followed by its source only when the card has more than one source. **Not built, and not added: second sources** (DBpedia,
+    MusicBrainz, a heights site), named children with birth dates (the design here is a count only, never by name), and body-measurement fields
+    (CLAUDE.md: not wanted). A brief that described those as "already on PersonFacts" was wrong: they are not in this code.
   - **Card over a person's photos (October 2026).** When the main grid shows one person's photos (People > "Show these photos", an `ocula:person`
     link, or a name in "Who matched"), a card sits above the photos: their face, the Wikidata description, the same rows as the People window
     (`PersonFacts.Rows()`), the credit line, "Open in People" and "Open on Wikidata". A group with no saved card shows "No person card for X yet" and a

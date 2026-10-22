@@ -72,7 +72,7 @@ public sealed partial class MainWindow
                 row.Children.Add(text);
                 PersonHeaderRows.Children.Add(row);
             }
-            PersonHeaderNote.Text = $"From Wikidata (CC0), retrieved {card.RetrievedAt.LocalDateTime:MMMM d, yyyy}. Only what Wikidata lists; it can be out of date.";
+            PersonHeaderNote.Text = card.CreditText;
             PersonHeaderButton.Content = "Open in People";
             PersonHeaderButton.Visibility = Visibility.Visible;
             PersonHeaderLink.NavigateUri = new Uri("https://www.wikidata.org/wiki/" + card.WikidataId);

@@ -51,6 +51,10 @@ public sealed class PersonFacts
     public int? BirthYear { get; set; }
     public string? DeathDate { get; set; }
 
+    /// <summary>Where and of what they died, from Wikidata, only for a person who has a death date there.</summary>
+    public string? DeathPlace { get; set; }
+    public string? DeathCause { get; set; }
+
     /// <summary>"female" or "male" when Wikidata says so. Not shown on the card; only used so a search for "actress" can tell
     /// an actress from an actor (Wikidata files both under "actor").</summary>
     public string? Gender { get; set; }
@@ -116,16 +120,51 @@ public sealed class PersonFacts
             string.Join(separator, parts.Where(p => !string.IsNullOrWhiteSpace(p)));
 
         Add("Full name", FullName);
-        Add("Born", Join(" \u00B7 ", BirthDateText, BirthPlace));
-        Add("Died", DeathDateText);
+        Add("Date of birth", BirthDateText);
+        Add("Place of birth", BirthPlace);
+        if (DeathDate != null)   // where and of what are only shown for someone Wikidata says has died
+        {
+            Add("Date of death", DeathDateText);
+            Add("Place of death", DeathPlace);
+            Add("Cause of death", DeathCause);
+        }
         Add("Occupation", string.Join(", ", Occupations));
+        Add("Height", HeightText is { } height && HasSeveralSources && Sources.TryGetValue("height", out var heightSource)
+            ? $"{height} \u00B7 {heightSource}" : HeightText);
         Add(Spouses.Count > 1 ? "Spouses" : "Spouse", string.Join(", ", Spouses.Select(s => s.Display)));
         Add("Former spouses", string.Join(", ", FormerSpouses.Select(s => s.Display)));
         Add("Partners", string.Join(", ", Partners.Select(s => s.Display)));
         Add("Children", ChildrenText);
-        Add("Height", HeightText);
         Add("Languages", string.Join(", ", Languages));
         return rows;
+    }
+
+    // ----- Where the card's facts came from -----
+
+    /// <summary>The sources the facts on this card came from, in the order they were first used ("Wikidata", and any other that was added).</summary>
+    [JsonIgnore]
+    public List<string> SourceNames => Sources.Values.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+    /// <summary>Whether more than one source contributed, in which case a fact says which one it came from.</summary>
+    [JsonIgnore]
+    public bool HasSeveralSources => SourceNames.Count > 1;
+
+    /// <summary>The source's name as credited under the card: Wikidata is CC0; another source is named as it was recorded.</summary>
+    private static string Credit(string source) =>
+        source.Equals("Wikidata", StringComparison.OrdinalIgnoreCase) ? "Wikidata (CC0)" : source;
+
+    /// <summary>The line under the card: every source actually used, when it was read, and that it may be out of date.</summary>
+    [JsonIgnore]
+    public string CreditText
+    {
+        get
+        {
+            var names = SourceNames;
+            var from = names.Count == 0 ? "Wikidata (CC0)" : string.Join(", ", names.Select(Credit));
+            var only = names.Count > 1 ? "sources list" : "Wikidata lists";
+            return $"From {from}, retrieved {RetrievedAt.LocalDateTime:MMMM d, yyyy}. It is only what {only}, can be out of date, " +
+                   "and often leaves things out. A spouse is one with no end date there.";
+        }
     }
 
     public string ToJson() => JsonSerializer.Serialize(this);
@@ -304,7 +343,7 @@ public sealed class PersonLookup
     /// <summary>The items whose names are needed to write the card: occupations, spouses, partners, languages.</summary>
     public static IEnumerable<string> ReferencedItems(JsonElement entity)
     {
-        foreach (var property in new[] { "P106", "P26", "P451", "P1412" })
+        foreach (var property in new[] { "P106", "P26", "P451", "P1412", "P20", "P509" })
             foreach (var id in ItemValues(entity, property, ranked: true))
                 yield return id;
     }
@@ -347,6 +386,21 @@ public sealed class PersonLookup
         {
             facts.DeathDate = died.Text;
             facts.Sources["deathDate"] = "Wikidata";
+        }
+
+        // Where and of what they died: only for someone Wikidata gives a death date.
+        if (facts.DeathDate != null)
+        {
+            if (FirstItem(entity, "P20") is { } placeId && Label(placeId) is { Length: > 0 } place)
+            {
+                facts.DeathPlace = place;
+                facts.Sources["deathPlace"] = "Wikidata";
+            }
+            if (FirstItem(entity, "P509") is { } causeId && Label(causeId) is { Length: > 0 } cause)
+            {
+                facts.DeathCause = cause;
+                facts.Sources["deathCause"] = "Wikidata";
+            }
         }
 
         // Gender, only for searching (see PersonFacts.Gender).
