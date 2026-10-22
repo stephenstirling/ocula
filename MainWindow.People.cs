@@ -125,7 +125,7 @@ public sealed partial class MainWindow
             return;
         }
         var paths = await _index.GetPersonPhotoPathsAsync(person.Id);
-        await ShowPhotosAsync(person.Name, await _index.GetRowsAsync(paths));   // their photos in the grid, behind
+        await ShowPhotosAsync(person.Name, await _index.GetRowsAsync(paths), person.Id);   // their photos in the grid, behind
         OpenPeople();                                                           // and the People view on them, in front
         _people?.ShowPerson(person.Id);
     }
@@ -142,10 +142,13 @@ public sealed partial class MainWindow
         await ApplyToItemsAsync(items, i => { if (!i.Tags.Any(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase))) i.Tags.Add(tag); });
     }
 
-    /// <summary>Shows a person's photos in the grid.</summary>
-    public async Task ShowPhotosAsync(string name, List<IndexRow> rows)
+    /// <summary>
+    /// Shows a person's photos in the grid. With the group's id, a card for the person is shown above the photos (see MainWindow.PersonCard).
+    /// </summary>
+    public async Task ShowPhotosAsync(string name, List<IndexRow> rows, long? personId = null)
     {
         await OpenRowsAsync(rows, ViewKind.Search, 0, name, "photos of this person (as grouped by you)");
+        if (personId is long id) await ShowPersonHeaderAsync(id, name);
         Activate();
     }
 }

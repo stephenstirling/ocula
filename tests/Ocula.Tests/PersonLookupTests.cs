@@ -81,6 +81,90 @@ public class PersonLookupTests
     // ---------- The whole card ----------
 
     [Fact]
+    public void The_card_rows_are_in_display_order_and_leave_out_what_wikidata_did_not_have()
+    {
+        var previous = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = new CultureInfo("en-US");
+        try
+        {
+            var rows = PersonLookup.Build(FullPerson(), Labels, Chain, Now).Rows();
+
+            Assert.Equal(
+                new[] { "Full name", "Date of birth", "Place of birth", "Occupation", "Height", "Spouse", "Former spouses", "Partners", "Children", "Languages" },
+                rows.Select(r => r.Label));
+            Assert.Equal("February 2, 1977", rows.Single(r => r.Label == "Date of birth").Value);          // not one combined "Born" line
+            Assert.Equal("Austin, Texas, United States", rows.Single(r => r.Label == "Place of birth").Value);
+            Assert.Equal("Alex Rivera (2009\u20132014)", rows.Single(r => r.Label == "Former spouses").Value);
+            Assert.Equal("5\u20323\u2033 (160 cm)", rows.Single(r => r.Label == "Height").Value);      // one source: no source appended
+            Assert.Empty(PersonLookup.Build(Entity("Q7", "Nobody", null, "{}"), Labels, Array.Empty<string>(), Now).Rows());
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previous;
+        }
+    }
+
+    // ---------- Death, sources and the credit line ----------
+
+    private static JsonElement DeceasedPerson() => Entity("Q9", "Late Person", null, Claims(
+        ("P569", new[] { Statement(Time("+1920-05-05T00:00:00Z", 11)) }),
+        ("P570", new[] { Statement(Time("+1999-12-31T00:00:00Z", 11)) }),
+        ("P20", new[] { Statement(Item("Q403")) }),
+        ("P509", new[] { Statement(Item("Q300")) })));
+
+    [Fact]
+    public void Where_and_of_what_someone_died_is_read_and_shown_only_when_wikidata_has_a_death_date()
+    {
+        var card = PersonLookup.Build(DeceasedPerson(), Labels, Array.Empty<string>(), Now);
+
+        Assert.Equal("1999-12-31", card.DeathDate);
+        Assert.Equal("United States", card.DeathPlace);   // Q403's label in the fixture
+        Assert.Equal("English", card.DeathCause);          // Q300's label: any item works for the shape
+        Assert.Equal("Wikidata", card.Sources["deathPlace"]);
+        Assert.Equal("Wikidata", card.Sources["deathCause"]);
+        Assert.Equal(new[] { "Date of birth", "Date of death", "Place of death", "Cause of death" }, card.Rows().Select(r => r.Label));
+        Assert.Contains("Q403", PersonLookup.ReferencedItems(DeceasedPerson()));   // the place and the cause are among the names to fetch
+        Assert.Contains("Q300", PersonLookup.ReferencedItems(DeceasedPerson()));
+
+        // The same facts on someone with no death date are not shown, and are not even read.
+        var alive = Entity("Q9", "Living Person", null, Claims(
+            ("P569", new[] { Statement(Time("+1990-01-01T00:00:00Z", 11)) }),
+            ("P20", new[] { Statement(Item("Q403")) }), ("P509", new[] { Statement(Item("Q300")) })));
+        var living = PersonLookup.Build(alive, Labels, Array.Empty<string>(), Now);
+        Assert.Null(living.DeathPlace);
+        Assert.Null(living.DeathCause);
+        Assert.DoesNotContain(living.Rows(), r => r.Label.Contains("death"));
+    }
+
+    [Fact]
+    public void Death_rows_with_nothing_to_show_stay_hidden()
+    {
+        var card = new PersonFacts { BirthDate = "1920", DeathDate = "1999-12-31" };
+
+        Assert.Equal(new[] { "Date of birth", "Date of death" }, card.Rows().Select(r => r.Label));
+    }
+
+    [Fact]
+    public void The_credit_names_every_source_used_and_a_fact_names_its_source_only_when_there_are_several()
+    {
+        var card = new PersonFacts { HeightCm = 157, RetrievedAt = Now };
+        card.Sources["name"] = "Wikidata";
+        card.Sources["height"] = "Wikidata";
+
+        Assert.Equal(new[] { "Wikidata" }, card.SourceNames);
+        Assert.StartsWith("From Wikidata (CC0), retrieved ", card.CreditText);
+        Assert.Contains("It is only what Wikidata lists, can be out of date", card.CreditText);
+        Assert.Equal("5\u20322\u2033 (157 cm)", card.Rows().Single(r => r.Label == "Height").Value);
+
+        card.Sources["height"] = "Example Heights";
+
+        Assert.Equal(new[] { "Wikidata", "Example Heights" }, card.SourceNames);
+        Assert.Contains("From Wikidata (CC0), Example Heights,", card.CreditText);
+        Assert.Contains("It is only what sources list", card.CreditText);
+        Assert.Equal("5\u20322\u2033 (157 cm) \u00B7 Example Heights", card.Rows().Single(r => r.Label == "Height").Value);
+    }
+
+    [Fact]
     public void A_person_with_every_attribute_gets_a_full_card()
     {
         var card = PersonLookup.Build(FullPerson(), Labels, Chain, Now);
@@ -298,6 +382,69 @@ public class PersonLookupTests
         Assert.Null(PersonLookup.Build(entity, Labels, Array.Empty<string>(), Now).Children);
     }
 
+    // ---------- Children by name ----------
+
+    [Fact]
+    public void Children_wikidata_names_are_listed_with_birth_dates_where_their_items_have_them()
+    {
+        var labels = new Dictionary<string, string>(Labels) { ["Q501"] = "Ann Example", ["Q502"] = "Bo Example", ["Q503"] = "Cy Example" };
+        var entity = Entity("Q9", "P", null, Claims(
+            ("P1971", new[] { Statement(Quantity("+4")) }),
+            ("P40", new[] { Statement(Item("Q501")), Statement(Item("Q502")), Statement(Item("Q503")), Statement(Item("Q504")) })));   // Q504 has no label
+
+        var previous = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = new CultureInfo("en-US");
+        try
+        {
+            var card = PersonLookup.Build(entity, labels, Array.Empty<string>(), Now, new Dictionary<string, string> { ["Q501"] = "2005-03-04", ["Q502"] = "2008" });
+
+            Assert.Equal(new[] { "Ann Example", "Bo Example", "Cy Example" }, card.ChildrenDetails.Select(c => c.Name));   // the unnamed one is skipped
+            Assert.Equal("Ann Example (born March 4, 2005)", card.ChildrenDetails[0].Display);
+            Assert.Equal("Bo Example (born 2008)", card.ChildrenDetails[1].Display);
+            Assert.Equal("Cy Example", card.ChildrenDetails[2].Display);
+            Assert.Equal(4, card.Children);
+            Assert.Equal("Wikidata", card.Sources["childrenDetails"]);
+            Assert.Equal("4: Ann Example (born March 4, 2005), Bo Example (born 2008), Cy Example and 1 more",
+                         card.Rows().Single(r => r.Label == "Children").Value);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previous;
+        }
+    }
+
+    [Fact]
+    public void With_no_named_children_the_row_is_still_the_count()
+    {
+        var card = PersonLookup.Build(Entity("Q9", "P", null, Claims(("P1971", new[] { Statement(Quantity("+2")) }))), Labels, Array.Empty<string>(), Now);
+
+        Assert.Empty(card.ChildrenDetails);
+        Assert.Equal("2", card.Rows().Single(r => r.Label == "Children").Value);
+    }
+
+    [Fact]
+    public void At_most_twelve_children_are_named()
+    {
+        var labels = Enumerable.Range(0, 20).ToDictionary(i => "Q" + (600 + i), i => "Child " + i);
+        var entity = Entity("Q9", "P", null, Claims(("P40", Enumerable.Range(0, 20).Select(i => Statement(Item("Q" + (600 + i)))).ToArray())));
+
+        var card = PersonLookup.Build(entity, labels, Array.Empty<string>(), Now);
+
+        Assert.Equal(12, card.ChildrenDetails.Count);
+        Assert.Equal(20, card.Children);
+        Assert.EndsWith("and 8 more", card.Rows().Single(r => r.Label == "Children").Value);
+    }
+
+    [Fact]
+    public void The_card_survives_saving_with_its_named_children()
+    {
+        var card = new PersonFacts { Name = "P", ChildrenDetails = { new ChildDetail("Ann", "Q1", "2005-03-04") } };
+
+        var back = PersonFacts.FromJson(card.ToJson())!;
+
+        Assert.Equal(new ChildDetail("Ann", "Q1", "2005-03-04"), back.ChildrenDetails.Single());
+    }
+
     // ---------- Height ----------
 
     [Theory]
@@ -509,6 +656,30 @@ public class PersonLookupTests
         Assert.Equal(new[] { "Austin", "Travis County", "Texas", "United States" }, card.BirthPlaceChain);
         Assert.Equal(new[] { "English", "Spanish" }, card.Languages);
         Assert.Equal(new[] { "Sam Okafor" }, card.Spouses.Select(s => s.Name));
+    }
+
+    [Fact]
+    public async Task Reading_a_person_fetches_each_childs_birth_date_and_a_failure_just_means_no_date()
+    {
+        var person = Entity("Q42", "Parent", null, Claims(("P40", new[] { Statement(Item("Q501")), Statement(Item("Q502")) })));
+        var fake = new FakeWikidata
+        {
+            Answer = q =>
+            {
+                if (q["action"] == "wbgetentities" && q["ids"] == "Q42") return "{\"entities\":{\"Q42\":" + person.GetRawText() + "}}";
+                if (q["action"] == "wbgetclaims" && q["entity"] == "Q501" && q["property"] == "P569")
+                    return "{\"claims\":{\"P569\":[" + Statement(Time("+2005-03-04T00:00:00Z", 11)) + "]}}";
+                if (q["action"] == "wbgetclaims" && q["entity"] == "Q502") return null;   // 503
+                if (q["action"] == "wbgetentities" && q["props"] == "labels")
+                    return "{\"entities\":{\"Q501\":{\"id\":\"Q501\",\"labels\":{\"en\":{\"value\":\"Ann\"}}},\"Q502\":{\"id\":\"Q502\",\"labels\":{\"en\":{\"value\":\"Bo\"}}}}}";
+                return null;
+            }
+        };
+
+        var card = await new PersonLookup(new HttpClient(fake)).GetFactsAsync("Q42", Now);
+
+        Assert.Equal("2005-03-04", card.ChildrenDetails.Single(c => c.Name == "Ann").BirthDate);
+        Assert.Null(card.ChildrenDetails.Single(c => c.Name == "Bo").BirthDate);
     }
 
     [Fact]

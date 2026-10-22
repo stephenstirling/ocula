@@ -231,6 +231,7 @@ public sealed partial class PeopleWindow : Window
                       : "Saved.";
         await RefreshAsync(survivor);
         await LoadCardAsync(survivor, name.Length == 0 ? null : name);   // a new name removes the old name's card
+        _ = _main.RefreshPersonHeaderAsync(survivor);
     }
 
     // ---------- Person card (Wikidata) ----------
@@ -277,48 +278,10 @@ public sealed partial class PeopleWindow : Window
             CardRows.Children.Add(row);
         }
 
-        Row("Full name", facts.FullName);
-        Row("Date of birth", facts.BirthDateText);
-        Row("Place of birth", facts.BirthPlace);
-
-        Row("Date of death", facts.DeathDateText);
-        Row("Place of death", facts.DeathPlace);
-        Row("Cause of death", facts.CauseOfDeath);
-
-        Row("Occupation", string.Join(", ", facts.Occupations));
-
-        Row("Height", facts.HeightText is { } ht
-            ? (facts.Sources.TryGetValue("height", out var hs) ? $"{ht} · {hs}" : ht)
-            : null);
-        Row("Bra size", facts.BraSize is { Length: > 0 } bs
-            ? (facts.BraSizeEvidence is { Length: > 0 } ev
-                ? $"{bs} ({ev})" + (facts.Sources.TryGetValue("braSize", out var bsSrc) ? $" · {bsSrc}" : "")
-                : bs)
-            : null);
-
-        Row(facts.Spouses.Count > 1 ? "Spouses" : "Spouse",
-            string.Join(", ", facts.Spouses.Select(s => s.Display)));
-        Row(facts.FormerSpouses.Count > 1 ? "Former spouses" : "Former spouse",
-            string.Join(", ", facts.FormerSpouses.Select(s => s.Display)));
-        Row(facts.Partners.Count > 1 ? "Partners" : "Partner",
-            string.Join(", ", facts.Partners.Select(s => s.Display)));
-        Row(facts.FormerPartners.Count > 1 ? "Former partners" : "Former partner",
-            string.Join(", ", facts.FormerPartners.Select(s => s.Display)));
-
-        if (facts.ChildrenDetails.Count > 0)
-            Row("Children", string.Join("\n", facts.ChildrenDetails.Select(c => c.Display)));
-        else
-            Row("Children", facts.ChildrenText);
-
-        Row("Languages", string.Join(", ", facts.Languages));
+        foreach (var (label, value) in facts.Rows()) Row(label, value);
         if (CardRows.Children.Count == 0) Row("Wikidata has", "no facts about this person that Ocula shows.");
 
-        var sources = new List<string> { "Wikidata (CC0)" };
-        if (facts.Sources.Values.Any(v => v == "CelebHeights")) sources.Add("CelebHeights");
-        if (facts.Sources.TryGetValue("braSize", out var braSrc)) sources.Add(braSrc);
-        CardCredit.Text = $"From {string.Join(", ", sources)}, retrieved {facts.RetrievedAt.LocalDateTime:MMMM d, yyyy}. " +
-                          "Only what those sources list. Death fields appear only when Wikidata has a death date. " +
-                          "A spouse is one with no end date on Wikidata.";
+        CardCredit.Text = facts.CreditText;
         CardCredit.Visibility = Visibility.Visible;
         CardLink.NavigateUri = new Uri("https://www.wikidata.org/wiki/" + facts.WikidataId);
         CardLink.Visibility = Visibility.Visible;
@@ -408,6 +371,7 @@ public sealed partial class PeopleWindow : Window
             }
 
             await _main.Library.SavePersonCardAsync(person.Id, facts);
+            _ = _main.RefreshPersonHeaderAsync(person.Id);
             if (Selected?.Id == person.Id) ShowCard(facts, person.Name);
             CardNote.Text = "Saved on this PC.";
             await OfferNameTagsAsync(person, facts);
@@ -504,6 +468,7 @@ public sealed partial class PeopleWindow : Window
         var person = Selected;
         if (person == null) return;
         await _main.Library.DeletePersonCardAsync(person.Id);
+        _ = _main.RefreshPersonHeaderAsync(person.Id);
         ShowCard(null, person.Name);
         CardNote.Text = "Card removed. Tags already added to photos are not touched.";
     }
@@ -515,7 +480,7 @@ public sealed partial class PeopleWindow : Window
         if (person == null) return;
         var paths = await _main.Library.GetPersonPhotoPathsAsync(person.Id);
         var rows = await _main.Library.GetRowsAsync(paths);
-        await _main.ShowPhotosAsync(person.Name ?? "Unnamed group", rows);
+        await _main.ShowPhotosAsync(person.Name ?? "Unnamed group", rows, person.Name == null ? null : person.Id);
     }
 
     private async void HideGroup_Click(object sender, RoutedEventArgs e)
