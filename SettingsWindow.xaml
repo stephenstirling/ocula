@@ -169,7 +169,7 @@
                 <!-- Phun scraper -->
                 <TextBlock Text="Phun scraper" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,20,0,4"/>
                 <toolkit:SettingsExpander x:Name="PhunExpander" Header="Show the Phun scraper in the sidebar"
-                                          Description="A live view of the forum scraper that runs in Docker on your NAS: what it is downloading, how many images it has saved, and a Scan now button. Ocula only reads its status over your network; it doesn't run the scraper. The address and token are kept in Ocula's settings on this PC, unencrypted.">
+                                          Description="A live view of the forum scraper that runs in Docker on your NAS: what it is downloading, how many images it has saved, the pictures it saved most recently, and a Scan now button. Ocula only reads its status over your network; it doesn't run the scraper. The address and token are kept in Ocula's settings on this PC, unencrypted.">
                     <toolkit:SettingsExpander.HeaderIcon><FontIcon Glyph="&#xE896;"/></toolkit:SettingsExpander.HeaderIcon>
                     <ToggleSwitch x:Name="PhunToggle" Toggled="PhunToggle_Toggled"/>
                     <toolkit:SettingsExpander.Items>
@@ -179,7 +179,7 @@
                         <toolkit:SettingsCard Header="Token" Description="The scraper's STATUS_TOKEN, if you set one. Needed for Scan now.">
                             <PasswordBox x:Name="PhunTokenBox" Width="280" LostFocus="PhunTokenBox_LostFocus"/>
                         </toolkit:SettingsCard>
-                        <toolkit:SettingsCard Header="Downloads folder" Description="The folder the scraper saves into, as this PC sees it, for example Z:\Babes.">
+                        <toolkit:SettingsCard Header="Downloads folder" Description="The folder the scraper saves into, as this PC sees it, for example Z:\Babes. Ocula reads the pictures and the library file from here.">
                             <TextBox x:Name="PhunFolderBox" Width="280" PlaceholderText="Z:\Babes" LostFocus="PhunFolderBox_LostFocus"/>
                         </toolkit:SettingsCard>
                         <toolkit:SettingsCard x:Name="PhunNoteCard" Visibility="Collapsed">

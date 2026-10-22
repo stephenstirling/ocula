@@ -21,6 +21,13 @@ public sealed partial class MainWindow
         _phun.Activate();
     }
 
+    /// <summary>"Open in Ocula" on the Phun page: shows the picture in the main window.</summary>
+    public async System.Threading.Tasks.Task OpenFromPhunAsync(string path)
+    {
+        Activate();
+        await OpenPathAsync(path);
+    }
+
     /// <summary>Called by Settings when the Phun scraper is switched on or off: adds or removes the sidebar entry.</summary>
     public void PhunSettingsChanged()
     {
