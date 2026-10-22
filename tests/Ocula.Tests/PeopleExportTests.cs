@@ -333,6 +333,7 @@ public class PeopleExportTests : IDisposable
 
         Assert.False(File.Exists(Path.Combine(_folder, PeopleExport.FileName)));
         Assert.False(Directory.Exists(Path.Combine(_folder, PeopleExport.ThumbnailFolder)));
+        Assert.False(Directory.Exists(_folder));           // nothing of ours is left, not even the empty folder
     }
 
     [Fact]
@@ -351,5 +352,6 @@ public class PeopleExportTests : IDisposable
         PeopleExport.Delete(_folder);
 
         Assert.True(File.Exists(Path.Combine(_folder, "someone-elses.txt")));
+        Assert.True(Directory.Exists(_folder));            // not empty, so it stays
     }
 }

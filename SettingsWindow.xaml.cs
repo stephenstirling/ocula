@@ -42,6 +42,7 @@ public sealed partial class SettingsWindow : Window
         // Privacy
         CameraToggle.IsOn = AppSettings.OnlineCameraLookup;
         PersonLookupToggle.IsOn = AppSettings.OnlinePersonLookup;
+        SharePeopleToggle.IsOn = AppSettings.SharePeopleWithPorta;
         ColourToggle.IsOn = AppSettings.ColourManaged;
         MapToggle.IsOn = AppSettings.OnlineMaps;
         CaptureTextToggle.IsOn = AppSettings.CaptureTextSearch;
@@ -258,6 +259,13 @@ public sealed partial class SettingsWindow : Window
     {
         if (_loading) return;
         AppSettings.OnlinePersonLookup = PersonLookupToggle.IsOn;
+    }
+
+    private void SharePeopleToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        AppSettings.SharePeopleWithPorta = SharePeopleToggle.IsOn;
+        _main.PeopleSharingChanged();   // writes the file now, or removes it
     }
 
     private void ColourToggle_Toggled(object sender, RoutedEventArgs e)

@@ -17,6 +17,7 @@ public sealed partial class MainWindow
     private readonly FaceService _faceService = new();
     private FaceIndexer? _faceIndexer;
     private PeopleWindow? _people;
+    private PeopleSharing? _peopleSharing;
     private string _faceNote = string.Empty;
 
     /// <summary>The library database, for the People window.</summary>
@@ -36,6 +37,19 @@ public sealed partial class MainWindow
         _faceStartTimer.IsRepeating = false;
         _faceStartTimer.Tick += (_, _) => _faceIndexer?.Start();
         _faceStartTimer.Start();
+
+        // "Share people with Porta": keeps people-index.json current while the switch is on, and removes a leftover file while it is off.
+        _peopleSharing = new PeopleSharing(_index);
+        if (AppSettings.SharePeopleWithPorta) _peopleSharing.RequestRefresh();
+        else _ = _peopleSharing.RemoveAllAsync();
+    }
+
+    /// <summary>Called by Settings when "Share people with Porta" is switched on or off.</summary>
+    public void PeopleSharingChanged()
+    {
+        if (_peopleSharing == null) return;
+        if (AppSettings.SharePeopleWithPorta) _ = _peopleSharing.RefreshAsync();
+        else _ = _peopleSharing.RemoveAllAsync();
     }
 
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _faceStartTimer;
@@ -78,6 +92,7 @@ public sealed partial class MainWindow
         // the delete and left a stray face and scan record behind.
         if (_faceIndexer != null) await _faceIndexer.StopAsync();
         await _index.DeleteFaceDataAsync();
+        if (_peopleSharing != null) await _peopleSharing.RemoveAllAsync();   // the shared file and pictures go with the face data
         AppSettings.PeopleEnabled = false;
         PeopleSettingsChanged();
     }

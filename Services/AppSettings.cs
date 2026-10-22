@@ -34,6 +34,16 @@ public static class AppSettings
         set => Store.Values["OnlinePersonLookup"] = value;
     }
 
+    /// <summary>
+    /// Whether Ocula writes people-index.json (the names of the people you named in People, other names Wikidata has for them, a short
+    /// description, a photo count and a small face picture) where Porta can read it. Off by default. Nothing is sent over the internet.
+    /// </summary>
+    public static bool SharePeopleWithPorta
+    {
+        get => Store.Values["SharePeopleWithPorta"] as bool? ?? false;
+        set => Store.Values["SharePeopleWithPorta"] = value;
+    }
+
     /// <summary>Whether the map may download map tiles from OpenFreeMap.</summary>
     public static bool OnlineMaps
     {

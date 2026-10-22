@@ -113,4 +113,14 @@
   <Capabilities>
     <rescap:Capability Name="runFullTrust" />
   </Capabilities>
+
+  <!-- A folder shared by every app from this publisher (Ocula, Capta, Porta). Ocula writes the "Share people with Porta" file here
+       (Stirling\Ocula\people-index.json) only while that switch is on. -->
+  <Extensions>
+    <Extension Category="windows.publisherCacheFolders">
+      <PublisherCacheFolders>
+        <Folder Name="Stirling" />
+      </PublisherCacheFolders>
+    </Extension>
+  </Extensions>
 </Package>

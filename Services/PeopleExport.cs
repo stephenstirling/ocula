@@ -177,13 +177,19 @@ public static class PeopleExport
         TryDelete(Path.Combine(folder, FileName));
         TryDelete(Path.Combine(folder, FileName + ".tmp"));
         var thumbs = Path.Combine(folder, ThumbnailFolder);
-        if (!Directory.Exists(thumbs)) return;
-        try { Directory.Delete(thumbs, recursive: true); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        if (Directory.Exists(thumbs))
         {
-            // Something has a picture open; delete what can be deleted.
-            foreach (var file in Directory.EnumerateFiles(thumbs)) TryDelete(file);
+            try { Directory.Delete(thumbs, recursive: true); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // Something has a picture open; delete what can be deleted.
+                foreach (var file in Directory.EnumerateFiles(thumbs)) TryDelete(file);
+            }
         }
+
+        // Leave nothing behind: the folder goes too, but only if it is now empty (it is shared, so never anyone else's files).
+        try { if (Directory.Exists(folder)) Directory.Delete(folder, recursive: false); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
 
     private static void TryDelete(string path)
