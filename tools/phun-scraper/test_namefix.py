@@ -28,7 +28,7 @@ def load(root, tagged):
     with open(SOURCE, encoding="utf-8") as f:
         tree = ast.parse(f.read())
     keep = [n for n in tree.body if (isinstance(n, ast.FunctionDef) and n.name in FUNCS)
-            or (isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) == "NAME_PARTICLES")]
+            or (isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) in ("NAME_PARTICLES", "NAME_VERBS"))]
     db = os.path.join(root, "ocula_library.db")
 
     def connect():
