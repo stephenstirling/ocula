@@ -153,24 +153,10 @@ public sealed class LibraryCrawler
     /// </summary>
     private static async Task ApplyFolderPersonCardTagsAsync(ImageItem item, IReadOnlyList<ResolvedPersonCard> cards)
     {
-        var folderNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var currentDirectory = new DirectoryInfo(item.Folder);
-        folderNames.Add(currentDirectory.Name);
-        if (AppSettings.PersonFolderTagIncludeSubfolders)
-        {
-            for (var directory = currentDirectory.Parent; directory != null; directory = directory.Parent)
-                folderNames.Add(directory.Name);
-        }
+        var selection = PersonFolderTaggingService.ResolveCardForItem(item, cards);
+        if (selection.Ambiguous || selection.Card == null) return;
+        var match = selection.Card;
 
-        var matches = cards.Where(card =>
-            folderNames.Contains(card.GroupName) ||
-            folderNames.Contains(card.Facts.Name ?? string.Empty) ||
-            folderNames.Contains(card.Facts.FullName ?? string.Empty))
-            .ToList();
-
-        if (matches.Count != 1) return;
-
-        var match = matches[0];
         var existing = await MetadataStore.ReadAsync(item);
         var tags = existing.Tags.ToList();
         var additions = PersonCardTagBuilder.FromFacts(match.Facts, match.GroupName)

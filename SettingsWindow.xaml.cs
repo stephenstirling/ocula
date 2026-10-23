@@ -17,6 +17,7 @@ namespace Ocula;
 public sealed partial class SettingsWindow : Window
 {
     private readonly MainWindow _main;
+    private readonly PersonFolderTaggingService _personFolderTagging;
     private readonly ObservableCollection<string> _folders = new();
     private bool _loading = true;
 
@@ -24,6 +25,7 @@ public sealed partial class SettingsWindow : Window
     {
         InitializeComponent();
         _main = main;
+        _personFolderTagging = new PersonFolderTaggingService(main.Index);
 
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(DragArea);
@@ -39,6 +41,8 @@ public sealed partial class SettingsWindow : Window
         foreach (var folder in main.RootFolders) _folders.Add(folder);
         FoldersExpander.ItemsSource = _folders;
         PersonFolderInheritanceToggle.IsOn = AppSettings.PersonFolderTagIncludeSubfolders;
+        PersonFolderRulesBox.Text = AppSettings.PersonFolderTagRules;
+        PersonFolderUndoButton.IsEnabled = _personFolderTagging.CanUndo;
 
         // Privacy
         CameraToggle.IsOn = AppSettings.OnlineCameraLookup;
@@ -104,23 +108,90 @@ public sealed partial class SettingsWindow : Window
         AppSettings.PersonFolderTagIncludeSubfolders = PersonFolderInheritanceToggle.IsOn;
     }
 
-    private async void PersonFolderBackfill_Click(object sender, RoutedEventArgs e)
+    private void SavePersonFolderRules_Click(object sender, RoutedEventArgs e)
     {
+        AppSettings.PersonFolderTagRules = PersonFolderRulesBox.Text ?? string.Empty;
+        PersonFolderTagStatusText.Text = "Folder rules saved. Preview before applying changes.";
+    }
+
+    private async void PersonFolderPreview_Click(object sender, RoutedEventArgs e)
+    {
+        AppSettings.PersonFolderTagRules = PersonFolderRulesBox.Text ?? string.Empty;
+        PersonFolderBackfillButton.IsEnabled = false;
+        PersonFolderTagStatusText.Text = "Scanning library and preparing a read-only preview…";
+        try
+        {
+            var cards = await _main.Index.GetAllPersonCardsAsync();
+            var report = await _personFolderTagging.PreviewAsync(
+                _main.RootFolders, cards, PersonFolderRulesBox.Text ?? string.Empty, PersonFolderInheritanceToggle.IsOn);
+
+            var summary = $"Scanned: {report.Scanned:N0} items\n" +
+                          $"Would add keywords: {report.Changes:N0} photos\n" +
+                          $"Ambiguous matches skipped: {report.Ambiguous:N0}\n" +
+                          $"No matching card: {report.Unmatched:N0}\n\n" +
+                          (report.Examples.Count > 0 ? string.Join("\n", report.Examples) : "No keyword changes are needed.");
+
+            var dialog = new ContentDialog
+            {
+                XamlRoot = Root.XamlRoot,
+                RequestedTheme = Root.ActualTheme,
+                Title = "Person-folder tagging preview",
+                Content = new ScrollViewer { Content = new TextBlock { Text = summary, TextWrapping = TextWrapping.Wrap }, MaxHeight = 420 },
+                PrimaryButtonText = report.Changes > 0 ? "Apply changes" : "Done",
+                CloseButtonText = "Cancel",
+                DefaultButton = report.Changes > 0 ? ContentDialogButton.Primary : ContentDialogButton.Close
+            };
+            var result = await dialog.ShowAsync();
+            if (report.Changes > 0 && result == ContentDialogResult.Primary)
+            {
+                var applied = await _personFolderTagging.ApplyPreviewAsync();
+                PersonFolderTagStatusText.Text = $"Applied keyword updates to {applied:N0} photos. The operation is journaled for undo.";
+            }
+            else
+            {
+                PersonFolderTagStatusText.Text = $"Preview complete: {report.Changes:N0} photos would change. No metadata was written.";
+            }
+            PersonFolderUndoButton.IsEnabled = _personFolderTagging.CanUndo;
+        }
+        catch (Exception ex)
+        {
+            PersonFolderTagStatusText.Text = $"Preview failed: {ex.Message}";
+        }
+        finally
+        {
+            PersonFolderBackfillButton.IsEnabled = true;
+        }
+    }
+
+    private async void PersonFolderUndo_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_personFolderTagging.CanUndo) return;
         var confirm = new ContentDialog
         {
             XamlRoot = Root.XamlRoot,
             RequestedTheme = Root.ActualTheme,
-            Title = "Reapply folder keywords?",
-            Content = "Ocula will revisit every photo in the configured library folders and merge missing keywords from matching saved person cards. Existing keywords, ratings and labels are preserved. Ambiguous matches are skipped. This can take a while, especially on a network library.",
-            PrimaryButtonText = "Reapply",
+            Title = "Undo the last person-folder tagging operation?",
+            Content = "Ocula will restore the metadata snapshot from the most recent operation. Files that have since been moved or deleted will be skipped.",
+            PrimaryButtonText = "Undo",
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Close
         };
         if (await confirm.ShowAsync() != ContentDialogResult.Primary) return;
 
-        PersonFolderBackfillButton.IsEnabled = false;
-        _main.ReapplyPersonFolderTags();
-        PersonFolderBackfillButton.IsEnabled = true;
+        PersonFolderUndoButton.IsEnabled = false;
+        try
+        {
+            var restored = await _personFolderTagging.UndoLastAsync();
+            PersonFolderTagStatusText.Text = $"Restored metadata for {restored:N0} photos.";
+        }
+        catch (Exception ex)
+        {
+            PersonFolderTagStatusText.Text = $"Undo failed: {ex.Message}";
+        }
+        finally
+        {
+            PersonFolderUndoButton.IsEnabled = _personFolderTagging.CanUndo;
+        }
     }
 
     // ---------- Appearance ----------
