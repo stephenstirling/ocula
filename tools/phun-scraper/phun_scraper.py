@@ -14,7 +14,7 @@ from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta
-from urllib.parse import urljoin, quote_plus
+from urllib.parse import urljoin, quote_plus, urlparse
 from concurrent.futures import ThreadPoolExecutor
 from bs4 import BeautifulSoup
 import requests
@@ -43,6 +43,8 @@ FORUM_PAGES = int(os.environ.get("FORUM_PAGES", "1"))              # pages of th
 MAX_THREAD_PAGES = int(os.environ.get("MAX_THREAD_PAGES", "10"))   # pages of replies read in each thread
 MIN_FREE_GB = float(os.environ.get("MIN_FREE_GB", "100"))          # stop saving while the downloads volume has less free space than this
 THREAD_ATTEMPTS = 3                                                # a thread with failed pictures is tried this many times in all
+BLOCKED_HOSTS = ("turboimagehost.com",)                            # image hosts behind a bot check (a Cloudflare challenge): a script can't fetch them
+BLOCKED_FILE = os.path.join(DOWNLOAD_DIR, "blocked_links.txt")     # their links, one line each, to fetch by hand in a browser
 MIN_FILE_SIZE_BYTES = 50 * 1024
 UPGRADE_FILE_SIZE_THRESHOLD = 400 * 1024
 PHASH_SIMILARITY_THRESHOLD = 5
@@ -237,6 +239,7 @@ def load_history():
     data.setdefault("downloaded_urls", [])
     data.setdefault("downloaded_hashes", [])
     data.setdefault("thread_attempts", {})   # thread url -> times it was tried with failures
+    data.setdefault("blocked_urls", [])      # links on BLOCKED_HOSTS that are already in blocked_links.txt
     return data
 
 
@@ -365,11 +368,17 @@ def reindex_existing():
                 category = parts[1] if len(parts) > 2 and parts[1] in SUBFOLDER_CATEGORIES else None
                 tags = []
                 try:
-                    meta = et.get_tags([full], tags=["IPTC:Keywords"])
-                    kw = meta[0].get("IPTC:Keywords", []) if meta else []
-                    tags = [str(k) for k in (kw if isinstance(kw, list) else [kw])]
+                    meta = et.get_tags([full], tags=["XMP:Subject", "IPTC:Keywords"])
+                    row = meta[0] if meta else {}
+                    for key in ("XMP:Subject", "IPTC:Keywords"):
+                        value = row.get(key, [])
+                        tags += [str(k) for k in (value if isinstance(value, list) else [value])]
+                    tags = list(dict.fromkeys(tags))
                 except Exception:
                     pass
+                if not tags and celebrity:             # saved but never tagged (the scraper was stopped mid-save): tag it with the person
+                    tags = [celebrity]
+                    embed_metadata(full, tags)
                 with open(full, "rb") as f:
                     ph = phash_of(f.read())
                 record_image(full, celebrity, tags, category=category, phash=ph)
@@ -379,16 +388,51 @@ def reindex_existing():
     logging.info("Reindex complete: %d added", added)
 
 
-def plan_name_fixes(rows, people_for_title):
+_canon = {}   # lower-case name -> the one spelling used for that person
+
+
+def canonical_person(name):
+    """One spelling per person, whatever a title's capitalisation ("Mckenna Grace" and "McKenna Grace" are two folders on the NAS, which is
+    case sensitive, but one folder to Windows, which isn't): the spelling seen first, or at start-up the one most pictures use."""
+    return _canon.setdefault(name.lower(), name)
+
+
+def most_used_spellings(counts):
+    """`counts` are (name, number of pictures). Returns {lower-case name: the spelling most pictures use} (a tie goes to the later spelling
+    alphabetically, so it is the same every time)."""
+    best = {}
+    for name, n in counts:
+        key = name.lower()
+        if key not in best or (n, name) > (best[key][1], best[key][0]):
+            best[key] = (name, n)
+    return {k: v[0] for k, v in best.items()}
+
+
+def load_canonical_names():
+    """Fills the spellings from the index, then from the folders that are not in it."""
+    with closing(_library_connect()) as conn:
+        counts = conn.execute("SELECT celebrity, COUNT(*) FROM images WHERE celebrity IS NOT NULL GROUP BY celebrity").fetchall()
+    _canon.clear()
+    _canon.update(most_used_spellings(counts))
+    try:
+        for entry in os.listdir(DOWNLOAD_DIR):
+            if os.path.isdir(os.path.join(DOWNLOAD_DIR, entry)):
+                _canon.setdefault(entry.lower(), entry)
+    except OSError:
+        pass
+
+
+def plan_name_fixes(rows, people_for_title, canon=None):
     """Which indexed pictures sit under the wrong person's name. `rows` are (id, rel_path, celebrity, tags_json, thread_title);
     `people_for_title` turns a thread title into the people it names (the first is the main one). Returns one dict per picture to
     fix: where it is, where it should be, and its corrected tag list. A picture filed under any person the title names is right
     (a two-person post has a copy in each folder). Pictures with no thread title (added by --reindex) are never touched."""
+    canon = canon or (lambda name: name)
     plan = []
     for image_id, rel_path, celebrity, tags_json, thread_title in rows:
         if not thread_title or not celebrity:
             continue
-        people = people_for_title(re.sub(r"\[.*?\]|\(.*?\)", "", thread_title).strip())
+        people = [canon(p) for p in people_for_title(re.sub(r"\[.*?\]|\(.*?\)", "", thread_title).strip())]
         correct = people[0] if people else None
         if not correct or celebrity in people:
             continue
@@ -411,9 +455,10 @@ def fix_celebrity_names(dry_run=False):
     """Moves pictures filed under a wrong name (made before name_from_title) into the right folder, and corrects the name in
     their tags and in the index. Runs at every start and is a no-op once everything is right.
         python phun_scraper.py --fix-names --dry-run     (shows what it would do, changes nothing)"""
+    load_canonical_names()
     with closing(_library_connect()) as conn:
         rows = conn.execute("SELECT id, rel_path, celebrity, tags, thread_title FROM images").fetchall()
-    plan = plan_name_fixes(rows, people_from_title)
+    plan = plan_name_fixes(rows, people_from_title, canonical_person)
     if not plan:
         return 0
     logging.info("Name fix: %d pictures are filed under the wrong name", len(plan))
@@ -457,15 +502,16 @@ def fix_celebrity_names(dry_run=False):
     return moved
 
 
-def plan_second_people(rows, people_for_title, existing_rel_paths):
+def plan_second_people(rows, people_for_title, existing_rel_paths, canon=None):
     """Pictures from a thread that names two people ("X and Y ...") that are filed under X only. `rows` are (id, rel_path, celebrity,
     category, tags_json, thread_title, source_url, thread_url, post_date, phash, upgraded). For each picture that has no copy under the
     other person yet it gives the copy to make and the tag list (both names first) that the picture and its copy should carry."""
+    canon = canon or (lambda name: name)
     plan = []
     for (image_id, rel_path, celebrity, category, tags_json, thread_title, source_url, thread_url, post_date, phash, upgraded) in rows:
         if not thread_title or not celebrity:
             continue
-        people = people_for_title(re.sub(r"\[.*?\]|\(.*?\)", "", thread_title).strip())
+        people = [canon(p) for p in people_for_title(re.sub(r"\[.*?\]|\(.*?\)", "", thread_title).strip())]
         if len(people) < 2 or celebrity != people[0]:
             continue
         parts = rel_path.split("/")
@@ -494,7 +540,7 @@ def fix_second_people(dry_run=False):
         rows = conn.execute("SELECT id, rel_path, celebrity, category, tags, thread_title, source_url, thread_url, post_date, phash, upgraded "
                             "FROM images").fetchall()
         existing = {r[1] for r in rows}
-    plan = plan_second_people(rows, people_from_title, existing)
+    plan = plan_second_people(rows, people_from_title, existing, canonical_person)
     if not plan:
         return 0
     logging.info("Pairs: %d copies to make for the second person of two-person threads", len(plan))
@@ -886,7 +932,7 @@ def people_from_title(clean_title):
 
 def extract_metadata_tags(title_text, post_text=""):
     clean_title = re.sub(r"\[.*?\]|\(.*?\)", "", title_text).strip()
-    people = people_from_title(clean_title)
+    people = [canonical_person(p) for p in people_from_title(clean_title)]
     celeb_name = people[0]
 
     common_keywords = [
@@ -1029,9 +1075,38 @@ def log_failure(url, reason, meta=None, direct_url=None):
         logging.warning("Couldn't write %s: %s", FAILURES_FILE, e)
 
 
+def is_blocked_host(url):
+    """True for a link on a host in BLOCKED_HOSTS."""
+    host = urlparse(url).netloc.lower()
+    return any(host == h or host.endswith("." + h) for h in BLOCKED_HOSTS)
+
+
+blocked_lock = threading.Lock()
+
+
+def note_blocked_links(links, people, meta, history):
+    """Links on hosts that block scripts can't be saved here, so each is written once to blocked_links.txt (date, who, thread, link;
+    tab separated) to be fetched by hand in a browser. Returns how many were new."""
+    with history_lock:
+        known = history.setdefault("blocked_urls", [])
+        new = [link for link in dict.fromkeys(links) if link not in known]
+        known.extend(new)
+    if not new:
+        return 0
+    try:
+        with blocked_lock, open(BLOCKED_FILE, "a", encoding="utf-8") as f:
+            for link in new:
+                f.write("\t".join([_iso(), ", ".join(people), meta.get("thread_title") or "", meta.get("thread_url") or "", link]) + "\n")
+    except OSError as e:
+        logging.warning("Couldn't write %s: %s", BLOCKED_FILE, e)
+    logging.warning("%d picture(s) are on a host that blocks scripts (%s); listed in blocked_links.txt: %s",
+                    len(new), ", ".join(BLOCKED_HOSTS), meta.get("thread_title") or "")
+    return len(new)
+
+
 def download_file(url, celeb_root_folder, history, keywords_list, meta=None, also_for=None):
     ok = _download_file(url, celeb_root_folder, history, keywords_list, meta, also_for)
-    if not ok:
+    if ok is False:                                  # None means "blocked by a bot check": reported, but not a failure to retry
         status.bump("failed_downloads")
     return ok
 
@@ -1064,6 +1139,9 @@ def _download_file(url, celeb_root_folder, history, keywords_list, meta=None, al
 
     try:
         res = session.get(direct_url, stream=True, timeout=15)
+        if res.headers.get("cf-mitigated") == "challenge":
+            log_failure(url, "blocked by the host's bot check (a Cloudflare challenge); fetch it by hand in a browser", meta, direct_url)
+            return None
         if res.status_code != 200 or "text/html" in res.headers.get("Content-Type", ""):
             log_failure(url, f"HTTP {res.status_code}, {res.headers.get('Content-Type', 'no content type')}", meta, direct_url)
             return False
@@ -1250,17 +1328,21 @@ def process_thread(thread_title, thread_url, history):
         logging.info("Read the first %d of %d pages of this thread", MAX_THREAD_PAGES, total_pages)
 
     celeb_name, keywords_list = extract_metadata_tags(thread_title, post_text)
-    people = people_from_title(re.sub(r"\[.*?\]|\(.*?\)", "", thread_title).strip())
+    people = [canonical_person(p) for p in people_from_title(re.sub(r"\[.*?\]|\(.*?\)", "", thread_title).strip())]
     celeb_folder = os.path.join(DOWNLOAD_DIR, sanitize_filename(celeb_name))
     os.makedirs(celeb_folder, exist_ok=True)
     others = [(os.path.join(DOWNLOAD_DIR, sanitize_filename(p)), p) for p in people[1:]]   # a two-person thread is saved for both
     for folder, _ in others:
         os.makedirs(folder, exist_ok=True)
 
-    links = []
+    links, blocked = [], []
     for post in posts:
         for a in post.find_all("a", href=True):
             href = a["href"]
+            if is_blocked_host(href):
+                if a.find("img"):                    # a picture link (its thumbnail is inside), not a link to the site
+                    blocked.append(href)
+                continue
             if any(h in href.lower() for h in SUPPORTED_HOSTS) or re.search(
                 r"\.(jpg|jpeg|png|webp)$", href, re.IGNORECASE
             ):
@@ -1276,6 +1358,7 @@ def process_thread(thread_title, thread_url, history):
         "post_date": post_dt.date().isoformat() if post_dt else None,
     }
 
+    note_blocked_links(blocked, people, meta, history)
     status.update(thread_links_total=len(links))
     logging.info("Folder: '%s'%s | Tags: %s | Links found: %d", celeb_name,
                  " (and " + ", ".join(p for _, p in others) + ")" if others else "", keywords_list, len(links))
@@ -1377,6 +1460,7 @@ def main():
     try:
         fix_celebrity_names()
         fix_second_people()
+        reindex_existing()                  # pictures saved but never indexed (the scraper was stopped mid-save)
     except Exception as e:                  # never stop the scraper over a tidy-up
         logging.error("Name fix failed: %s", e)
     while True:
@@ -1398,6 +1482,7 @@ if __name__ == "__main__":
         fix_celebrity_names(dry_run="--dry-run" in sys.argv)
     elif "--fix-pairs" in sys.argv:
         init_library()
+        load_canonical_names()
         fix_second_people(dry_run="--dry-run" in sys.argv)
     else:
         main()

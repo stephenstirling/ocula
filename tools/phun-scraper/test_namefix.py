@@ -20,7 +20,8 @@ from contextlib import closing
 
 SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "phun_scraper.py")
 FUNCS = {"sanitize_filename", "rel_library_path", "name_from_title", "people_from_title", "_second_person", "plan_name_fixes",
-         "fix_celebrity_names", "plan_second_people", "fix_second_people"}
+         "fix_celebrity_names", "plan_second_people", "fix_second_people", "canonical_person", "most_used_spellings",
+         "load_canonical_names"}
 SCHEMA = """CREATE TABLE images (id INTEGER PRIMARY KEY AUTOINCREMENT, rel_path TEXT NOT NULL UNIQUE, celebrity TEXT, category TEXT,
  tags TEXT, source_url TEXT, thread_title TEXT, thread_url TEXT, post_date TEXT, phash TEXT, upgraded INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE image_tags (image_id INTEGER NOT NULL REFERENCES images(id) ON DELETE CASCADE, tag TEXT NOT NULL, PRIMARY KEY (image_id, tag));"""
@@ -30,7 +31,7 @@ def load(root, tagged):
     with open(SOURCE, encoding="utf-8") as f:
         tree = ast.parse(f.read())
     keep = [n for n in tree.body if (isinstance(n, ast.FunctionDef) and n.name in FUNCS)
-            or (isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) in ("NAME_PARTICLES", "NAME_VERBS"))]
+            or (isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) in ("NAME_PARTICLES", "NAME_VERBS", "_canon"))]
     db = os.path.join(root, "ocula_library.db")
 
     def connect():
@@ -157,6 +158,40 @@ class NameFixTests(unittest.TestCase):
         self.add("Somewhere Else/a.jpg", "Kelly Brook for NEXT UK", [], "Kelly Brook for NEXT UK - x")
         self.assertEqual(self.s["fix_celebrity_names"](), 0)
         self.assertTrue(self.exists("Somewhere Else/a.jpg"))
+
+
+class CaseVariantTests(unittest.TestCase):
+    """The NAS is case sensitive, so "McKenna Grace" and "Mckenna Grace" are two folders there; a Windows temp folder can't hold both, so these
+    test the plan (which pictures move where) rather than the move."""
+
+    def plan(self, rows, spellings=None):
+        logging.disable(logging.CRITICAL)
+        scope = {"re": re, "json": json}
+        with open(SOURCE, encoding="utf-8") as f:
+            tree = ast.parse(f.read())
+        keep = [n for n in tree.body if (isinstance(n, ast.FunctionDef) and n.name in {"sanitize_filename", "name_from_title", "people_from_title",
+                                                                                        "_second_person", "plan_name_fixes"})
+                or (isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) in ("NAME_PARTICLES", "NAME_VERBS"))]
+        exec(compile(ast.Module(body=keep, type_ignores=[]), SOURCE, "exec"), scope)
+        canon = (lambda n: spellings.get(n.lower(), n)) if spellings else None
+        return scope["plan_name_fixes"](rows, scope["people_from_title"], canon)
+
+    def test_the_minority_spelling_moves_to_the_majority_one_and_its_tags_follow(self):
+        rows = [(1, "McKenna Grace/a.jpg", "McKenna Grace", json.dumps(["McKenna Grace", "Dress"]), "McKenna Grace - Newport Beach Film Festival"),
+                (2, "Mckenna Grace/b.jpg", "Mckenna Grace", json.dumps(["Mckenna Grace"]), "Mckenna Grace - Academy Museum Gala")]
+        plan = self.plan(rows, {"mckenna grace": "Mckenna Grace"})
+        self.assertEqual(len(plan), 1)
+        self.assertEqual((plan[0]["old_rel"], plan[0]["new_rel"], plan[0]["new_name"]), ("McKenna Grace/a.jpg", "Mckenna Grace/a.jpg", "Mckenna Grace"))
+        self.assertEqual(plan[0]["tags"], ["Mckenna Grace", "Dress"])
+
+    def test_without_a_spelling_table_nothing_changes(self):
+        rows = [(1, "McKenna Grace/a.jpg", "McKenna Grace", json.dumps(["McKenna Grace"]), "McKenna Grace - Newport Beach Film Festival")]
+        self.assertEqual(self.plan(rows), [])
+
+    def test_a_two_person_copy_under_a_differently_capitalised_name_is_not_moved(self):
+        rows = [(1, "Ana De Armas/a.jpg", "Ana De Armas", json.dumps(["Ana De Armas"]), "Ana De Armas and Tom Hardy at a premiere")]
+        plan = self.plan(rows, {"ana de armas": "Ana de Armas", "tom hardy": "Tom Hardy"})
+        self.assertEqual([(p["old_name"], p["new_name"]) for p in plan], [("Ana De Armas", "Ana de Armas")])
 
 
 class PairTests(unittest.TestCase):
