@@ -199,9 +199,16 @@ public static class ImportService
                         }
                     }
 
-                    if (tags.Count > 0)
+                    // Preserve source ratings and XMP labels as well as keywords. Without
+                    // these values, writing the merged tags would reset them to their defaults.
+                    if (tags.Count > 0 || sourceMetadata.Rating > 0 || !string.IsNullOrWhiteSpace(sourceMetadata.Label))
                     {
-                        var photo = new ImageItem(main, raw != null && raw != main ? raw : null) { Tags = tags };
+                        var photo = new ImageItem(main, raw != null && raw != main ? raw : null)
+                        {
+                            Tags = tags,
+                            Rating = sourceMetadata.Rating,
+                            Label = sourceMetadata.Label
+                        };
                         await MetadataStore.WriteAsync(photo);
                     }
                 }
