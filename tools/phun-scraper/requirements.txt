@@ -1,5 +1,7 @@
 requests
+cloudscraper
 beautifulsoup4
-Pillow
+pillow
 imagehash
 PyExifTool
+urllib3

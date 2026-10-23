@@ -29,7 +29,7 @@ def load():
     keep = [n for n in tree.body if (isinstance(n, ast.FunctionDef) and n.name in WANTED)
             or (isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) in ("NAME_PARTICLES", "NAME_VERBS", "_canon"))]
     scope = {"re": re, "is_within_pregnancy_timeline": lambda *a: False, "logging": logging, "threading": threading,
-             "urlparse": urlparse, "BLOCKED_HOSTS": ("turboimagehost.com",), "history_lock": threading.Lock(), "blocked_lock": threading.Lock(),
+             "urlparse": urlparse, "urljoin": urljoin, "BLOCKED_HOSTS": (), "history_lock": threading.Lock(), "blocked_lock": threading.Lock(),
              "BLOCKED_FILE": None, "shutil": shutil, "FORUM_URL": "https://forum.phun.org/forums/celebrity-photos.15/", "failures_lock": threading.Lock(), "BeautifulSoup": BeautifulSoup, "requests": requests, "session": None, "_iso": lambda: "2026-10-22T21:00:00Z", "FAILURES_FILE": None}
     exec(compile(ast.Module(body=keep, type_ignores=[]), SOURCE, "exec"), scope)
     return scope
@@ -158,8 +158,10 @@ class NameTests(unittest.TestCase):
 
 
 class FakeResponse:
-    def __init__(self, status, text=""):
+    def __init__(self, status, text="", headers=None, url=None):
         self.status_code, self.text = status, text
+        self.headers = headers or {}
+        self.url = url or ""
 
 
 class FakeSession:
@@ -170,6 +172,8 @@ class FakeSession:
         self.asked.append(url)
         if isinstance(self.response, Exception):
             raise self.response
+        if not self.response.url:
+            self.response.url = url
         return self.response
 
 
@@ -199,6 +203,34 @@ class ResolveTests(unittest.TestCase):
         S["session"] = FakeSession(FakeResponse(500))
         self.assertEqual(S["resolve_image_host_url"]("https://example.com/a.jpg"), "https://example.com/a.jpg")
         self.assertEqual(S["session"].asked, [])
+
+    def test_turboimagehost_resolves_imageid_and_uimg_selectors(self):
+        for html in (
+            '<img id="imageid" src="/images/full.jpg">',
+            '<img class="uimg" data-src="/images/full.jpg">',
+        ):
+            S["session"] = FakeSession(FakeResponse(200, html))
+            self.assertEqual(
+                S["resolve_image_host_url"]("https://www.turboimagehost.com/p/1/page.html"),
+                "https://www.turboimagehost.com/images/full.jpg",
+            )
+
+    def test_turboimagehost_falls_back_to_open_graph_image(self):
+        S["session"] = FakeSession(FakeResponse(
+            200, '<meta property="og:image" content="https://cdn.example.com/full.jpg">'
+        ))
+        self.assertEqual(
+            S["resolve_image_host_url"]("https://turboimagehost.com/p/1/page.html"),
+            "https://cdn.example.com/full.jpg",
+        )
+
+    def test_turboimagehost_challenge_or_missing_image_returns_none(self):
+        S["session"] = FakeSession(FakeResponse(
+            403, "challenge", headers={"cf-mitigated": "challenge"}
+        ))
+        self.assertIsNone(S["resolve_image_host_url"]("https://turboimagehost.com/p/1/page.html"))
+        S["session"] = FakeSession(FakeResponse(200, "<html>no image</html>"))
+        self.assertIsNone(S["resolve_image_host_url"]("https://turboimagehost.com/p/1/page.html"))
 
 
 class PeopleTests(unittest.TestCase):
@@ -324,9 +356,9 @@ class CanonicalNameTests(unittest.TestCase):
 
 
 class BlockedHostTests(unittest.TestCase):
-    def test_only_links_on_a_blocked_host_are_recognised(self):
-        self.assertTrue(S["is_blocked_host"]("https://www.turboimagehost.com/p/129936247/HH_15.jpg.html"))
-        self.assertTrue(S["is_blocked_host"]("https://turboimagehost.com/p/1/a.jpg.html"))
+    def test_turboimagehost_is_no_longer_blanket_blocked(self):
+        self.assertFalse(S["is_blocked_host"]("https://www.turboimagehost.com/p/129936247/HH_15.jpg.html"))
+        self.assertFalse(S["is_blocked_host"]("https://turboimagehost.com/p/1/a.jpg.html"))
         self.assertFalse(S["is_blocked_host"]("https://phun.imagetwist.com/abc/x.jpg"))
         self.assertFalse(S["is_blocked_host"]("https://notturboimagehost.com/p/1/a.jpg.html"))
         self.assertFalse(S["is_blocked_host"]("https://example.com/turboimagehost.com/a.jpg"))

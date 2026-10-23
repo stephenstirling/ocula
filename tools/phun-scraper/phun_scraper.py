@@ -18,6 +18,7 @@ from urllib.parse import urljoin, quote_plus, urlparse
 from concurrent.futures import ThreadPoolExecutor
 from bs4 import BeautifulSoup
 import requests
+import cloudscraper
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from PIL import Image
@@ -43,8 +44,8 @@ FORUM_PAGES = int(os.environ.get("FORUM_PAGES", "1"))              # pages of th
 MAX_THREAD_PAGES = int(os.environ.get("MAX_THREAD_PAGES", "10"))   # pages of replies read in each thread
 MIN_FREE_GB = float(os.environ.get("MIN_FREE_GB", "100"))          # stop saving while the downloads volume has less free space than this
 THREAD_ATTEMPTS = 3                                                # a thread with failed pictures is tried this many times in all
-BLOCKED_HOSTS = ("turboimagehost.com",)                            # image hosts behind a bot check (a Cloudflare challenge): a script can't fetch them
-BLOCKED_FILE = os.path.join(DOWNLOAD_DIR, "blocked_links.txt")     # their links, one line each, to fetch by hand in a browser
+BLOCKED_HOSTS = ()  # Hosts that still return an unsolved bot challenge are logged as failed downloads.
+BLOCKED_FILE = os.path.join(DOWNLOAD_DIR, "blocked_links.txt")  # Legacy file retained for any explicitly blocked hosts.
 MIN_FILE_SIZE_BYTES = 50 * 1024
 UPGRADE_FILE_SIZE_THRESHOLD = 400 * 1024
 PHASH_SIMILARITY_THRESHOLD = 5
@@ -89,7 +90,7 @@ HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 }
 
-session = requests.Session()
+session = cloudscraper.create_scraper()
 retry_strategy = Retry(total=3, backoff_factor=2, status_forcelist=[429, 500, 502, 503, 504])
 adapter = HTTPAdapter(max_retries=retry_strategy)
 session.mount("https://", adapter)
@@ -997,6 +998,23 @@ def resolve_image_host_url(link_url):
             pass
         return None
 
+    if "turboimagehost.com" in urlparse(link_url).netloc.lower():
+        try:
+            resp = session.get(link_url, timeout=15, allow_redirects=True)
+            if resp.status_code == 200 and resp.headers.get("cf-mitigated", "").lower() != "challenge":
+                soup = BeautifulSoup(resp.text, "html.parser")
+                image = soup.select_one("img#imageid, img.uimg")
+                if image:
+                    candidate = image.get("src") or image.get("data-src") or image.get("data-original")
+                    if candidate:
+                        return urljoin(resp.url, candidate)
+                og = soup.select_one("meta[property='og:image']")
+                if og and og.get("content"):
+                    return urljoin(resp.url, og["content"])
+        except requests.RequestException as e:
+            logging.warning("TurboImageHost page resolution failed (%s): %s", link_url, e)
+        return None
+
     if re.search(r"\.(jpg|jpeg|png|gif|webp)$", link_url, re.IGNORECASE):
         if "imagetwist.com" in link_url:
             return re.sub(r"/th/", "/i/", link_url)
@@ -1227,7 +1245,7 @@ def _download_file(url, celeb_root_folder, history, keywords_list, meta=None, al
 
 SUPPORTED_HOSTS = [
     "imagetwist.com", "pixhost.to", "pixhost.cc", "pixho.st", "pixhost.org", "imgbox.com",
-    "imagevenue.com", "postimg.cc",
+    "imagevenue.com", "postimg.cc", "turboimagehost.com",
 ]
 
 
