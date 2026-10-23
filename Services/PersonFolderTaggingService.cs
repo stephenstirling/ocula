@@ -172,7 +172,7 @@ public sealed class PersonFolderTaggingService
         var matchingRules = rules.SelectMany(rule =>
         {
             var depth = paths.FindIndex(p => string.Equals(p, rule.Folder, StringComparison.OrdinalIgnoreCase));
-            return depth < 0 ? Array.Empty<(Rule Rule, int Depth)>() : new[] { (rule, depth) };
+            return depth < 0 ? Array.Empty<(Rule Rule, int Depth)>() : new[] { (Rule: rule, Depth: depth) };
         }).ToList();
 
         if (matchingRules.Count > 0)
