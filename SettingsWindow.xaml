@@ -98,9 +98,21 @@
                                           Description="Use locally saved person cards to add keywords based on matching folder names.">
                     <ToggleSwitch x:Name="PersonFolderInheritanceToggle" OnContent="Include parent folders" OffContent="Immediate folder only" Toggled="PersonFolderInheritance_Toggled"/>
                     <toolkit:SettingsExpander.Items>
-                        <toolkit:SettingsCard Header="Reapply to existing photos"
-                                              Description="Revisit every photo in the configured folders and merge missing keywords from matching saved cards.">
-                            <Button x:Name="PersonFolderBackfillButton" Content="Reapply to existing photos" Click="PersonFolderBackfill_Click"/>
+                        <toolkit:SettingsCard Header="Explicit folder rules"
+                                              Description="One rule per line: full folder path => saved person-card name. Explicit rules override automatic name matching.">
+                            <StackPanel Spacing="8">
+                                <TextBox x:Name="PersonFolderRulesBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="110"
+                                         PlaceholderText="D:\Photos\Jane Doe => Jane Doe&#x0a;D:\Photos\Trips\Alex => Alex"/>
+                                <Button Content="Save rules" Click="SavePersonFolderRules_Click" HorizontalAlignment="Left"/>
+                            </StackPanel>
+                        </toolkit:SettingsCard>
+                        <toolkit:SettingsCard Header="Preview and repair metadata"
+                                              Description="Preview proposed keyword additions before applying them. The last operation can be undone.">
+                            <StackPanel Spacing="8">
+                                <Button x:Name="PersonFolderBackfillButton" Content="Preview and apply" Click="PersonFolderPreview_Click" HorizontalAlignment="Left"/>
+                                <Button x:Name="PersonFolderUndoButton" Content="Undo last operation" Click="PersonFolderUndo_Click" HorizontalAlignment="Left"/>
+                                <TextBlock x:Name="PersonFolderTagStatusText" Text="No preview run yet." TextWrapping="Wrap" Opacity="0.75"/>
+                            </StackPanel>
                         </toolkit:SettingsCard>
                     </toolkit:SettingsExpander.Items>
                 </toolkit:SettingsExpander>
