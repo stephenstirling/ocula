@@ -354,6 +354,82 @@ def reindex_existing():
     logging.info("Reindex complete: %d added", added)
 
 
+def plan_name_fixes(rows, name_for_title):
+    """Which indexed pictures sit under the wrong person's name. `rows` are (id, rel_path, celebrity, tags_json, thread_title);
+    `name_for_title` turns a thread title into the person's name. Returns one dict per picture to fix: where it is, where it
+    should be, and its corrected tag list. Pictures with no thread title (added by --reindex) are never touched."""
+    plan = []
+    for image_id, rel_path, celebrity, tags_json, thread_title in rows:
+        if not thread_title or not celebrity:
+            continue
+        correct = name_for_title(re.sub(r"\[.*?\]|\(.*?\)", "", thread_title).strip())
+        if not correct or correct == celebrity:
+            continue
+        parts = rel_path.split("/")
+        if len(parts) < 2 or parts[0] != sanitize_filename(celebrity):
+            continue                                   # not filed where the index says: leave it alone
+        try:
+            tags = json.loads(tags_json) if tags_json else []
+        except ValueError:
+            tags = []
+        fixed = list(dict.fromkeys(correct if t == celebrity else t for t in tags))
+        if correct not in fixed:
+            fixed.insert(0, correct)
+        plan.append({"id": image_id, "old_rel": rel_path, "new_rel": "/".join([sanitize_filename(correct)] + parts[1:]),
+                     "old_name": celebrity, "new_name": correct, "tags": fixed})
+    return plan
+
+
+def fix_celebrity_names(dry_run=False):
+    """Moves pictures filed under a wrong name (made before name_from_title) into the right folder, and corrects the name in
+    their tags and in the index. Runs at every start and is a no-op once everything is right.
+        python phun_scraper.py --fix-names --dry-run     (shows what it would do, changes nothing)"""
+    with closing(_library_connect()) as conn:
+        rows = conn.execute("SELECT id, rel_path, celebrity, tags, thread_title FROM images").fetchall()
+    plan = plan_name_fixes(rows, name_from_title)
+    if not plan:
+        return 0
+    logging.info("Name fix: %d pictures are filed under the wrong name", len(plan))
+    moved, old_dirs = 0, set()
+    for item in plan:
+        old_path = os.path.join(DOWNLOAD_DIR, *item["old_rel"].split("/"))
+        new_path = os.path.join(DOWNLOAD_DIR, *item["new_rel"].split("/"))
+        if dry_run:
+            logging.info("Would move %s -> %s (tags: %s)", item["old_rel"], item["new_rel"], ", ".join(item["tags"]))
+            continue
+        try:
+            if os.path.exists(old_path):
+                if os.path.exists(new_path):            # same file name already there: keep both
+                    name, ext = os.path.splitext(new_path)
+                    new_path = f"{name}_{hashlib.md5(item['old_rel'].encode()).hexdigest()[:6]}{ext}"
+                os.makedirs(os.path.dirname(new_path), exist_ok=True)
+                os.rename(old_path, new_path)
+            elif not os.path.exists(new_path):
+                logging.warning("Name fix: %s is missing, skipped", item["old_rel"])
+                continue
+            embed_metadata(new_path, item["tags"])      # failures are logged and counted there; the move still stands
+            new_rel = rel_library_path(new_path)
+            with db_lock, closing(_library_connect()) as conn, conn:
+                conn.execute("UPDATE images SET rel_path=?, celebrity=?, tags=? WHERE id=?",
+                             (new_rel, item["new_name"], json.dumps(item["tags"], ensure_ascii=False), item["id"]))
+                conn.execute("DELETE FROM image_tags WHERE image_id=?", (item["id"],))
+                conn.executemany("INSERT OR IGNORE INTO image_tags(image_id, tag) VALUES (?, ?)",
+                                 [(item["id"], t) for t in item["tags"]])
+            old_dirs.add(os.path.dirname(old_path))
+            moved += 1
+        except Exception as e:
+            logging.error("Name fix failed for %s: %s", item["old_rel"], e)
+    for folder in sorted(old_dirs, key=len, reverse=True):   # tidy: only folders that are now empty
+        for d in (folder, os.path.dirname(folder)):
+            try:
+                if os.path.abspath(d) != os.path.abspath(DOWNLOAD_DIR):
+                    os.rmdir(d)
+            except OSError:
+                pass
+    logging.info("Name fix: %d of %d pictures moved and re-tagged", moved, len(plan))
+    return moved
+
+
 # --- Live status for Ocula ---
 def _iso(ts=None):
     return datetime.utcfromtimestamp(ts if ts is not None else time.time()).isoformat(timespec="seconds") + "Z"
@@ -702,7 +778,7 @@ def should_skip_thread(thread_title):
 def resolve_image_host_url(link_url):
     # pixhost /show/ links end in .jpg but are HTML pages. The picture's server is named on the page (img1, img2, ...,
     # so it can't be guessed), and og:image there is only a thumbnail.
-    if re.search(r"pixhost\.[a-z]+/show/", link_url, re.IGNORECASE):
+    if re.search(r"pixho(?:st)?\.[a-z]+/show/", link_url, re.IGNORECASE):
         try:
             resp = session.get(link_url, timeout=10)
             if resp.status_code == 200:
@@ -887,7 +963,7 @@ def _download_file(url, celeb_root_folder, history, keywords_list, meta=None):
 
 
 SUPPORTED_HOSTS = [
-    "imagetwist.com", "pixhost.to", "pixhost.cc", "pixhost.org", "imgbox.com",
+    "imagetwist.com", "pixhost.to", "pixhost.cc", "pixho.st", "pixhost.org", "imgbox.com",
     "imagevenue.com", "postimg.cc",
 ]
 
@@ -1035,6 +1111,10 @@ def main():
     init_library()
     start_status_server()
     status.update(force=True)
+    try:
+        fix_celebrity_names()
+    except Exception as e:                  # never stop the scraper over a tidy-up
+        logging.error("Name fix failed: %s", e)
     while True:
         scan_now_event.clear()
         run_cycle()
@@ -1049,5 +1129,8 @@ def main():
 if __name__ == "__main__":
     if "--reindex" in sys.argv:
         reindex_existing()
+    elif "--fix-names" in sys.argv:
+        init_library()
+        fix_celebrity_names(dry_run="--dry-run" in sys.argv)
     else:
         main()

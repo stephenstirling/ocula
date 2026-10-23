@@ -139,6 +139,8 @@ class ResolveTests(unittest.TestCase):
     def test_pixhost_mirrors_work_the_same_way(self):
         S["session"] = FakeSession(FakeResponse(200, '<img id="image" src="https://img3.pixhost.cc/images/6572/a.jpg">'))
         self.assertEqual(S["resolve_image_host_url"]("https://pixhost.cc/show/6572/a.jpg"), "https://img3.pixhost.cc/images/6572/a.jpg")
+        S["session"] = FakeSession(FakeResponse(200, '<img id="image" src="https://img3.pixho.st/images/6606/b.jpg">'))
+        self.assertEqual(S["resolve_image_host_url"]("https://pixho.st/show/6606/b.jpg"), "https://img3.pixho.st/images/6606/b.jpg")
 
     def test_pixhost_page_that_fails_or_has_no_image_gives_nothing_rather_than_a_guess(self):
         S["session"] = FakeSession(FakeResponse(404))
