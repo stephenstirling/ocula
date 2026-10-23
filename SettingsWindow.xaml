@@ -236,7 +236,8 @@
                     <toolkit:SettingsExpander.HeaderIcon>
                         <ImageIcon Source="ms-appx:///Assets/Square44x44Logo.targetsize-32_altform-unplated.png"/>
                     </toolkit:SettingsExpander.HeaderIcon>
-                    <Button x:Name="SupportButton" Style="{StaticResource AccentButtonStyle}" Click="Support_Click">
+                    <Button x:Name="SupportButton" Style="{StaticResource AccentButtonStyle}" Click="Support_Click"
+                            AutomationProperties.Name="Support Ocula">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon Glyph="&#xEB51;" FontSize="14"/>
                             <TextBlock Text="Support Ocula"/>

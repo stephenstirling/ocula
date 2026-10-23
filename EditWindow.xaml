@@ -33,7 +33,8 @@
                 </StackPanel>
             </Grid>
             <ToggleButton Grid.Column="1" x:Name="CompareToggle" Click="Compare_Click" VerticalAlignment="Center"
-                          ToolTipService.ToolTip="Before and after (B)">
+                          ToolTipService.ToolTip="Before and after (B)"
+                          AutomationProperties.Name="Before / after">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <FontIcon Glyph="&#xE89F;" FontSize="14"/>
                     <TextBlock Text="Before / after"/>
@@ -70,13 +71,15 @@
                             <ColumnDefinition/>
                             <ColumnDefinition/>
                         </Grid.ColumnDefinitions>
-                        <ToggleButton x:Name="CropTab" HorizontalAlignment="Stretch" IsChecked="True" Click="Tab_Click" Tag="crop">
+                        <ToggleButton x:Name="CropTab" HorizontalAlignment="Stretch" IsChecked="True" Click="Tab_Click" Tag="crop"
+                                      AutomationProperties.Name="Crop">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon Glyph="&#xE7A8;" FontSize="14"/>
                                 <TextBlock Text="Crop"/>
                             </StackPanel>
                         </ToggleButton>
-                        <ToggleButton Grid.Column="1" x:Name="AdjustTab" HorizontalAlignment="Stretch" Click="Tab_Click" Tag="adjust">
+                        <ToggleButton Grid.Column="1" x:Name="AdjustTab" HorizontalAlignment="Stretch" Click="Tab_Click" Tag="adjust"
+                                      AutomationProperties.Name="Adjust">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon Glyph="&#xE9E9;" FontSize="14"/>
                                 <TextBlock Text="Adjust"/>

@@ -92,7 +92,8 @@
                         <Button Content="Fit" Click="Fit_Click" ToolTipService.ToolTip="Fit (0)"/>
                         <Button Content="100%" Click="Actual_Click" ToolTipService.ToolTip="Actual pixels (1)"/>
                     </StackPanel>
-                    <Button Grid.Column="2" Click="Edit_Click" VerticalAlignment="Center" ToolTipService.ToolTip="Edit (E)">
+                    <Button Grid.Column="2" Click="Edit_Click" VerticalAlignment="Center" ToolTipService.ToolTip="Edit (E)"
+                            AutomationProperties.Name="Edit">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <FontIcon Glyph="&#xE70F;" FontSize="14"/>
                             <TextBlock Text="Edit"/>
