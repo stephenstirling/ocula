@@ -29,7 +29,7 @@ def load():
     keep = [n for n in tree.body if (isinstance(n, ast.FunctionDef) and n.name in WANTED)
             or (isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) in ("NAME_PARTICLES", "NAME_VERBS", "_canon"))]
     scope = {"re": re, "is_within_pregnancy_timeline": lambda *a: False, "logging": logging, "threading": threading,
-             "urlparse": urlparse, "BLOCKED_HOSTS": (), "history_lock": threading.Lock(), "blocked_lock": threading.Lock(),
+             "urlparse": urlparse, "urljoin": urljoin, "BLOCKED_HOSTS": (), "history_lock": threading.Lock(), "blocked_lock": threading.Lock(),
              "BLOCKED_FILE": None, "shutil": shutil, "FORUM_URL": "https://forum.phun.org/forums/celebrity-photos.15/", "failures_lock": threading.Lock(), "BeautifulSoup": BeautifulSoup, "requests": requests, "session": None, "_iso": lambda: "2026-10-22T21:00:00Z", "FAILURES_FILE": None}
     exec(compile(ast.Module(body=keep, type_ignores=[]), SOURCE, "exec"), scope)
     return scope
