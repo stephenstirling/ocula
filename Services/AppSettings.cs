@@ -68,12 +68,11 @@ public static class AppSettings
         set => Store.Values["PhunScraperUrl"] = value;
     }
 
-    /// <summary>The scraper's STATUS_TOKEN, if it has one. Kept in Ocula's settings on this PC, unencrypted.</summary>
-    public static string PhunScraperToken
-    {
-        get => Store.Values["PhunScraperToken"] as string ?? string.Empty;
-        set => Store.Values["PhunScraperToken"] = value;
-    }
+    /// <summary>
+    /// Ocula used to keep the scraper's STATUS_TOKEN (for a "Scan now" button), unencrypted. It only views the scraper now, so this
+    /// removes any token an earlier version saved.
+    /// </summary>
+    public static void ForgetPhunToken() => Store.Values.Remove("PhunScraperToken");
 
     /// <summary>The folder the scraper saves into (it also holds scraper_status.json), as this PC sees it, for example Z:\Babes.</summary>
     public static string PhunDownloadsFolder

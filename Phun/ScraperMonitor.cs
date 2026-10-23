@@ -1,7 +1,7 @@
 // Ocula side of the scraper monitor.  No extra NuGet packages needed (System.Text.Json + HttpClient).
 //
 // Two ways to see the container:
-//   1. HTTP   http://<nas-ip>:8765/status   (live; also lets Ocula press "Scan now")
+//   1. HTTP   http://<nas-ip>:8765/status   (live; a GET, nothing else: Ocula only views the scraper, it never controls it)
 //   2. File   <downloads>\scraper_status.json (works even if the port isn't reachable)
 // The monitor tries HTTP first and falls back to the file. If the data is older than 90 s,
 // the container is treated as offline.
@@ -66,17 +66,15 @@ public sealed class ScraperMonitor : IDisposable
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(4) };
     private readonly string? _baseUrl;       // e.g. "http://192.168.86.62:8765"
     private readonly string _statusFile;     // e.g. @"Z:\...\scraper_status.json"
-    private readonly string? _token;
     private CancellationTokenSource? _cts;
 
     /// Raised on the polling thread; marshal to the UI thread (DispatcherQueue) before touching controls.
     public event Action<ScraperStatus>? StatusChanged;
 
-    public ScraperMonitor(string downloadsFolder, string? baseUrl = null, string? token = null)
+    public ScraperMonitor(string downloadsFolder, string? baseUrl = null)
     {
         _statusFile = Path.Combine(downloadsFolder, "scraper_status.json");
         _baseUrl = baseUrl?.TrimEnd('/');
-        _token = token;
     }
 
     public void Start(TimeSpan? interval = null)
@@ -129,15 +127,6 @@ public sealed class ScraperMonitor : IDisposable
         status ??= new ScraperStatus();
         status.Offline = json is null || DateTime.UtcNow - status.UpdatedAt.ToUniversalTime() > StaleAfter;
         return status;
-    }
-
-    /// Wakes the container early instead of waiting for the 4-hour timer. Needs the HTTP address.
-    public async Task<bool> ScanNowAsync()
-    {
-        if (_baseUrl is null) return false;
-        using var req = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/scan-now");
-        if (!string.IsNullOrEmpty(_token)) req.Headers.Add("X-Token", _token);
-        try { return (await _http.SendAsync(req)).IsSuccessStatusCode; } catch { return false; }
     }
 
     public void Dispose() { Stop(); _http.Dispose(); }

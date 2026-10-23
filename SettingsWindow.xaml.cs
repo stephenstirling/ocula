@@ -45,7 +45,7 @@ public sealed partial class SettingsWindow : Window
         SharePeopleToggle.IsOn = AppSettings.SharePeopleWithPorta;
         PhunToggle.IsOn = AppSettings.PhunTabEnabled;
         PhunUrlBox.Text = AppSettings.PhunScraperUrl;
-        PhunTokenBox.Password = AppSettings.PhunScraperToken;
+        AppSettings.ForgetPhunToken();
         PhunFolderBox.Text = AppSettings.PhunDownloadsFolder;
         ColourToggle.IsOn = AppSettings.ColourManaged;
         MapToggle.IsOn = AppSettings.OnlineMaps;
@@ -278,7 +278,7 @@ public sealed partial class SettingsWindow : Window
     {
         if (_loading) return;
         var text = PhunUrlBox.Text.Trim();
-        // Only an http or https address on the network: the monitor sends one GET (and, for Scan now, one POST) there.
+        // Only an http or https address on the network: the monitor sends only a GET to /status there.
         if (text.Length > 0 && !(Uri.TryCreate(text, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https"))
         {
             PhunNote.Text = "That isn't an address Ocula can use. Use the form http://192.168.1.10:8765.";
@@ -287,11 +287,6 @@ public sealed partial class SettingsWindow : Window
         }
         PhunNoteCard.Visibility = Visibility.Collapsed;
         AppSettings.PhunScraperUrl = text;
-    }
-
-    private void PhunTokenBox_LostFocus(object sender, RoutedEventArgs e)
-    {
-        if (!_loading) AppSettings.PhunScraperToken = PhunTokenBox.Password;
     }
 
     private void PhunFolderBox_LostFocus(object sender, RoutedEventArgs e)

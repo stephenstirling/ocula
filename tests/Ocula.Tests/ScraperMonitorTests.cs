@@ -1,4 +1,7 @@
 using System.Globalization;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
 using Ocula.Library;
 using Xunit;
 
@@ -112,11 +115,42 @@ public class ScraperMonitorTests : IDisposable
     }
 
     [Fact]
-    public async Task Scan_now_needs_an_address()
+    public async Task Ocula_only_views_the_scraper_it_sends_a_GET_to_status_and_nothing_else()
     {
-        using var monitor = new ScraperMonitor(_folder);
+        // A minimal server on the loopback address that records the first line of every request it gets.
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var requests = new List<string>();
+        var body = $$"""{"state": "sleeping", "updated_at": "{{Iso(DateTime.UtcNow)}}", "images_saved": 7, "events": []}""";
+        var serving = Task.Run(async () =>
+        {
+            try
+            {
+                while (true)
+                {
+                    using var client = await listener.AcceptTcpClientAsync();
+                    using var stream = client.GetStream();
+                    var buffer = new byte[4096];
+                    var read = await stream.ReadAsync(buffer);
+                    lock (requests) requests.Add(Encoding.ASCII.GetString(buffer, 0, read).Split("\r\n")[0]);
+                    var response = Encoding.ASCII.GetBytes(
+                        $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n{body}");
+                    await stream.WriteAsync(response);
+                }
+            }
+            catch (Exception) { /* the listener was stopped */ }
+        });
 
-        Assert.False(await monitor.ScanNowAsync());
+        using (var monitor = new ScraperMonitor(_folder, $"http://127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}"))
+        {
+            var status = await monitor.ReadOnceAsync();
+            Assert.Equal(7, status.ImagesSaved);
+            Assert.False(status.Offline);
+        }
+        listener.Stop();
+        await serving;
+
+        lock (requests) Assert.Equal(new[] { "GET /status HTTP/1.1" }, requests);
     }
 
     [Fact]

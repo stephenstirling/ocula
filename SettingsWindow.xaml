@@ -169,15 +169,12 @@
                 <!-- Phun Forum Scraper -->
                 <TextBlock Text="Phun Forum Scraper" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,20,0,4"/>
                 <toolkit:SettingsExpander x:Name="PhunExpander" Header="Show the Phun Forum Scraper in the sidebar"
-                                          Description="A live view of the forum scraper that runs in Docker on your NAS: what it is downloading, how many images it has saved, the pictures it saved most recently, and a Scan now button. Ocula only reads its status over your network; it doesn't run the scraper. The address and token are kept in Ocula's settings on this PC, unencrypted.">
+                                          Description="A live view of the forum scraper that runs in Docker on your NAS: what it is downloading, how many images it has saved, and the pictures it saved most recently. The scraper keeps running on your NAS by itself; Ocula only reads its status over your network and never starts, stops or controls it.">
                     <toolkit:SettingsExpander.HeaderIcon><FontIcon Glyph="&#xE896;"/></toolkit:SettingsExpander.HeaderIcon>
                     <ToggleSwitch x:Name="PhunToggle" Toggled="PhunToggle_Toggled"/>
                     <toolkit:SettingsExpander.Items>
-                        <toolkit:SettingsCard Header="Scraper address" Description="The status address on your network. Leave it empty to read the status file in the downloads folder only (no Scan now).">
+                        <toolkit:SettingsCard Header="Scraper address" Description="The status address on your network. Leave it empty to read the status file in the downloads folder only.">
                             <TextBox x:Name="PhunUrlBox" Width="280" PlaceholderText="http://192.168.1.10:8765" LostFocus="PhunUrlBox_LostFocus"/>
-                        </toolkit:SettingsCard>
-                        <toolkit:SettingsCard Header="Token" Description="The scraper's STATUS_TOKEN, if you set one. Needed for Scan now.">
-                            <PasswordBox x:Name="PhunTokenBox" Width="280" LostFocus="PhunTokenBox_LostFocus"/>
                         </toolkit:SettingsCard>
                         <toolkit:SettingsCard Header="Downloads folder" Description="The folder the scraper saves into, as this PC sees it, for example Z:\Babes. Ocula reads the pictures and the library file from here.">
                             <TextBox x:Name="PhunFolderBox" Width="280" PlaceholderText="Z:\Babes" LostFocus="PhunFolderBox_LostFocus"/>
