@@ -73,6 +73,20 @@ public sealed class LibraryCrawler
         var token = cts.Token;
         _checked = 0;
         _updated = 0;
+
+        // Use only saved local cards. The crawler must never trigger online person lookups.
+        List<ResolvedPersonCard> personCards;
+        try
+        {
+            personCards = AppSettings.WritePersonCardTagsToFiles
+                ? await _index.GetAllPersonCardsAsync()
+                : new List<ResolvedPersonCard>();
+        }
+        catch
+        {
+            personCards = new List<ResolvedPersonCard>();
+        }
+
         try
         {
             foreach (var root in roots)
@@ -105,7 +119,12 @@ public sealed class LibraryCrawler
                         while (_paused) await Task.Delay(500, token);
 
                         await Task.WhenAll(stale.Skip(i).Take(batchSize)
-                            .Select(item => Indexer.IndexAsync(item, _index, withThumbnail: true)));
+                            .Select(async item =>
+                            {
+                                if (!item.IsCloudOnly && !item.IsVideo && personCards.Count > 0)
+                                    await ApplyFolderPersonCardTagsAsync(item, personCards);
+                                await Indexer.IndexAsync(item, _index, withThumbnail: true);
+                            }));
                         _updated += Math.Min(batchSize, stale.Count - i);
                         if (i % 12 == 0) Report(folder);
                         if (network) await Task.Delay(25, token); // leave bandwidth for whatever you're doing
@@ -126,6 +145,44 @@ public sealed class LibraryCrawler
 
     private void Report(string? folder) =>
         StatusChanged?.Invoke(new CrawlStatus(_cts != null, _paused, _checked, _updated, folder));
+
+    /// <summary>
+    /// Apply saved person-card keywords when a directory segment exactly matches a card name.
+    /// This runs only for new/changed files found by the crawler and merges rather than replaces
+    /// metadata. Ambiguous folders are deliberately left alone.
+    /// </summary>
+    private static async Task ApplyFolderPersonCardTagsAsync(ImageItem item, IReadOnlyList<ResolvedPersonCard> cards)
+    {
+        var folderNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (DirectoryInfo? directory = new DirectoryInfo(item.Folder); directory != null; directory = directory.Parent)
+            folderNames.Add(directory.Name);
+
+        var matches = cards.Where(card =>
+            folderNames.Contains(card.GroupName) ||
+            folderNames.Contains(card.Facts.Name ?? string.Empty) ||
+            folderNames.Contains(card.Facts.FullName ?? string.Empty))
+            .ToList();
+
+        if (matches.Count != 1) return;
+
+        var match = matches[0];
+        var existing = await MetadataStore.ReadAsync(item);
+        var tags = existing.Tags.ToList();
+        var additions = PersonCardTagBuilder.FromFacts(match.Facts, match.GroupName)
+            .Where(tag => !tag.StartsWith("person:", StringComparison.OrdinalIgnoreCase));
+        PersonCardTagBuilder.MergeInto(tags, new[] { match.GroupName }.Concat(additions));
+
+        if (tags.Count == existing.Tags.Count) return;
+
+        item.Tags = tags;
+        item.Rating = existing.Rating;
+        item.Label = existing.Label;
+        await MetadataStore.WriteAsync(item);
+
+        // Embedded metadata writes may update the file timestamp. Keep the index row aligned
+        // with the file so the crawler doesn't immediately treat its own write as a new change.
+        item.Modified = FolderScanner.ModifiedOf(item);
+    }
 
     private static IEnumerable<string> Folders(string root)
     {
