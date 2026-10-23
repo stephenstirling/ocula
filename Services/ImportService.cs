@@ -228,7 +228,7 @@ public static class ImportService
         {
             if (string.IsNullOrWhiteSpace(name)) return false;
             // Avoid partial matches such as "Duff" matching "Hilary Duff" or names inside longer words.
-            var pattern = $@"(?<![\\p{{L}}\\p{{N}}]){Regex.Escape(name.Trim())}(?![\\p{{L}}\\p{{N}}])";
+            var pattern = $@"(?<![\p{{L}}\p{{N}}]){Regex.Escape(name.Trim())}(?![\p{{L}}\p{{N}}])";
             return Regex.IsMatch(text, pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         }
 
