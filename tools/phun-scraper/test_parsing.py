@@ -24,7 +24,7 @@ WANTED = {"listing_threads", "post_bodies", "direct_from_thumbnail", "extract_me
 def load():
     tree = ast.parse(open(SOURCE, encoding="utf-8").read())
     keep = [n for n in tree.body if (isinstance(n, ast.FunctionDef) and n.name in WANTED)
-            or (isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) == "NAME_PARTICLES")]
+            or (isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) in ("NAME_PARTICLES", "NAME_VERBS"))]
     scope = {"re": re, "is_within_pregnancy_timeline": lambda *a: False, "logging": logging, "threading": threading,
              "failures_lock": threading.Lock(), "BeautifulSoup": BeautifulSoup, "requests": requests, "session": None, "_iso": lambda: "2026-10-22T21:00:00Z", "FAILURES_FILE": None}
     exec(compile(ast.Module(body=keep, type_ignores=[]), SOURCE, "exec"), scope)
@@ -104,6 +104,31 @@ class NameTests(unittest.TestCase):
             ("Joanna ''JoJo'' Levesque at an event", "Joanna ''JoJo'' Levesque"),
         ]:
             self.assertEqual(S["name_from_title"](title), name, title)
+
+    def test_a_capitalised_verb_at_the_end_is_not_part_of_the_name(self):
+        for title, name in [
+            ("Chloe Bailey Sings the national anthem before Lakers-Warriors NBA season opener", "Chloe Bailey"),
+            ("Rihanna Performs at the Met Gala", "Rihanna"),
+            ("Zoe de Vries Attends a premiere", "Zoe de Vries"),
+            ("Katy Perry Out in New York", "Katy Perry"),
+            # real names, including 3-word names, are left alone
+            ("Millie Bobby Brown leaving the Corner Store after dinner", "Millie Bobby Brown"),
+            ("Megan Thee Stallion walks the runway for the Victoria's Secret Fashion Show", "Megan Thee Stallion"),
+            ("Olivia Taylor Dudley at Dead Meat & Hades Present Fresh Meat", "Olivia Taylor Dudley"),
+            ("Peyton Elizabeth Lee at the U.S. Premiere", "Peyton Elizabeth Lee"),
+            ("Brooke Shields at a charity dinner", "Brooke Shields"),
+            ("Kate Hudson in Paris", "Kate Hudson"),
+        ]:
+            self.assertEqual(S["name_from_title"](title), name, title)
+
+    def test_a_verb_is_only_removed_when_a_name_is_left(self):
+        self.assertEqual(S["name_from_title"]("Sings at the awards"), "Sings")   # nothing before it: keep what there is
+
+    def test_curly_and_straight_apostrophes_give_the_same_name(self):
+        straight = S["name_from_title"]("Charli D'Amelio at the Hollywood Reporter Creator A-List Party")
+        curly = S["name_from_title"]("Charli D’Amelio at the Hollywood Reporter Creator A-List Party")
+        self.assertEqual(straight, "Charli D'Amelio")
+        self.assertEqual(curly, straight)
 
     def test_titles_with_nothing_lower_case_fall_back_to_the_old_rules(self):
         self.assertEqual(S["name_from_title"]("Rihanna"), "Rihanna")

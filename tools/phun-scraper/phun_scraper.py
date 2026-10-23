@@ -693,12 +693,24 @@ def is_within_pregnancy_timeline(celeb_name, title_text):
 
 NAME_PARTICLES = {"de", "del", "della", "di", "da", "van", "von", "der", "den", "la", "le", "du", "bin", "al", "el", "ter", "ten"}
 
+# Verbs that titles write with a capital ("Chloe Bailey Sings the national anthem"), so they look like part of the name.
+# Only ever removed from the END of a name that has another word before it.
+NAME_VERBS = {
+    "sings", "performs", "attends", "arrives", "leaves", "walks", "steps", "stuns", "poses", "shows", "wears", "dines", "heads",
+    "hits", "visits", "celebrates", "takes", "goes", "gets", "joins", "enjoys", "films", "promotes", "launches", "unveils",
+    "appears", "looks", "wins", "hosts", "presents", "accepts", "greets", "departs", "spotted", "seen", "out", "pictured",
+    "flaunts", "rocks", "slays", "wows", "sizzles", "models", "shops", "lunches", "exits", "shoots", "dazzles", "debuts",
+    "receives", "reveals", "supports", "cheers", "struts", "stops", "catches", "grabs", "picks", "runs", "rides", "plays",
+    "smiles", "waves", "arriving", "leaving", "walking", "heading", "attending", "performing",
+}
+
 
 def name_from_title(clean_title):
     """The person's name at the start of a thread title. Names are capitalised words, and the title carries on in lower
     case ("Kelly Brook for NEXT UK", "Famke Janssen out in NYC", "Carrie-Anne Moss and Clark Backo ..."), so the name is
     the leading run of capitalised words when something lower case ends it. Otherwise: the text before " at / in / @ / on / - ",
     or the first two words. A name of more than four words is cut to two."""
+    clean_title = clean_title.replace("‘", "'").replace("’", "'")   # one spelling of D'Amelio, whatever the forum typed
     words = clean_title.split()
     run = []
     stopped = False
@@ -710,6 +722,8 @@ def name_from_title(clean_title):
             stopped = True
             break
     while run and run[-1].lower() in NAME_PARTICLES:
+        run.pop()
+    while len(run) > 1 and run[-1].lower() in NAME_VERBS:
         run.pop()
     if run:
         run[-1] = re.sub(r"['’]s$", "", run[-1])
