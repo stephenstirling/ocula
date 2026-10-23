@@ -25,6 +25,7 @@ from exiftool import ExifToolHelper
 
 # --- Configuration ---
 FORUM_URL = "https://forum.phun.org/forums/celebrity-photos.15/"
+FORUM_BASE = "https://forum.phun.org/"  # thread links in the list are relative to this, not to FORUM_URL
 DOWNLOAD_DIR = os.environ.get("DOWNLOAD_DIR", "/downloads")  # Docker path; mount the NAS "Babes" folder here
 HISTORY_FILE = os.path.join(DOWNLOAD_DIR, "download_history.json")
 CELEB_CACHE_FILE = os.path.join(DOWNLOAD_DIR, "celeb_data_cache.json")
@@ -832,6 +833,35 @@ SUPPORTED_HOSTS = [
 ]
 
 
+def listing_threads(soup):
+    """(title, href) for each normal thread in a forum listing, newest activity first. Handles XenForo 2 (structItem) and
+    XenForo 1 (discussionListItem, which phun.org runs); pinned XenForo 1 threads (rules, requests) are skipped."""
+    found = []
+    for a_tag in soup.select("div.structItem-title a[data-tp-primary='on']"):
+        if a_tag.get("href"):
+            found.append((a_tag.text.strip(), a_tag["href"]))
+    for li in soup.select("li.discussionListItem"):
+        if "sticky" in (li.get("class") or []):
+            continue
+        for a_tag in li.select("h3.title a[href]"):
+            if a_tag["href"].startswith("threads/"):
+                found.append((a_tag.text.strip(), a_tag["href"]))
+    return found
+
+
+def post_bodies(soup):
+    """The message bodies of a thread page (XenForo 2 `article.message-body`, XenForo 1 `blockquote.messageText`)."""
+    return soup.select("article.message-body, blockquote.messageText")
+
+
+def direct_from_thumbnail(href, thumb_src):
+    """imagetwist links are HTML pages even when they end in .jpg; the picture itself is the thumbnail's address with
+    /th/ changed to /i/. Returns None when this isn't an imagetwist link with a thumbnail."""
+    if thumb_src and "imagetwist.com" in href.lower() and "/th/" in thumb_src:
+        return thumb_src.replace("/th/", "/i/", 1)
+    return None
+
+
 def process_thread(thread_title, thread_url, history):
     """Returns True when the thread is finished (don't retry), False to retry next cycle."""
     logging.info("Processing thread: %s", thread_title)
@@ -852,21 +882,22 @@ def process_thread(thread_title, thread_url, history):
         return False  # transient errors must not permanently mark the thread done
 
     soup = BeautifulSoup(resp.text, "html.parser")
-    first_post = soup.select_one("article.message-body")
-    post_text = first_post.get_text() if first_post else ""
+    posts = post_bodies(soup)
+    post_text = posts[0].get_text() if posts else ""
 
     celeb_name, keywords_list = extract_metadata_tags(thread_title, post_text)
     celeb_folder = os.path.join(DOWNLOAD_DIR, sanitize_filename(celeb_name))
     os.makedirs(celeb_folder, exist_ok=True)
 
     links = []
-    for post in soup.select("article.message-body"):
+    for post in posts:
         for a in post.find_all("a", href=True):
             href = a["href"]
             if any(h in href.lower() for h in SUPPORTED_HOSTS) or re.search(
                 r"\.(jpg|jpeg|png|webp)$", href, re.IGNORECASE
             ):
-                links.append(href)
+                thumb = a.find("img")
+                links.append(direct_from_thumbnail(href, thumb.get("src") if thumb else None) or href)
     links = list(dict.fromkeys(links))
 
     post_dt = parse_title_date(thread_title)
@@ -912,15 +943,14 @@ def run_cycle():
 
         soup = BeautifulSoup(resp.text, "html.parser")
         pending = []
-        for a_tag in soup.select("div.structItem-title a[data-tp-primary='on']"):
-            href = a_tag.get("href")
-            if not href:
-                continue
-            url = urljoin(FORUM_URL, href)
+        for title, href in listing_threads(soup):
+            url = urljoin(FORUM_BASE, href)
             with history_lock:
                 if url in history["processed_threads"]:
                     continue
-            pending.append((a_tag.text.strip(), url))
+            pending.append((title, url))
+        if not pending and not history["processed_threads"]:
+            logging.warning("The forum list had no threads at all; its markup may have changed")
 
         status.update(threads_total=len(pending), force=True)
         logging.info("%d new threads to process", len(pending))
