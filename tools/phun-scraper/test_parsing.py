@@ -123,6 +123,22 @@ class NameTests(unittest.TestCase):
         ]:
             self.assertEqual(S["name_from_title"](title), name, title)
 
+    def test_a_title_case_sentence_does_not_leave_a_verb_in_the_name(self):
+        # the older rules take everything before " at ": the verb has to come off that name too
+        self.assertEqual(S["name_from_title"]("The Pussycat Dolls Perform At The 3Arena Dublin in Dublin 10/05/2026"), "The Pussycat Dolls")
+        self.assertEqual(S["name_from_title"]("Dua Lipa Attends At The Opera"), "Dua Lipa")
+
+    def test_the_name_ends_at_a_comma_and_a_description_after_it_is_not_a_second_person(self):
+        title = "Daisy Edgar-Jones, Esme Creed-Miles for Focus Features ''Sense and Sensibility'' promo October 2026"
+        self.assertEqual(S["name_from_title"](title), "Daisy Edgar-Jones")
+        self.assertEqual(S["people_from_title"](title), ["Daisy Edgar-Jones"])
+        self.assertEqual(S["people_from_title"]("Kelly Brook, Swimwear Collection 2026"), ["Kelly Brook"])
+        self.assertEqual(S["name_from_title"]("Kelly Brook, ADDS"), "Kelly Brook")
+        # a one-word start before a comma is left alone
+        self.assertEqual(S["name_from_title"]("Este, Danielle & Alana Haim at Louis Vuitton"), "Este, Danielle")
+        # ... and "& Alana Haim" is still found as the second person, so her pictures stay where they are
+        self.assertEqual(S["people_from_title"]("Este, Danielle & Alana Haim at Louis Vuitton"), ["Este, Danielle", "Alana Haim"])
+
     def test_a_verb_is_only_removed_when_a_name_is_left(self):
         self.assertEqual(S["name_from_title"]("Sings at the awards"), "Sings")   # nothing before it: keep what there is
 

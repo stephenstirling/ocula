@@ -798,6 +798,9 @@ NAME_VERBS = {
     "flaunts", "rocks", "slays", "wows", "sizzles", "models", "shops", "lunches", "exits", "shoots", "dazzles", "debuts",
     "receives", "reveals", "supports", "cheers", "struts", "stops", "catches", "grabs", "picks", "runs", "rides", "plays",
     "smiles", "waves", "arriving", "leaving", "walking", "heading", "attending", "performing",
+    # the plain form, for a title like "The Pussycat Dolls Perform At The 3Arena" (only ones that are not also surnames)
+    "perform", "attend", "arrive", "leave", "walk", "pose", "wear", "dine", "visit", "celebrate", "promote", "launch", "unveil",
+    "appear", "greet", "depart", "flaunt", "debut", "receive", "reveal", "enjoy", "join", "cheer", "strut", "stun",
 }
 
 
@@ -814,6 +817,10 @@ def name_from_title(clean_title):
         bare = word.lstrip("'\"")
         if bare[:1].isupper() or (i > 0 and word.lower() in NAME_PARTICLES):
             run.append(word)
+            if word.endswith(",") and len(run) >= 2:      # "Daisy Edgar-Jones, Esme ...": the name ends at the comma
+                run[-1] = word.rstrip(",")
+                stopped = True
+                break
         else:
             stopped = True
             break
@@ -831,7 +838,10 @@ def name_from_title(clean_title):
         name = match.group(1).strip()
     else:
         name = " ".join(words[:2]) if len(words) >= 2 else clean_title
-    return " ".join(name.split()[:2]) if len(name.split()) > 4 else name
+    parts = name.split()
+    while len(parts) > 1 and parts[-1].lower() in NAME_VERBS:
+        parts.pop()
+    return " ".join(parts[:2]) if len(parts) > 4 else " ".join(parts)
 
 
 def _second_person(words):
@@ -862,7 +872,7 @@ def people_from_title(clean_title):
     first = name_from_title(clean_title)
     words = clean_title.split()
     n = len(first.split())
-    if words[:n] != first.split():
+    if [w.rstrip(",") for w in words[:n]] != [w.rstrip(",") for w in first.split()]:
         return [first]                       # the name came from the older rules; don't guess at a second
     rest = words[n:]
     if rest and rest[0] == "-":
