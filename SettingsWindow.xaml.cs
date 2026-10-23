@@ -125,11 +125,11 @@ public sealed partial class SettingsWindow : Window
             var report = await _personFolderTagging.PreviewAsync(
                 _main.RootFolders, cards, PersonFolderRulesBox.Text, PersonFolderInheritanceToggle.IsOn);
 
-            var summary = $"Scanned: {report.Scanned:N0} items\\n" +
-                          $"Would add keywords: {report.Changes:N0} photos\\n" +
-                          $"Ambiguous matches skipped: {report.Ambiguous:N0}\\n" +
-                          $"No matching card: {report.Unmatched:N0}\\n\\n" +
-                          (report.Examples.Count > 0 ? string.Join("\\n", report.Examples) : "No keyword changes are needed.");
+            var summary = $"Scanned: {report.Scanned:N0} items\n" +
+                          $"Would add keywords: {report.Changes:N0} photos\n" +
+                          $"Ambiguous matches skipped: {report.Ambiguous:N0}\n" +
+                          $"No matching card: {report.Unmatched:N0}\n\n" +
+                          (report.Examples.Count > 0 ? string.Join("\n", report.Examples) : "No keyword changes are needed.");
 
             var dialog = new ContentDialog
             {
