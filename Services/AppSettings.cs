@@ -34,6 +34,13 @@ public static class AppSettings
         set => Store.Values["WritePersonCardTagsToFiles"] = value;
     }
 
+    /// <summary>Explicit folder-to-person rules, one absolute folder path followed by => and a saved person-card name per line.</summary>
+    public static string PersonFolderTagRules
+    {
+        get => Store.Values["PersonFolderTagRules"] as string ?? string.Empty;
+        set => Store.Values["PersonFolderTagRules"] = value;
+    }
+
     /// <summary>Whether a saved person card can match a photo through any ancestor directory, rather than only its immediate folder.</summary>
     public static bool PersonFolderTagIncludeSubfolders
     {
