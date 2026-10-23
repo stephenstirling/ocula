@@ -9,6 +9,7 @@ import ast
 import logging
 import os
 import re
+import shutil
 import tempfile
 import threading
 import unittest
@@ -18,7 +19,8 @@ import requests
 from bs4 import BeautifulSoup
 
 SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "phun_scraper.py")
-WANTED = {"listing_threads", "post_bodies", "direct_from_thumbnail", "extract_metadata_tags", "log_failure", "resolve_image_host_url", "name_from_title"}
+WANTED = {"listing_threads", "post_bodies", "direct_from_thumbnail", "extract_metadata_tags", "log_failure", "resolve_image_host_url", "name_from_title", "people_from_title", "_second_person",
+          "forum_page_url", "thread_page_url", "last_page_number", "enough_free_space", "hash_ints", "is_near_duplicate"}
 
 
 def load():
@@ -26,7 +28,7 @@ def load():
     keep = [n for n in tree.body if (isinstance(n, ast.FunctionDef) and n.name in WANTED)
             or (isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) in ("NAME_PARTICLES", "NAME_VERBS"))]
     scope = {"re": re, "is_within_pregnancy_timeline": lambda *a: False, "logging": logging, "threading": threading,
-             "failures_lock": threading.Lock(), "BeautifulSoup": BeautifulSoup, "requests": requests, "session": None, "_iso": lambda: "2026-10-22T21:00:00Z", "FAILURES_FILE": None}
+             "shutil": shutil, "FORUM_URL": "https://forum.phun.org/forums/celebrity-photos.15/", "failures_lock": threading.Lock(), "BeautifulSoup": BeautifulSoup, "requests": requests, "session": None, "_iso": lambda: "2026-10-22T21:00:00Z", "FAILURES_FILE": None}
     exec(compile(ast.Module(body=keep, type_ignores=[]), SOURCE, "exec"), scope)
     return scope
 
@@ -179,6 +181,106 @@ class ResolveTests(unittest.TestCase):
         S["session"] = FakeSession(FakeResponse(500))
         self.assertEqual(S["resolve_image_host_url"]("https://example.com/a.jpg"), "https://example.com/a.jpg")
         self.assertEqual(S["session"].asked, [])
+
+
+class PeopleTests(unittest.TestCase):
+    def test_a_thread_that_names_two_people_gives_both_in_order(self):
+        for title, people in [
+            ("Carrie-Anne Moss and Clark Backo for Entertainment Weekly photoshoot - October 2026, ADDS", ["Carrie-Anne Moss", "Clark Backo"]),
+            ("Dua Lipa - and Callum Turner walk their dog, New York City - October 21, 2026", ["Dua Lipa", "Callum Turner"]),
+            ("Taylor Swift & Travis Kelce out in New York", ["Taylor Swift", "Travis Kelce"]),
+            ("Taylor Swift and Travis Kelce", ["Taylor Swift", "Travis Kelce"]),
+            ("Zoe de Vries and Amy Smith, ADDS", ["Zoe de Vries", "Amy Smith"]),
+        ]:
+            self.assertEqual(S["people_from_title"](title), people, title)
+
+    def test_one_person_titles_stay_one_person(self):
+        for title in [
+            "Miranda Kerr at the 2026 George H.W. Bush Points of Light Awards in Washington D.C. 10/13/2026",
+            "Olivia Taylor Dudley at Dead Meat & Hades Present Fresh Meat in Los Angeles",   # the & is a company
+            "Emmy Rossum at IndieWire x Hulu Furious Screening",
+            "Sadie Sink - Stella McCartney",                                                  # a dash is not "and"
+            "Kelly Brook for NEXT UK - Swimwear Collection 2026",
+            "Xochitl Gomez at Dancing with the Stars 10/20/2026",
+            "Selena Gomez And Hailey Bieber Attend The Met Gala",                             # a sentence, not two names
+            "Rihanna",
+        ]:
+            self.assertEqual(len(S["people_from_title"](title)), 1, title)
+
+    def test_every_person_named_is_a_tag(self):
+        name, tags = S["extract_metadata_tags"]("Carrie-Anne Moss and Clark Backo for Entertainment Weekly photoshoot - October 2026, ADDS")
+        self.assertEqual(name, "Carrie-Anne Moss")
+        self.assertEqual(tags[:2], ["Carrie-Anne Moss", "Clark Backo"])
+
+
+class SafetyFilterTests(unittest.TestCase):
+    """The age and exclusion checks have to apply to every person a title names, not only the first."""
+
+    def skip(self, title, ages):
+        scope = dict(S)
+        scope.update({"EXCLUDED_TITLE_KEYWORDS": ["trans"], "EXCLUDED_CELEBRITIES": ["lindsay lohan"], "MAX_AGE_AT_POST": 57,
+                      "MIN_AGE_AT_POST": 18, "is_amanda_bynes_after_2012": lambda *a: False,
+                      "age_at_post": lambda name, thread_title: ages.get(name)})
+        with open(SOURCE, encoding="utf-8") as f:
+            tree = ast.parse(f.read())
+        fn = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "should_skip_thread"]
+        exec(compile(ast.Module(body=fn, type_ignores=[]), SOURCE, "exec"), scope)
+        logging.disable(logging.CRITICAL)
+        return scope["should_skip_thread"](title)
+
+    def test_a_second_person_under_the_minimum_age_skips_the_thread(self):
+        self.assertTrue(self.skip("Adult Actor and Young Star at a premiere", {"Adult Actor": 30, "Young Star": 16}))
+
+    def test_a_first_person_under_the_minimum_age_still_skips_the_thread(self):
+        self.assertTrue(self.skip("Young Star and Adult Actor at a premiere", {"Adult Actor": 30, "Young Star": 16}))
+
+    def test_a_second_person_who_is_excluded_skips_the_thread(self):
+        self.assertTrue(self.skip("Adult Actor and Lindsay Lohan at a premiere", {"Adult Actor": 30}))
+
+    def test_two_adults_are_kept(self):
+        self.assertFalse(self.skip("Adult Actor and Other Person at a premiere", {"Adult Actor": 30, "Other Person": 41}))
+
+
+class CrawlHelperTests(unittest.TestCase):
+    def test_list_and_thread_page_urls(self):
+        self.assertEqual(S["forum_page_url"](1), "https://forum.phun.org/forums/celebrity-photos.15/")
+        self.assertEqual(S["forum_page_url"](3), "https://forum.phun.org/forums/celebrity-photos.15/page-3")
+        self.assertEqual(S["thread_page_url"]("https://forum.phun.org/threads/a.1/", 1), "https://forum.phun.org/threads/a.1/")
+        self.assertEqual(S["thread_page_url"]("https://forum.phun.org/threads/a.1/", 2), "https://forum.phun.org/threads/a.1/page-2")
+
+    def test_last_page_number_reads_the_page_navigation(self):
+        self.assertEqual(S["last_page_number"](BeautifulSoup('<div class="PageNav" data-last="6098"></div>', "html.parser")), 6098)
+        self.assertEqual(S["last_page_number"](BeautifulSoup("<p>one page</p>", "html.parser")), 1)
+        self.assertEqual(S["last_page_number"](BeautifulSoup('<div class="PageNav" data-last="x"></div>', "html.parser")), 1)
+
+    def test_free_space_check(self):
+        self.assertTrue(S["enough_free_space"](tempfile.gettempdir(), 0))
+        self.assertFalse(S["enough_free_space"](tempfile.gettempdir(), 10_000_000))   # 10 million GB
+
+
+class HashTests(unittest.TestCase):
+    def setUp(self):
+        S["_hash_ints"] = []
+        S["_hash_ints"].clear()
+
+    def test_hashes_become_integers_and_follow_the_history(self):
+        history = {"downloaded_hashes": ["0000000000000000", "ffffffffffffffff"]}
+        self.assertEqual(S["hash_ints"](history), [0, 2**64 - 1])
+        history["downloaded_hashes"].append("0000000000000010")
+        self.assertEqual(S["hash_ints"](history), [0, 2**64 - 1, 16])   # only the new one is converted
+
+    def test_a_shorter_history_restarts_the_cache(self):
+        S["hash_ints"]({"downloaded_hashes": ["0000000000000001", "0000000000000002"]})
+        self.assertEqual(S["hash_ints"]({"downloaded_hashes": ["0000000000000005"]}), [5])
+
+    def test_near_duplicates_are_found_by_bit_distance(self):
+        known = [0b1010101010, 0xFFFF]
+        near = S["is_near_duplicate"]
+        self.assertTrue(near(0b1010101010, known, 5))            # identical
+        self.assertTrue(near(0b1010101011, known, 5))            # 1 bit away
+        self.assertTrue(near(0b1010111111, known, 5))            # 3 bits away
+        self.assertFalse(near(0b0101010101, known, 5))           # every bit different
+        self.assertFalse(near(123456789, [], 5))                 # nothing to match
 
 
 class FailureLogTests(unittest.TestCase):

@@ -1,5 +1,6 @@
 import io
 import os
+import shutil
 import sys
 import sqlite3
 from contextlib import closing
@@ -38,6 +39,10 @@ STATUS_FILE = os.path.join(DOWNLOAD_DIR, "scraper_status.json")  # live status f
 STATUS_PORT = int(os.environ.get("STATUS_PORT", "8765"))
 STATUS_TOKEN = os.environ.get("STATUS_TOKEN", "")  # if set, required (X-Token header) for POST /scan-now
 CHECK_INTERVAL_HOURS = 4
+FORUM_PAGES = int(os.environ.get("FORUM_PAGES", "1"))              # pages of the forum's thread list read per scan, newest first
+MAX_THREAD_PAGES = int(os.environ.get("MAX_THREAD_PAGES", "10"))   # pages of replies read in each thread
+MIN_FREE_GB = float(os.environ.get("MIN_FREE_GB", "100"))          # stop saving while the downloads volume has less free space than this
+THREAD_ATTEMPTS = 3                                                # a thread with failed pictures is tried this many times in all
 MIN_FILE_SIZE_BYTES = 50 * 1024
 UPGRADE_FILE_SIZE_THRESHOLD = 400 * 1024
 PHASH_SIMILARITY_THRESHOLD = 5
@@ -101,6 +106,25 @@ def image_ok(data):
             return w >= 300 and h >= 300
     except Exception:
         return False
+
+
+_hash_ints = []   # the saved pictures' perceptual hashes as integers, in the same order as history["downloaded_hashes"]
+
+
+def hash_ints(history):
+    """history["downloaded_hashes"] as integers (kept up to date as pictures are saved). Comparing integers is far faster than
+    building a hash object for every saved picture, which matters once the library has hundreds of thousands of them."""
+    hashes = history["downloaded_hashes"]
+    if len(_hash_ints) > len(hashes):
+        _hash_ints.clear()                   # the history was replaced by a shorter one: start again
+    while len(_hash_ints) < len(hashes):
+        _hash_ints.append(int(hashes[len(_hash_ints)], 16))
+    return _hash_ints
+
+
+def is_near_duplicate(value, known, threshold):
+    """True when `value` is within `threshold` bits (Hamming distance) of any hash in `known`. Same test as imagehash's subtraction."""
+    return any(bin(value ^ k).count("1") <= threshold for k in known)
 
 
 def phash_of(data):
@@ -212,6 +236,7 @@ def load_history():
     data.setdefault("processed_threads", [])
     data.setdefault("downloaded_urls", [])
     data.setdefault("downloaded_hashes", [])
+    data.setdefault("thread_attempts", {})   # thread url -> times it was tried with failures
     return data
 
 
@@ -354,16 +379,18 @@ def reindex_existing():
     logging.info("Reindex complete: %d added", added)
 
 
-def plan_name_fixes(rows, name_for_title):
+def plan_name_fixes(rows, people_for_title):
     """Which indexed pictures sit under the wrong person's name. `rows` are (id, rel_path, celebrity, tags_json, thread_title);
-    `name_for_title` turns a thread title into the person's name. Returns one dict per picture to fix: where it is, where it
-    should be, and its corrected tag list. Pictures with no thread title (added by --reindex) are never touched."""
+    `people_for_title` turns a thread title into the people it names (the first is the main one). Returns one dict per picture to
+    fix: where it is, where it should be, and its corrected tag list. A picture filed under any person the title names is right
+    (a two-person post has a copy in each folder). Pictures with no thread title (added by --reindex) are never touched."""
     plan = []
     for image_id, rel_path, celebrity, tags_json, thread_title in rows:
         if not thread_title or not celebrity:
             continue
-        correct = name_for_title(re.sub(r"\[.*?\]|\(.*?\)", "", thread_title).strip())
-        if not correct or correct == celebrity:
+        people = people_for_title(re.sub(r"\[.*?\]|\(.*?\)", "", thread_title).strip())
+        correct = people[0] if people else None
+        if not correct or celebrity in people:
             continue
         parts = rel_path.split("/")
         if len(parts) < 2 or parts[0] != sanitize_filename(celebrity):
@@ -386,7 +413,7 @@ def fix_celebrity_names(dry_run=False):
         python phun_scraper.py --fix-names --dry-run     (shows what it would do, changes nothing)"""
     with closing(_library_connect()) as conn:
         rows = conn.execute("SELECT id, rel_path, celebrity, tags, thread_title FROM images").fetchall()
-    plan = plan_name_fixes(rows, name_from_title)
+    plan = plan_name_fixes(rows, people_from_title)
     if not plan:
         return 0
     logging.info("Name fix: %d pictures are filed under the wrong name", len(plan))
@@ -428,6 +455,75 @@ def fix_celebrity_names(dry_run=False):
                 pass
     logging.info("Name fix: %d of %d pictures moved and re-tagged", moved, len(plan))
     return moved
+
+
+def plan_second_people(rows, people_for_title, existing_rel_paths):
+    """Pictures from a thread that names two people ("X and Y ...") that are filed under X only. `rows` are (id, rel_path, celebrity,
+    category, tags_json, thread_title, source_url, thread_url, post_date, phash, upgraded). For each picture that has no copy under the
+    other person yet it gives the copy to make and the tag list (both names first) that the picture and its copy should carry."""
+    plan = []
+    for (image_id, rel_path, celebrity, category, tags_json, thread_title, source_url, thread_url, post_date, phash, upgraded) in rows:
+        if not thread_title or not celebrity:
+            continue
+        people = people_for_title(re.sub(r"\[.*?\]|\(.*?\)", "", thread_title).strip())
+        if len(people) < 2 or celebrity != people[0]:
+            continue
+        parts = rel_path.split("/")
+        if len(parts) < 2 or parts[0] != sanitize_filename(celebrity):
+            continue
+        try:
+            tags = json.loads(tags_json) if tags_json else []
+        except ValueError:
+            tags = []
+        tags = list(dict.fromkeys(people + [t for t in tags if t not in people]))
+        for other in people[1:]:
+            new_rel = "/".join([sanitize_filename(other)] + parts[1:])
+            if new_rel in existing_rel_paths:
+                continue
+            plan.append({"id": image_id, "old_rel": rel_path, "new_rel": new_rel, "person": other, "category": category, "tags": tags,
+                         "source_url": source_url, "thread_title": thread_title, "thread_url": thread_url, "post_date": post_date,
+                         "phash": phash, "upgraded": bool(upgraded)})
+    return plan
+
+
+def fix_second_people(dry_run=False):
+    """Gives the second person of a two-person thread a copy of each picture already saved under the first, and puts both names in the
+    tags of the picture and its copy. Runs at every start and does nothing once every copy is there.
+        python phun_scraper.py --fix-pairs [--dry-run]"""
+    with closing(_library_connect()) as conn:
+        rows = conn.execute("SELECT id, rel_path, celebrity, category, tags, thread_title, source_url, thread_url, post_date, phash, upgraded "
+                            "FROM images").fetchall()
+        existing = {r[1] for r in rows}
+    plan = plan_second_people(rows, people_from_title, existing)
+    if not plan:
+        return 0
+    logging.info("Pairs: %d copies to make for the second person of two-person threads", len(plan))
+    made = 0
+    for item in plan:
+        old_path = os.path.join(DOWNLOAD_DIR, *item["old_rel"].split("/"))
+        new_path = os.path.join(DOWNLOAD_DIR, *item["new_rel"].split("/"))
+        if dry_run:
+            logging.info("Would copy %s -> %s (tags: %s)", item["old_rel"], item["new_rel"], ", ".join(item["tags"]))
+            continue
+        try:
+            if not os.path.exists(old_path):
+                logging.warning("Pairs: %s is missing, skipped", item["old_rel"])
+                continue
+            embed_metadata(old_path, item["tags"])           # the original carries both names now
+            with db_lock, closing(_library_connect()) as conn, conn:
+                conn.execute("UPDATE images SET tags=? WHERE id=?", (json.dumps(item["tags"], ensure_ascii=False), item["id"]))
+                conn.execute("DELETE FROM image_tags WHERE image_id=?", (item["id"],))
+                conn.executemany("INSERT OR IGNORE INTO image_tags(image_id, tag) VALUES (?, ?)", [(item["id"], t) for t in item["tags"]])
+            os.makedirs(os.path.dirname(new_path), exist_ok=True)
+            shutil.copy2(old_path, new_path)
+            record_image(new_path, item["person"], item["tags"], category=item["category"], source_url=item["source_url"],
+                         thread_title=item["thread_title"], thread_url=item["thread_url"], post_date=item["post_date"],
+                         phash=item["phash"], upgraded=item["upgraded"])
+            made += 1
+        except Exception as e:
+            logging.error("Pairs failed for %s: %s", item["old_rel"], e)
+    logging.info("Pairs: %d of %d copies made", made, len(plan))
+    return made
 
 
 # --- Live status for Ocula ---
@@ -738,16 +834,57 @@ def name_from_title(clean_title):
     return " ".join(name.split()[:2]) if len(name.split()) > 4 else name
 
 
+def _second_person(words):
+    """The name that starts `words` (the text after "and" / "&"): two to four capitalised words that something lower case, a comma or
+    the end of the title closes. None when it isn't a name."""
+    run = []
+    for i, word in enumerate(words):
+        bare = word.rstrip(",").lstrip("'\"")
+        if bare[:1].isupper() or (i > 0 and word.lower() in NAME_PARTICLES):
+            run.append(word.rstrip(","))
+            if word.endswith(","):
+                break
+        else:
+            break
+    while run and run[-1].lower() in NAME_PARTICLES:
+        run.pop()
+    while len(run) > 1 and run[-1].lower() in NAME_VERBS:
+        run.pop()
+    if run:
+        run[-1] = re.sub(r"['\u2019]s$", "", run[-1])
+    return " ".join(run) if 2 <= len(run) <= 4 else None
+
+
+def people_from_title(clean_title):
+    """The people a thread title names: [first] or [first, second] for "X and Y ..." / "X & Y ..." / "X - and Y ...". The first is
+    always name_from_title; a second person only counts when the name comes straight after "and" or "&"."""
+    clean_title = clean_title.replace("\u2018", "'").replace("\u2019", "'")
+    first = name_from_title(clean_title)
+    words = clean_title.split()
+    n = len(first.split())
+    if words[:n] != first.split():
+        return [first]                       # the name came from the older rules; don't guess at a second
+    rest = words[n:]
+    if rest and rest[0] == "-":
+        rest = rest[1:]
+    if rest and rest[0].lower() in ("and", "&"):
+        second = _second_person(rest[1:])
+        if second and second.lower() != first.lower():
+            return [first, second]
+    return [first]
+
+
 def extract_metadata_tags(title_text, post_text=""):
     clean_title = re.sub(r"\[.*?\]|\(.*?\)", "", title_text).strip()
-    celeb_name = name_from_title(clean_title)
+    people = people_from_title(clean_title)
+    celeb_name = people[0]
 
     common_keywords = [
         "bikini", "lingerie", "swimsuit", "red carpet", "dress", "gown",
         "photoshoot", "street style", "casual", "beach", "runway",
         "fashion week", "magazine", "pregnant", "maternity", "baby bump", "swimwear",
     ]
-    found = [celeb_name]
+    found = list(people)                     # everyone the title names is a tag
     combined = (clean_title + " " + post_text).lower()
 
     for kw in common_keywords:
@@ -774,18 +911,19 @@ def should_skip_thread(thread_title):
             logging.info("Skipped filtered thread (keyword '%s'): %s", keyword, thread_title)
             return True
 
-    celeb_name, _ = extract_metadata_tags(thread_title)
-    if celeb_name.lower() in EXCLUDED_CELEBRITIES:
-        logging.info("Skipped filtered thread (excluded celebrity '%s'): %s", celeb_name, thread_title)
-        return True
+    # Every person the title names has to pass, not just the first.
+    for celeb_name in people_from_title(re.sub(r"\[.*?\]|\(.*?\)", "", thread_title).strip()):
+        if celeb_name.lower() in EXCLUDED_CELEBRITIES:
+            logging.info("Skipped filtered thread (excluded celebrity '%s'): %s", celeb_name, thread_title)
+            return True
 
-    if is_amanda_bynes_after_2012(celeb_name, thread_title):
-        return True
+        if is_amanda_bynes_after_2012(celeb_name, thread_title):
+            return True
 
-    age = age_at_post(celeb_name, thread_title)
-    if age is not None and (age > MAX_AGE_AT_POST or age < MIN_AGE_AT_POST):
-        logging.info("Skipped - age limit: %s was %d at post date: %s", celeb_name, age, thread_title)
-        return True
+        age = age_at_post(celeb_name, thread_title)
+        if age is not None and (age > MAX_AGE_AT_POST or age < MIN_AGE_AT_POST):
+            logging.info("Skipped - age limit: %s was %d at post date: %s", celeb_name, age, thread_title)
+            return True
     return False
 
 
@@ -881,14 +1019,29 @@ def log_failure(url, reason, meta=None, direct_url=None):
         logging.warning("Couldn't write %s: %s", FAILURES_FILE, e)
 
 
-def download_file(url, celeb_root_folder, history, keywords_list, meta=None):
-    ok =_download_file(url, celeb_root_folder, history, keywords_list, meta)
+def download_file(url, celeb_root_folder, history, keywords_list, meta=None, also_for=None):
+    ok = _download_file(url, celeb_root_folder, history, keywords_list, meta, also_for)
     if not ok:
         status.bump("failed_downloads")
     return ok
 
 
-def _download_file(url, celeb_root_folder, history, keywords_list, meta=None):
+def copy_for_person(src, folder, person, category, tags, meta, phash, upgraded, source_url):
+    """Puts a copy of a saved picture in another person's folder (same category subfolder) and indexes it under that person. The tags are
+    inside the file already, so the copy carries them. Returns the new path."""
+    dest_dir = os.path.join(folder, category) if category else folder
+    os.makedirs(dest_dir, exist_ok=True)
+    dest = os.path.join(dest_dir, os.path.basename(src))
+    if os.path.exists(dest):
+        name, ext = os.path.splitext(os.path.basename(src))
+        dest = os.path.join(dest_dir, f"{name}_{hashlib.md5(src.encode()).hexdigest()[:6]}{ext}")
+    shutil.copy2(src, dest)
+    record_image(dest, person, tags, category=category, source_url=source_url, thread_title=meta.get("thread_title"),
+                 thread_url=meta.get("thread_url"), post_date=meta.get("post_date"), phash=phash, upgraded=upgraded)
+    return dest
+
+
+def _download_file(url, celeb_root_folder, history, keywords_list, meta=None, also_for=None):
     meta = meta or {}
     with history_lock:
         if url in history["downloaded_urls"]:
@@ -942,12 +1095,13 @@ def _download_file(url, celeb_root_folder, history, keywords_list, meta=None):
 
         # Dedupe + reserve filename + write, all atomically
         with history_lock:
-            for existing in history["downloaded_hashes"]:
-                if current_phash - imagehash.hex_to_hash(existing) <= PHASH_SIMILARITY_THRESHOLD:
-                    logging.info("Skipped visual duplicate (pHash): %s", filename)
-                    history["downloaded_urls"].append(url)
-                    status.bump("duplicates_skipped")
-                    return True
+            current_int = int(str(current_phash), 16)
+            known = hash_ints(history)
+            if is_near_duplicate(current_int, known, PHASH_SIMILARITY_THRESHOLD):
+                logging.info("Skipped visual duplicate (pHash): %s", filename)
+                history["downloaded_urls"].append(url)
+                status.bump("duplicates_skipped")
+                return True
 
             file_path = os.path.join(target_folder, filename)
             if os.path.exists(file_path):
@@ -957,6 +1111,7 @@ def _download_file(url, celeb_root_folder, history, keywords_list, meta=None):
             with open(file_path, "wb") as f:
                 f.write(content)
             history["downloaded_hashes"].append(str(current_phash))
+            known.append(current_int)
             history["downloaded_urls"].append(url)
 
         status.bump("images_saved")
@@ -969,6 +1124,12 @@ def _download_file(url, celeb_root_folder, history, keywords_list, meta=None):
             source_url=url, thread_title=meta.get("thread_title"), thread_url=meta.get("thread_url"),
             post_date=meta.get("post_date"), phash=current_phash, upgraded=upgraded,
         )
+        for other_folder, other_name in also_for or []:
+            try:
+                copy_for_person(file_path, other_folder, other_name, subfolder_name, keywords_list, meta, current_phash, upgraded, url)
+                logging.info("Also saved for %s: %s", other_name, os.path.basename(file_path))
+            except Exception as e:
+                logging.error("Couldn't save a copy for %s (%s): %s", other_name, os.path.basename(file_path), e)
         return True
 
     except Exception as e:
@@ -1011,8 +1172,33 @@ def direct_from_thumbnail(href, thumb_src):
     return None
 
 
+def forum_page_url(page):
+    """Page N of the forum's thread list (XenForo: .../celebrity-photos.15/page-2)."""
+    return FORUM_URL if page <= 1 else f"{FORUM_URL}page-{page}"
+
+
+def thread_page_url(thread_url, page):
+    """Page N of a thread's replies."""
+    return thread_url if page <= 1 else f"{thread_url.rstrip('/')}/page-{page}"
+
+
+def last_page_number(soup):
+    """How many pages a list or thread has (1 when there is no page navigation)."""
+    nav = soup.select_one("div.PageNav")
+    try:
+        return max(1, int(nav.get("data-last"))) if nav is not None else 1
+    except (TypeError, ValueError):
+        return 1
+
+
+def enough_free_space(path, min_gb):
+    """False when the volume holding `path` has less than `min_gb` GB free, so the scraper stops before it fills the NAS."""
+    return shutil.disk_usage(path).free >= min_gb * 1_000_000_000
+
+
 def process_thread(thread_title, thread_url, history):
-    """Returns True when the thread is finished (don't retry), False to retry next cycle."""
+    """Returns True when the thread is finished (don't retry), False to retry next cycle (a failed fetch, or pictures that failed, up to
+    THREAD_ATTEMPTS times in all)."""
     logging.info("Processing thread: %s", thread_title)
 
     status.update(thread_title=thread_title, thread_url=thread_url,
@@ -1034,9 +1220,32 @@ def process_thread(thread_title, thread_url, history):
     posts = post_bodies(soup)
     post_text = posts[0].get_text() if posts else ""
 
+    # Every page of replies, up to MAX_THREAD_PAGES (the first page is only part of a long thread).
+    incomplete = False
+    total_pages = last_page_number(soup)
+    for n in range(2, min(total_pages, MAX_THREAD_PAGES) + 1):
+        try:
+            more = session.get(thread_page_url(thread_url, n), timeout=15)
+        except Exception as e:
+            logging.warning("Thread page %d failed (%s): %s", n, thread_url, e)
+            incomplete = True
+            break
+        if more.status_code != 200:
+            logging.warning("Thread page %d: HTTP %d (%s)", n, more.status_code, thread_url)
+            incomplete = True
+            break
+        posts = posts + post_bodies(BeautifulSoup(more.text, "html.parser"))
+        time.sleep(0.5)
+    if total_pages > MAX_THREAD_PAGES:
+        logging.info("Read the first %d of %d pages of this thread", MAX_THREAD_PAGES, total_pages)
+
     celeb_name, keywords_list = extract_metadata_tags(thread_title, post_text)
+    people = people_from_title(re.sub(r"\[.*?\]|\(.*?\)", "", thread_title).strip())
     celeb_folder = os.path.join(DOWNLOAD_DIR, sanitize_filename(celeb_name))
     os.makedirs(celeb_folder, exist_ok=True)
+    others = [(os.path.join(DOWNLOAD_DIR, sanitize_filename(p)), p) for p in people[1:]]   # a two-person thread is saved for both
+    for folder, _ in others:
+        os.makedirs(folder, exist_ok=True)
 
     links = []
     for post in posts:
@@ -1058,19 +1267,32 @@ def process_thread(thread_title, thread_url, history):
     }
 
     status.update(thread_links_total=len(links))
-    logging.info("Folder: '%s' | Tags: %s | Links found: %d", celeb_name, keywords_list, len(links))
+    logging.info("Folder: '%s'%s | Tags: %s | Links found: %d", celeb_name,
+                 " (and " + ", ".join(p for _, p in others) + ")" if others else "", keywords_list, len(links))
 
+    failures = 0
     with ThreadPoolExecutor(max_workers=MAX_DOWNLOAD_WORKERS) as executor:
         futures = [
-            executor.submit(download_file, link, celeb_folder, history, keywords_list, meta)
+            executor.submit(download_file, link, celeb_folder, history, keywords_list, meta, others)
             for link in links
         ]
         for future in futures:
             try:
-                future.result()
+                if future.result() is False:
+                    failures += 1
             except Exception as e:
                 logging.error("Worker error: %s", e)
+                failures += 1
             status.bump("thread_links_done")
+
+    if failures or incomplete:
+        with history_lock:
+            tries = history["thread_attempts"][thread_url] = history["thread_attempts"].get(thread_url, 0) + 1
+        if tries < THREAD_ATTEMPTS:
+            logging.info("%d picture(s) not saved%s: will try this thread again next scan (attempt %d of %d)",
+                         failures, " and some pages not read" if incomplete else "", tries, THREAD_ATTEMPTS)
+            return False
+        logging.warning("Giving up on the %d picture(s) of this thread that can't be saved (tried %d times)", failures, tries)
     return True
 
 
@@ -1084,34 +1306,51 @@ def run_cycle():
                   next_scan_at=None, force=True)
 
     try:
-        resp = session.get(FORUM_URL, timeout=15)
-        if resp.status_code != 200:
-            logging.error("Forum list failed: HTTP %d", resp.status_code)
-            status.update(last_error=f"Forum list failed: HTTP {resp.status_code}")
-            return
-
-        soup = BeautifulSoup(resp.text, "html.parser")
-        pending = []
-        for title, href in listing_threads(soup):
-            url = urljoin(FORUM_BASE, href)
-            with history_lock:
-                if url in history["processed_threads"]:
-                    continue
-            pending.append((title, url))
+        pending, seen = [], set()
+        pages_read = 0
+        paused = False
+        for page in range(1, FORUM_PAGES + 1):
+            resp = session.get(forum_page_url(page), timeout=15)
+            if resp.status_code != 200:
+                logging.error("Forum list page %d failed: HTTP %d", page, resp.status_code)
+                if page == 1:
+                    status.update(last_error=f"Forum list failed: HTTP {resp.status_code}")
+                    return
+                break                              # carry on with the pages that were read
+            pages_read += 1
+            soup = BeautifulSoup(resp.text, "html.parser")
+            for title, href in listing_threads(soup):
+                url = urljoin(FORUM_BASE, href)
+                with history_lock:
+                    if url in history["processed_threads"] or url in seen:
+                        continue
+                seen.add(url)
+                pending.append((title, url))
+            if page >= last_page_number(soup):
+                break
+            time.sleep(1)
         if not pending and not history["processed_threads"]:
             logging.warning("The forum list had no threads at all; its markup may have changed")
 
         status.update(threads_total=len(pending), force=True)
-        logging.info("%d new threads to process", len(pending))
+        logging.info("%d new threads to process (from %d page%s of the forum list)", len(pending), pages_read, "" if pages_read == 1 else "s")
 
         for title, url in pending:
+            if not enough_free_space(DOWNLOAD_DIR, MIN_FREE_GB):
+                free = shutil.disk_usage(DOWNLOAD_DIR).free / 1_000_000_000
+                message = f"Paused: only {free:.0f} GB free on the downloads volume (the limit is {MIN_FREE_GB:.0f} GB). Free up space to carry on."
+                logging.error(message)
+                status.update(last_error=message)
+                paused = True
+                break
             if process_thread(title, url, history):
                 with history_lock:
                     history["processed_threads"].append(url)
             save_history(history)
             status.bump("threads_done")
             time.sleep(1)
-        status.update(last_error=None)
+        if not paused:
+            status.update(last_error=None)
     except Exception as e:
         logging.error("Cycle error: %s", e)
         status.update(last_error=str(e))
@@ -1127,6 +1366,7 @@ def main():
     status.update(force=True)
     try:
         fix_celebrity_names()
+        fix_second_people()
     except Exception as e:                  # never stop the scraper over a tidy-up
         logging.error("Name fix failed: %s", e)
     while True:
@@ -1146,5 +1386,8 @@ if __name__ == "__main__":
     elif "--fix-names" in sys.argv:
         init_library()
         fix_celebrity_names(dry_run="--dry-run" in sys.argv)
+    elif "--fix-pairs" in sys.argv:
+        init_library()
+        fix_second_people(dry_run="--dry-run" in sys.argv)
     else:
         main()
