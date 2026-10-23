@@ -155,6 +155,9 @@ public sealed class PersonFolderTaggingService
         return restored;
     }
 
+    public static (ResolvedPersonCard? Card, bool Ambiguous) ResolveCardForItem(ImageItem item, IReadOnlyList<ResolvedPersonCard> cards) =>
+        ResolveCard(item, cards, ParseRules(AppSettings.PersonFolderTagRules), AppSettings.PersonFolderTagIncludeSubfolders);
+
     private static (ResolvedPersonCard? Card, bool Ambiguous) ResolveCard(
         ImageItem item, IReadOnlyList<ResolvedPersonCard> cards, IReadOnlyList<Rule> rules, bool includeParents)
     {
