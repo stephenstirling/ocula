@@ -158,8 +158,10 @@ class NameTests(unittest.TestCase):
 
 
 class FakeResponse:
-    def __init__(self, status, text=""):
+    def __init__(self, status, text="", headers=None, url=None):
         self.status_code, self.text = status, text
+        self.headers = headers or {}
+        self.url = url or ""
 
 
 class FakeSession:
@@ -170,6 +172,8 @@ class FakeSession:
         self.asked.append(url)
         if isinstance(self.response, Exception):
             raise self.response
+        if not self.response.url:
+            self.response.url = url
         return self.response
 
 
@@ -199,6 +203,34 @@ class ResolveTests(unittest.TestCase):
         S["session"] = FakeSession(FakeResponse(500))
         self.assertEqual(S["resolve_image_host_url"]("https://example.com/a.jpg"), "https://example.com/a.jpg")
         self.assertEqual(S["session"].asked, [])
+
+    def test_turboimagehost_resolves_imageid_and_uimg_selectors(self):
+        for html in (
+            '<img id="imageid" src="/images/full.jpg">',
+            '<img class="uimg" data-src="/images/full.jpg">',
+        ):
+            S["session"] = FakeSession(FakeResponse(200, html))
+            self.assertEqual(
+                S["resolve_image_host_url"]("https://www.turboimagehost.com/p/1/page.html"),
+                "https://www.turboimagehost.com/images/full.jpg",
+            )
+
+    def test_turboimagehost_falls_back_to_open_graph_image(self):
+        S["session"] = FakeSession(FakeResponse(
+            200, '<meta property="og:image" content="https://cdn.example.com/full.jpg">'
+        ))
+        self.assertEqual(
+            S["resolve_image_host_url"]("https://turboimagehost.com/p/1/page.html"),
+            "https://cdn.example.com/full.jpg",
+        )
+
+    def test_turboimagehost_challenge_or_missing_image_returns_none(self):
+        S["session"] = FakeSession(FakeResponse(
+            403, "challenge", headers={"cf-mitigated": "challenge"}
+        ))
+        self.assertIsNone(S["resolve_image_host_url"]("https://turboimagehost.com/p/1/page.html"))
+        S["session"] = FakeSession(FakeResponse(200, "<html>no image</html>"))
+        self.assertIsNone(S["resolve_image_host_url"]("https://turboimagehost.com/p/1/page.html"))
 
 
 class PeopleTests(unittest.TestCase):
