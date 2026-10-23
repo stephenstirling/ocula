@@ -1,4 +1,5 @@
 import io
+import html as html_lib
 import os
 import shutil
 import sys
@@ -137,19 +138,142 @@ def phash_of(data):
 
 # --- Multi-Engine Reverse Image Search Module ---
 class MultiEngineReverseSearch:
+    YANDEX_UPLOAD_URL = "https://yandex.com/images/search"
+    YANDEX_UPLOAD_REQUEST = '{"blocks":[{"block":"b-page_type_search-by-image__link"}]}'
+
     def __init__(self, session):
         self.session = session
+
+    @staticmethod
+    def _prepare_query_image(image_bytes):
+        """Return a JPEG query copy (max edge 1024 px); never alter the original bytes."""
+        try:
+            with Image.open(io.BytesIO(image_bytes)) as source:
+                image = source.copy()
+            image.thumbnail((1024, 1024), Image.Resampling.LANCZOS)
+            if image.mode != "RGB":
+                image = image.convert("RGB")
+            output = io.BytesIO()
+            image.save(output, format="JPEG", quality=85, optimize=True)
+            return output.getvalue()
+        except Exception as exc:
+            # Keep the upgrade path non-fatal if a decoder cannot make a query copy.
+            logging.warning("Could not prepare reverse-search upload image: %s", exc)
+            return image_bytes
+
+    @staticmethod
+    def _is_block_page(text):
+        lowered = (text or "").lower()
+        return any(marker in lowered for marker in (
+            "are you not a robot", "smartcaptcha", "captcha__image",
+            "unusual traffic", "verify you are human",
+        ))
+
+    @staticmethod
+    def _yandex_original_urls(text):
+        """Best-effort extraction from Yandex's embedded result data."""
+        text = html_lib.unescape(text or "")
+        text = text.replace("\\/", "/").replace("\\u0026", "&").replace("\\u0026", "&")
+        candidates = []
+        # Keep the same original.url pattern used by the URL-search implementation.
+        for match in re.findall(
+            r'"original"\s*:\s*\{[^{}]{0,1000}?"url"\s*:\s*"([^"]+)"',
+            text,
+            re.IGNORECASE,
+        ):
+            url = match.replace("\\/", "/").replace("\\u0026", "&").replace("\\u0026", "&")
+            url = url.replace("\\", "")
+            if url.startswith(("http://", "https://")):
+                candidates.append(url)
+        return candidates
+
+    def search_yandex_upload(self, image_bytes):
+        """Upload downloaded image bytes to Yandex Images; return full-size original URLs.
+
+        The public Yandex Images form has historically used multipart field upfile,
+        with rpt=imageview, format=json, and a request block asking for the
+        b-page_type_search-by-image__link URL. This is an unofficial web interface
+        and can change or return CAPTCHA pages, so every failure degrades to [].
+        """
+        if not image_bytes:
+            return []
+        candidates = []
+        try:
+            query_bytes = self._prepare_query_image(image_bytes)
+            # The public form sends dimensions and prg=1 alongside the uploaded file.
+            # The POST often returns a small JSON redirect payload rather than results.
+            with Image.open(io.BytesIO(query_bytes)) as image:
+                width, height = image.size
+            params = {
+                "rpt": "imageview",
+                "format": "json",
+                "request": self.YANDEX_UPLOAD_REQUEST,
+                "original_width": str(width),
+                "original_height": str(height),
+                "prg": "1",
+            }
+            response = self.session.post(
+                self.YANDEX_UPLOAD_URL,
+                params=params,
+                files={"upfile": ("query.jpg", query_bytes, "image/jpeg")},
+                headers={"Referer": "https://yandex.com/images/search?rpt=imageview"},
+                timeout=10,
+            )
+            if response.status_code != 200 or not response.text:
+                logging.warning("Yandex visual upload returned HTTP %s or an empty response",
+                                response.status_code)
+                return []
+            if self._is_block_page(response.text):
+                logging.warning("Yandex visual upload returned a CAPTCHA/block page")
+                return []
+
+            result_text = response.text
+            # Some Yandex versions return JSON containing a result-page URL; others
+            # may return result HTML directly.
+            try:
+                payload = json.loads(response.text)
+            except (TypeError, ValueError):
+                payload = None
+            search_url = None
+            if isinstance(payload, dict):
+                for block in payload.get("blocks", []):
+                    if not isinstance(block, dict):
+                        continue
+                    block_params = block.get("params")
+                    if isinstance(block_params, dict) and block_params.get("url"):
+                        search_url = block_params["url"]
+                        break
+                if search_url:
+                    target = urljoin(self.YANDEX_UPLOAD_URL, search_url)
+                    result_page = self.session.get(target, timeout=10)
+                    if result_page.status_code == 200 and result_page.text:
+                        if self._is_block_page(result_page.text):
+                            logging.warning("Yandex visual upload follow-up returned a CAPTCHA/block page")
+                            return []
+                        result_text += "\n" + result_page.text
+                    else:
+                        logging.warning("Yandex visual upload follow-up returned HTTP %s",
+                                        result_page.status_code)
+            candidates.extend(self._yandex_original_urls(result_text))
+        except Exception as exc:
+            logging.warning("Yandex visual upload error: %s", exc)
+        return list(dict.fromkeys(candidates))
 
     def search_yandex(self, image_url):
         candidates = []
         url = f"https://yandex.com/images/search?rpt=imageview&url={quote_plus(image_url)}"
         try:
             resp = self.session.get(url, timeout=10)
-            if resp.status_code == 200:
-                for m in re.findall(r'"original":\s*\{\s*"url":\s*"([^"]+)"', resp.text):
-                    candidates.append(m.replace("\\/", "/"))
-        except Exception as e:
-            logging.warning("Yandex reverse search error: %s", e)
+            if resp.status_code == 200 and resp.text:
+                if self._is_block_page(resp.text):
+                    logging.warning("Yandex URL reverse search returned a CAPTCHA/block page")
+                    return []
+                candidates.extend(self._yandex_original_urls(resp.text))
+            else:
+                logging.warning("Yandex URL reverse search returned HTTP %s or an empty response",
+                                resp.status_code)
+        except Exception as exc:
+            logging.warning("Yandex reverse search error: %s", exc)
         return candidates
 
     def search_google_lens(self, image_url):
@@ -157,56 +281,115 @@ class MultiEngineReverseSearch:
         url = f"https://lens.google.com/uploadbyurl?url={quote_plus(image_url)}"
         try:
             resp = self.session.get(url, timeout=10)
-            if resp.status_code == 200:
-                m = re.findall(r'https?://[^"]+\.(?:jpg|jpeg|png|webp)', resp.text, re.IGNORECASE)
-                candidates.extend(m[:10])
-        except Exception as e:
-            logging.warning("Google Lens reverse search error: %s", e)
+            if resp.status_code == 200 and resp.text:
+                if self._is_block_page(resp.text):
+                    logging.warning("Google Lens URL search returned a CAPTCHA/block page")
+                    return []
+                matches = re.findall(r'https?://[^"\s<>]+?\.(?:jpg|jpeg|png|webp)(?:\?[^"\s<>]*)?',
+                                     resp.text, re.IGNORECASE)
+                candidates.extend(matches[:10])
+            else:
+                logging.warning("Google Lens URL search returned HTTP %s or an empty response",
+                                resp.status_code)
+        except Exception as exc:
+            logging.warning("Google Lens reverse search error: %s", exc)
         return candidates
 
     def search_bing(self, image_url):
         candidates = []
+        # Bing's documented multipart upload endpoint is the Visual Search API and
+        # requires a subscription key. The consumer upload flow is JS/redirect driven,
+        # so URL search remains the reliable unauthenticated fallback here.
         url = f"https://www.bing.com/images/searchbyimage?cbir=sbi&imgurl={quote_plus(image_url)}"
         try:
             resp = self.session.get(url, timeout=10)
-            if resp.status_code == 200:
-                m = re.findall(r'murl(?:&quot;|")\s*:\s*(?:&quot;|")(https?://[^"&]+)', resp.text)
-                candidates.extend(m[:10])
-        except Exception as e:
-            logging.warning("Bing Visual Search error: %s", e)
+            if resp.status_code == 200 and resp.text:
+                if self._is_block_page(resp.text):
+                    logging.warning("Bing URL reverse search returned a CAPTCHA/block page")
+                    return []
+                matches = re.findall(r'murl(?:&quot;|")\s*:\s*(?:&quot;|")(https?://[^"&]+)',
+                                     resp.text)
+                candidates.extend(html_lib.unescape(m).replace("\\/", "/") for m in matches[:10])
+            else:
+                logging.warning("Bing URL reverse search returned HTTP %s or an empty response",
+                                resp.status_code)
+        except Exception as exc:
+            logging.warning("Bing Visual Search error: %s", exc)
         return candidates
 
-    def find_better_version(self, original_url, current_size, current_phash):
-        """Return bytes of a larger copy of the SAME photo, or None."""
-        logging.info("Reverse search for higher-res copy (current %.1f KB)...", current_size / 1024)
-        candidates = []
-        for fn in (self.search_yandex, self.search_google_lens, self.search_bing):
-            candidates.extend(fn(original_url))
-        candidates = [c for c in dict.fromkeys(candidates) if c != original_url]
+    def find_better_version(self, image_bytes, current_size, current_phash, original_url=None):
+        """Return bytes of a larger copy of the SAME photo, or None; never raise."""
+        try:
+            logging.info("Reverse search for higher-res copy (current %.1f KB)...", current_size / 1024)
+            candidates = []
 
-        best, best_size, tried = None, current_size, 0
-        for url in candidates:
-            if tried >= MAX_UPGRADE_CANDIDATES:
-                break
+            # Primary strategy: upload actual downloaded bytes. URL-only search can fail
+            # when the forum/hoster URL is a page, redirect, or protected thumbnail.
             try:
-                head = self.session.head(url, timeout=5, allow_redirects=True)
-                if head.status_code != 200 or "image" not in head.headers.get("Content-Type", ""):
+                candidates.extend(self.search_yandex_upload(image_bytes))
+            except Exception as exc:
+                logging.warning("Yandex visual upload failed non-fatally: %s", exc)
+
+            # Fallback: preserve the existing three-engine URL searches.
+            if original_url:
+                for search in (self.search_yandex, self.search_google_lens, self.search_bing):
+                    try:
+                        candidates.extend(search(original_url))
+                    except Exception as exc:
+                        logging.warning("Reverse-search fallback failed non-fatally: %s", exc)
+
+            unique_candidates = []
+            seen = set()
+            for candidate in candidates:
+                if not isinstance(candidate, str):
                     continue
-                if int(head.headers.get("Content-Length", 0)) <= best_size:
+                candidate = html_lib.unescape(candidate.strip()).replace("\\/", "/")
+                if (not candidate.startswith(("http://", "https://"))
+                        or candidate == original_url or candidate in seen):
                     continue
+                seen.add(candidate)
+                unique_candidates.append(candidate)
+
+            best, best_size, tried = None, current_size, 0
+            for url in unique_candidates:
+                if tried >= MAX_UPGRADE_CANDIDATES:
+                    break
                 tried += 1
-                r = self.session.get(url, timeout=20)
-                data = r.content
-                if r.status_code != 200 or len(data) <= best_size or not image_ok(data):
-                    continue
-                # Must be the same picture, not just a "visually similar" result
-                if phash_of(data) - current_phash > PHASH_SIMILARITY_THRESHOLD:
-                    continue
-                best, best_size = data, len(data)
-                logging.info("Found superior candidate (%.1f KB): %s", best_size / 1024, url)
-            except Exception:
-                continue
-        return best
+                try:
+                    head = self.session.head(url, timeout=5, allow_redirects=True)
+                    if head.status_code != 200:
+                        continue
+                    head_type = head.headers.get("Content-Type", "").lower()
+                    if head_type and "image" not in head_type:
+                        continue
+                    head_length = head.headers.get("Content-Length")
+                    if head_length:
+                        try:
+                            if int(head_length) <= best_size:
+                                continue
+                        except (TypeError, ValueError):
+                            pass
+
+                    response = self.session.get(url, timeout=20)
+                    if response.status_code != 200:
+                        continue
+                    data = response.content
+                    response_type = response.headers.get("Content-Type", "").lower()
+                    if response_type and "image" not in response_type:
+                        continue
+                    if len(data) <= best_size or not image_ok(data):
+                        continue
+                    # Compare and save the full candidate download, not the reduced query copy.
+                    if phash_of(data) - current_phash > PHASH_SIMILARITY_THRESHOLD:
+                        continue
+                    best, best_size = data, len(data)
+                    logging.info("Found superior candidate (%.1f KB): %s", best_size / 1024, url)
+                except Exception as exc:
+                    logging.debug("Skipping reverse-search candidate %s: %s", url, exc)
+            return best
+        except Exception as exc:
+            logging.warning("Higher-resolution reverse search failed non-fatally: %s", exc)
+            return None
 
 
 # --- Cache & History Management ---
@@ -1182,7 +1365,7 @@ def _download_file(url, celeb_root_folder, history, keywords_list, meta=None, al
         # Upgrade to a higher-res copy of the same photo if this one is small
         if len(content) < UPGRADE_FILE_SIZE_THRESHOLD:
             better = MultiEngineReverseSearch(session).find_better_version(
-                direct_url, len(content), current_phash
+                content, len(content), current_phash, original_url=direct_url
             )
             if better:
                 logging.info("Upgraded %.1f KB -> %.1f KB", len(content) / 1024, len(better) / 1024)
