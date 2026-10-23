@@ -35,14 +35,14 @@ public sealed class LibraryCrawler
     public bool IsRunning => _cts != null;
     public bool IsPaused => _paused;
 
-    public void Start(IEnumerable<string> roots)
+    public void Start(IEnumerable<string> roots, bool forceRetag = false)
     {
         Stop();
         var cts = new CancellationTokenSource();
         _cts = cts;
         _paused = false;
         var list = roots.ToList();
-        _ = Task.Run(() => RunAsync(list, cts));
+        _ = Task.Run(() => RunAsync(list, cts, forceRetag));
     }
 
     public void Stop()
@@ -68,7 +68,7 @@ public sealed class LibraryCrawler
         }
     }
 
-    private async Task RunAsync(List<string> roots, CancellationTokenSource cts)
+    private async Task RunAsync(List<string> roots, CancellationTokenSource cts, bool forceRetag)
     {
         var token = cts.Token;
         _checked = 0;
@@ -107,7 +107,7 @@ public sealed class LibraryCrawler
                     {
                         _checked++;
                         var fresh = state.TryGetValue(item.Path, out var s) && s.Modified == item.Modified;
-                        if (!fresh || (!s.Complete && !item.IsCloudOnly)) stale.Add(item);
+                        if (forceRetag || !fresh || (!s.Complete && !item.IsCloudOnly)) stale.Add(item);
                     }
                     Report(folder);
 
@@ -154,8 +154,13 @@ public sealed class LibraryCrawler
     private static async Task ApplyFolderPersonCardTagsAsync(ImageItem item, IReadOnlyList<ResolvedPersonCard> cards)
     {
         var folderNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        for (DirectoryInfo? directory = new DirectoryInfo(item.Folder); directory != null; directory = directory.Parent)
-            folderNames.Add(directory.Name);
+        var currentDirectory = new DirectoryInfo(item.Folder);
+        folderNames.Add(currentDirectory.Name);
+        if (AppSettings.PersonFolderTagIncludeSubfolders)
+        {
+            for (var directory = currentDirectory.Parent; directory != null; directory = directory.Parent)
+                folderNames.Add(directory.Name);
+        }
 
         var matches = cards.Where(card =>
             folderNames.Contains(card.GroupName) ||
