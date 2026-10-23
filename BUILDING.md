@@ -622,10 +622,11 @@ _Still to come_
 - **Phun Forum Scraper tab (wired in, October 2026; branch `phun-tab`).** `Phun/ScraperPage` (the page), `Phun/ScraperMonitor` (reads the scraper's status) and
   `Phun/LibraryIndex` (reads the scraper's `ocula_library.db`; not used by the page yet) came from the branch `claude/phun-scraper-tab`; the scraper itself is
   `tools/phun-scraper` (Python, runs in Docker on the NAS, not part of the app or the Store build). Ocula only **reads** the scraper's status; it doesn't run it.
-  Settings > Phun Forum Scraper has a switch (off by default), the status address (http or https only), the optional token, and the downloads folder. While the
+  Settings > Phun Forum Scraper has a switch (off by default), the status address (http or https only) and the downloads folder. While the
   switch is on the sidebar shows "Phun Forum Scraper…", which opens `PhunWindow`, which hosts the page; the page polls every 2 seconds only while the window is open
-  and treats a status older than 90 seconds as offline. Scan now needs the address (and the token if the scraper has one). The address and token are
-  kept in Ocula's settings on this PC, unencrypted. The branch's `NAV-SNIPPET.md` assumed a `NavigationView` that Ocula's main window doesn't have, so it was not used.
+  and treats a status older than 90 seconds as offline. **Ocula only views the scraper**: it sends a `GET /status` and nothing else (a test checks this), so there is
+  no "Scan now" button and no token; the scraper runs by itself in its container (restart policy `unless-stopped`) and scans every 4 hours. An earlier version kept the
+  scraper's token in Ocula's settings; any saved token is removed. The branch's `NAV-SNIPPET.md` assumed a `NavigationView` that Ocula's main window doesn't have, so it was not used.
   - **Recently saved (picture grid).** The page shows the 24 newest pictures from the scraper's `ocula_library.db` (`LibraryIndex.Query(limit: 24)`, read from a
     local snapshot because SQLite on a network share locks badly), with thumbnails from `ThumbnailService`, a Saved or Upgraded badge, and a detail panel: size, when it
     was saved, the thread, and **the tags actually in the file, read the way Ocula reads them (`MetadataStore`), compared with the tags the scraper meant to write**; a
@@ -640,9 +641,10 @@ _Still to come_
   - **Tested.** 12 tests for the library reader (newest first, limit, filters, paths that leave the folder, one snapshot per folder, size text, the tag comparison); 8 unit tests for the status reader (fields, the 90-second rule, a missing or half-written file, polling and stopping; this also fixed a
     `NullReferenceException` on a background thread when polling was stopped) and 7 Python tests for the tag writing (`python -m unittest tools/phun-scraper/test_metadata.py`)
     against a fake ExifTool. In the deployed app: the Settings section appears, the switch adds and removes the sidebar entry.
-  - **Not tested.** The tag writing against the real ExifTool, any real file (ExifTool isn't installed on this PC); the scraper running anywhere; Ocula talking to a real
-    scraper or the NAS; opening the Phun window by clicking the sidebar entry and seeing the page (Ocula wasn't in front for the click); the settings text boxes
-    (UI Automation can't reach them while the expander is shut) and so **the picture grid and its detail panel in the running app**; Scan now; thumbnails from a real NAS.
+  - **Seen working (October 2026).** The scraper running in Docker on the NAS; Ocula's page reading it over the network (status, counters, activity list) and showing the
+    picture grid with thumbnails from the library file; the tags written into the saved files, read back from the files (XMP and IPTC) and in Explorer's Tags column.
+  - **Not tested.** The page in the Light and High Contrast themes; the offline bar against a real stopped container (only the 90-second rule is unit tested);
+    the detail panel's missing-tag warning with a real file that is missing a tag.
 - **Smart recognition (what's in the photo)**: on-device and opt-in.
   - Uses OpenAI's CLIP (MIT licence) via ONNX Runtime to suggest scene and object tags such as
     beach, sunset, dog, car, snow, and to power natural-language search ("sunset over water").

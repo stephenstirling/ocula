@@ -26,7 +26,6 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
                 <Border Background="#1B4F82" CornerRadius="8" Padding="14,8">
@@ -37,10 +36,6 @@
                     <TextBlock x:Name="SummaryText" Style="{StaticResource SubtitleTextBlockStyle}"/>
                     <TextBlock x:Name="SubText" Opacity="0.7"/>
                 </StackPanel>
-
-                <Button Grid.Column="2" x:Name="ScanNowButton" Content="Scan now"
-                        Style="{StaticResource AccentButtonStyle}" Click="ScanNow_Click"
-                        VerticalAlignment="Center"/>
             </Grid>
 
             <InfoBar x:Name="OfflineBar" Severity="Error" IsOpen="False" IsClosable="False"

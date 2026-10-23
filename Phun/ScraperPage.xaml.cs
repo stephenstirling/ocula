@@ -17,7 +17,6 @@ public sealed partial class ScraperPage : Page
     // Read from Settings > Phun Forum Scraper each time the page opens.
     private string _downloadsFolder = string.Empty;
     private string? _scraperUrl;
-    private string? _scraperToken;
 
     private ScraperMonitor? _monitor;
     private MainWindow? _main;                 // for "Open in Ocula"
@@ -35,8 +34,8 @@ public sealed partial class ScraperPage : Page
         _savedAtLastLoad = -1;
         _downloadsFolder = Ocula.Services.AppSettings.PhunDownloadsFolder;
         _scraperUrl = Ocula.Services.AppSettings.PhunScraperUrl is { Length: > 0 } url ? url : null;
-        _scraperToken = Ocula.Services.AppSettings.PhunScraperToken is { Length: > 0 } token ? token : null;
-        _monitor = new ScraperMonitor(_downloadsFolder, _scraperUrl, _scraperToken);
+        Ocula.Services.AppSettings.ForgetPhunToken();
+        _monitor = new ScraperMonitor(_downloadsFolder, _scraperUrl);
         _monitor.StatusChanged += s => DispatcherQueue.TryEnqueue(() => Render(s));
         _monitor.Start();
     }
@@ -78,8 +77,6 @@ public sealed partial class ScraperPage : Page
 
         // newest first
         EventList.ItemsSource = Enumerable.Reverse(s.Events).Take(60).ToList();
-
-        ScanNowButton.IsEnabled = !s.Offline && s.State != "scanning" && _scraperUrl is not null;
 
         if (s.ImagesSaved != _savedAtLastLoad) _ = LoadRecentAsync(s.ImagesSaved);
     }
@@ -188,15 +185,5 @@ public sealed partial class ScraperPage : Page
     {
         if (RecentGrid.SelectedItem is not RecentImage tile) return;
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"/select,\"{tile.Image.FullPath}\"") { UseShellExecute = true });
-    }
-
-    private async void ScanNow_Click(object sender, RoutedEventArgs e)
-    {
-        ScanNowButton.IsEnabled = false;
-        if (_monitor is not null && !await _monitor.ScanNowAsync())
-        {
-            ErrorBar.Message = "Couldn't reach the scraper to start a scan.";
-            ErrorBar.IsOpen = true;
-        }
     }
 }
