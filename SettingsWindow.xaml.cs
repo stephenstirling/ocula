@@ -123,7 +123,7 @@ public sealed partial class SettingsWindow : Window
         {
             var cards = await _main.Index.GetAllPersonCardsAsync();
             var report = await _personFolderTagging.PreviewAsync(
-                _main.RootFolders, cards, PersonFolderRulesBox.Text, PersonFolderInheritanceToggle.IsOn);
+                _main.RootFolders, cards, PersonFolderRulesBox.Text ?? string.Empty, PersonFolderInheritanceToggle.IsOn);
 
             var summary = $"Scanned: {report.Scanned:N0} items\n" +
                           $"Would add keywords: {report.Changes:N0} photos\n" +
