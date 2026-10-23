@@ -47,6 +47,9 @@ public sealed class PersonFolderTaggingService
                 List<ImageItem> items;
                 try { items = FolderScanner.Scan(folder); }
                 catch { continue; }
+                Dictionary<string, IndexRow> indexedRows;
+                try { indexedRows = await _index.GetFolderAsync(folder); }
+                catch { indexedRows = new Dictionary<string, IndexRow>(StringComparer.OrdinalIgnoreCase); }
 
                 foreach (var item in items)
                 {
@@ -60,6 +63,8 @@ public sealed class PersonFolderTaggingService
                     UserData before;
                     try { before = await MetadataStore.ReadAsync(item); }
                     catch { continue; }
+                    if (indexedRows.TryGetValue(item.Path, out var indexed))
+                        before = new UserData(before.Tags, before.Rating > 0 ? before.Rating : indexed.Rating, before.Label ?? indexed.Label);
 
                     var after = before.Tags.ToList();
                     var additions = PersonCardTagBuilder.FromFacts(selection.Card.Facts, selection.Card.GroupName)
@@ -104,6 +109,8 @@ public sealed class PersonFolderTaggingService
             plan.Item.Modified = FolderScanner.ModifiedOf(plan.Item);
             plan.Item.Indexed = false;
             await Indexer.IndexAsync(plan.Item, _index, withThumbnail: false);
+            plan.Item.Label = plan.Before.Label; // embedded formats keep labels in Ocula's index
+            await _index.SaveAsync(plan.Item.ToRow());
             applied++;
         }
 
@@ -134,6 +141,8 @@ public sealed class PersonFolderTaggingService
                 await MetadataStore.WriteAsync(item);
                 item.Modified = FolderScanner.ModifiedOf(item);
                 await Indexer.IndexAsync(item, _index, withThumbnail: false);
+                item.Label = entry.Label;
+                await _index.SaveAsync(item.ToRow());
                 restored++;
             }
             catch
