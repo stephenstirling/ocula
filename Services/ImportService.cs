@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Ocula.Models;
@@ -123,6 +124,11 @@ public static class ImportService
         var sequence = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var done = 0;
 
+        // Read the local cards once. Import enrichment never triggers a web lookup.
+        var personCards = AppSettings.WritePersonCardTagsToFiles
+            ? await index.GetAllPersonCardsAsync()
+            : new List<ResolvedPersonCard>();
+
         foreach (var item in items.OrderBy(i => i.Taken))
         {
             token.ThrowIfCancellationRequested();
@@ -163,13 +169,39 @@ public static class ImportService
                     }
                 }
 
-                if (o.Tags.Count > 0)
+                var main = copied.FirstOrDefault(SupportedFormats.IsPairable) ?? copied[0];
+                var raw = copied.FirstOrDefault(SupportedFormats.IsRaw);
+                if (!IsVideo(main))
                 {
-                    var main = copied.FirstOrDefault(SupportedFormats.IsPairable) ?? copied[0];
-                    var raw = copied.FirstOrDefault(SupportedFormats.IsRaw);
-                    if (!IsVideo(main))
+                    // Preserve keywords already embedded in the source, then merge import tags.
+                    // This also carries source metadata into XMP sidecars for formats that use them.
+                    var sourceMain = item.Files.FirstOrDefault(SupportedFormats.IsPairable) ?? item.Files[0];
+                    var sourceRaw = item.Files.FirstOrDefault(SupportedFormats.IsRaw);
+                    var sourcePhoto = new ImageItem(sourceMain,
+                        sourceRaw != null && sourceRaw != sourceMain ? sourceRaw : null);
+                    var sourceMetadata = await MetadataStore.ReadAsync(sourcePhoto);
+                    var tags = sourceMetadata.Tags.ToList();
+                    PersonCardTagBuilder.MergeInto(tags, o.Tags);
+
+                    if (personCards.Count > 0)
                     {
-                        var photo = new ImageItem(main, raw != null && raw != main ? raw : null) { Tags = o.Tags.ToList() };
+                        // A saved card is applied only when its name appears as a whole phrase in
+                        // the filename/folder or existing/import tags. Multiple matches are ambiguous.
+                        var evidence = string.Join("\n", item.Stem, string.Join("\n", item.Files), string.Join("\n", tags));
+                        var matches = personCards.Where(card => CardNameAppears(card, evidence)).ToList();
+                        if (matches.Count == 1)
+                        {
+                            var match = matches[0];
+                            var facts = PersonCardTagBuilder.FromFacts(match.Facts, match.GroupName)
+                                .Where(tag => !tag.StartsWith("person:", StringComparison.OrdinalIgnoreCase));
+                            // Keep one plain display-name keyword, not both "Name" and "person:Name".
+                            PersonCardTagBuilder.MergeInto(tags, new[] { match.GroupName }.Concat(facts));
+                        }
+                    }
+
+                    if (tags.Count > 0)
+                    {
+                        var photo = new ImageItem(main, raw != null && raw != main ? raw : null) { Tags = tags };
                         await MetadataStore.WriteAsync(photo);
                     }
                 }
@@ -188,6 +220,21 @@ public static class ImportService
         }
 
         return new ImportResult(items.Count - failed.Count, folders, failed);
+    }
+
+    private static bool CardNameAppears(ResolvedPersonCard card, string evidence)
+    {
+        static bool ContainsPhrase(string text, string? name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return false;
+            // Avoid partial matches such as "Duff" matching "Hilary Duff" or names inside longer words.
+            var pattern = $@"(?<![\p{{L}}\p{{N}}]){Regex.Escape(name.Trim())}(?![\p{{L}}\p{{N}}])";
+            return Regex.IsMatch(text, pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        }
+
+        return ContainsPhrase(evidence, card.GroupName)
+            || ContainsPhrase(evidence, card.Facts.Name)
+            || ContainsPhrase(evidence, card.Facts.FullName);
     }
 
     private static async Task CopyAsync(string source, string target, CancellationToken token)
