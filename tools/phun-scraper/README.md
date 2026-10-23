@@ -15,3 +15,9 @@ Python forum image scraper. Not part of the Ocula app or its Store build.
 - **Two people in a title** ("X and Y ...", "X & Y ..."): the picture is saved in both people's folders (the same category subfolder) and tagged with both names.
   Every person named has to pass the exclusion and age checks, not only the first. Pictures saved before this get their copy at start-up (`--fix-pairs [--dry-run]`).
 - At every start the scraper also moves pictures filed under a wrong name to the right folder and fixes their tags (`--fix-names [--dry-run]`).
+- **One folder per person, whatever the capitalisation** ("Mckenna Grace" and "McKenna Grace" are two folders on the NAS but one to Windows, which then can only
+  reach one of them): the spelling most pictures use wins, and pictures filed under another spelling are moved at start-up. Pictures that were saved but never
+  indexed (the scraper was stopped mid-save) are indexed at start-up too, and tagged with the person's name if they have no tags.
+- **Hosts that block scripts.** turboimagehost.com is behind a Cloudflare challenge ("Just a moment..."), which a script can't pass, and the scraper doesn't try to get
+  around it. Links on it are written once each to `blocked_links.txt` in the downloads folder (date, who, thread, link; tab separated) so they can be opened and saved by
+  hand in a browser. Any other host that answers with such a challenge is reported in `failed_downloads.log` and not retried. About 3% of threads use turboimagehost.

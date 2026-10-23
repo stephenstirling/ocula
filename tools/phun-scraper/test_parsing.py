@@ -13,22 +13,24 @@ import shutil
 import tempfile
 import threading
 import unittest
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
 
 SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "phun_scraper.py")
 WANTED = {"listing_threads", "post_bodies", "direct_from_thumbnail", "extract_metadata_tags", "log_failure", "resolve_image_host_url", "name_from_title", "people_from_title", "_second_person",
-          "forum_page_url", "thread_page_url", "last_page_number", "enough_free_space", "hash_ints", "is_near_duplicate"}
+          "forum_page_url", "thread_page_url", "last_page_number", "enough_free_space", "hash_ints", "is_near_duplicate", "canonical_person", "most_used_spellings",
+          "is_blocked_host", "note_blocked_links"}
 
 
 def load():
     tree = ast.parse(open(SOURCE, encoding="utf-8").read())
     keep = [n for n in tree.body if (isinstance(n, ast.FunctionDef) and n.name in WANTED)
-            or (isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) in ("NAME_PARTICLES", "NAME_VERBS"))]
+            or (isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) in ("NAME_PARTICLES", "NAME_VERBS", "_canon"))]
     scope = {"re": re, "is_within_pregnancy_timeline": lambda *a: False, "logging": logging, "threading": threading,
-             "shutil": shutil, "FORUM_URL": "https://forum.phun.org/forums/celebrity-photos.15/", "failures_lock": threading.Lock(), "BeautifulSoup": BeautifulSoup, "requests": requests, "session": None, "_iso": lambda: "2026-10-22T21:00:00Z", "FAILURES_FILE": None}
+             "urlparse": urlparse, "BLOCKED_HOSTS": ("turboimagehost.com",), "history_lock": threading.Lock(), "blocked_lock": threading.Lock(),
+             "BLOCKED_FILE": None, "shutil": shutil, "FORUM_URL": "https://forum.phun.org/forums/celebrity-photos.15/", "failures_lock": threading.Lock(), "BeautifulSoup": BeautifulSoup, "requests": requests, "session": None, "_iso": lambda: "2026-10-22T21:00:00Z", "FAILURES_FILE": None}
     exec(compile(ast.Module(body=keep, type_ignores=[]), SOURCE, "exec"), scope)
     return scope
 
@@ -297,6 +299,60 @@ class HashTests(unittest.TestCase):
         self.assertTrue(near(0b1010111111, known, 5))            # 3 bits away
         self.assertFalse(near(0b0101010101, known, 5))           # every bit different
         self.assertFalse(near(123456789, [], 5))                 # nothing to match
+
+
+class CanonicalNameTests(unittest.TestCase):
+    def setUp(self):
+        S["_canon"].clear()
+
+    def test_the_first_spelling_seen_is_used_for_everyone_after_it(self):
+        self.assertEqual(S["canonical_person"]("Mckenna Grace"), "Mckenna Grace")
+        self.assertEqual(S["canonical_person"]("McKenna Grace"), "Mckenna Grace")
+        self.assertEqual(S["canonical_person"]("MCKENNA GRACE"), "Mckenna Grace")
+        self.assertEqual(S["canonical_person"]("Ana de Armas"), "Ana de Armas")
+        self.assertEqual(S["canonical_person"]("Ana De Armas"), "Ana de Armas")
+
+    def test_at_start_up_the_spelling_most_pictures_use_wins(self):
+        spellings = S["most_used_spellings"]([("McKenna Grace", 107), ("Mckenna Grace", 398), ("Ana De Armas", 3), ("Ana de Armas", 40),
+                                              ("Kelly Brook", 84)])
+        self.assertEqual(spellings, {"mckenna grace": "Mckenna Grace", "ana de armas": "Ana de Armas", "kelly brook": "Kelly Brook"})
+
+    def test_a_tie_is_settled_the_same_way_every_time(self):
+        a = S["most_used_spellings"]([("McKenna Grace", 5), ("Mckenna Grace", 5)])
+        b = S["most_used_spellings"]([("Mckenna Grace", 5), ("McKenna Grace", 5)])
+        self.assertEqual(a, b)
+
+
+class BlockedHostTests(unittest.TestCase):
+    def test_only_links_on_a_blocked_host_are_recognised(self):
+        self.assertTrue(S["is_blocked_host"]("https://www.turboimagehost.com/p/129936247/HH_15.jpg.html"))
+        self.assertTrue(S["is_blocked_host"]("https://turboimagehost.com/p/1/a.jpg.html"))
+        self.assertFalse(S["is_blocked_host"]("https://phun.imagetwist.com/abc/x.jpg"))
+        self.assertFalse(S["is_blocked_host"]("https://notturboimagehost.com/p/1/a.jpg.html"))
+        self.assertFalse(S["is_blocked_host"]("https://example.com/turboimagehost.com/a.jpg"))
+
+    def test_each_blocked_link_is_listed_once(self):
+        with tempfile.TemporaryDirectory() as d:
+            S["BLOCKED_FILE"] = os.path.join(d, "blocked_links.txt")
+            logging.disable(logging.CRITICAL)
+            history = {"blocked_urls": []}
+            meta = {"thread_title": "Hilary Duff soaking up the sun", "thread_url": "https://forum.example/t/1"}
+            links = ["https://www.turboimagehost.com/p/1/a.jpg.html", "https://www.turboimagehost.com/p/2/b.jpg.html",
+                     "https://www.turboimagehost.com/p/1/a.jpg.html"]
+            self.assertEqual(S["note_blocked_links"](links, ["Hilary Duff"], meta, history), 2)
+            self.assertEqual(S["note_blocked_links"](links, ["Hilary Duff"], meta, history), 0)     # a later scan adds nothing
+            lines = open(S["BLOCKED_FILE"], encoding="utf-8").read().splitlines()
+            self.assertEqual(len(lines), 2)
+            fields = lines[0].split("\t")
+            self.assertEqual(fields[1:], ["Hilary Duff", "Hilary Duff soaking up the sun", "https://forum.example/t/1",
+                                          "https://www.turboimagehost.com/p/1/a.jpg.html"])
+            self.assertEqual(len(history["blocked_urls"]), 2)
+
+    def test_nothing_is_written_when_there_are_no_blocked_links(self):
+        with tempfile.TemporaryDirectory() as d:
+            S["BLOCKED_FILE"] = os.path.join(d, "blocked_links.txt")
+            self.assertEqual(S["note_blocked_links"]([], ["X Y"], {}, {"blocked_urls": []}), 0)
+            self.assertFalse(os.path.exists(S["BLOCKED_FILE"]))
 
 
 class FailureLogTests(unittest.TestCase):
