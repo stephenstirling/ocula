@@ -96,10 +96,10 @@
 
                 <toolkit:SettingsExpander x:Name="PersonFolderTagsExpander" Header="Folder keyword rules"
                                           Description="Use locally saved person cards to add keywords based on matching folder names.">
-                    <ToggleSwitch x:Name="PersonFolderInheritanceToggle" Toggled="PersonFolderInheritance_Toggled"/>
+                    <ToggleSwitch x:Name="PersonFolderInheritanceToggle" OnContent="Include parent folders" OffContent="Immediate folder only" Toggled="PersonFolderInheritance_Toggled"/>
                     <toolkit:SettingsExpander.Items>
-                        <toolkit:SettingsCard Header="Include parent folders"
-                                              Description="When enabled, parent folder names can match too.">
+                        <toolkit:SettingsCard Header="Reapply to existing photos"
+                                              Description="Revisit every photo in the configured folders and merge missing keywords from matching saved cards.">
                             <Button x:Name="PersonFolderBackfillButton" Content="Reapply to existing photos" Click="PersonFolderBackfill_Click"/>
                         </toolkit:SettingsCard>
                     </toolkit:SettingsExpander.Items>
