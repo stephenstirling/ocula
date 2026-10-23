@@ -166,9 +166,9 @@
                     </toolkit:SettingsExpander.Items>
                 </toolkit:SettingsExpander>
 
-                <!-- Phun scraper -->
-                <TextBlock Text="Phun scraper" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,20,0,4"/>
-                <toolkit:SettingsExpander x:Name="PhunExpander" Header="Show the Phun scraper in the sidebar"
+                <!-- Phun Forum Scraper -->
+                <TextBlock Text="Phun Forum Scraper" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,20,0,4"/>
+                <toolkit:SettingsExpander x:Name="PhunExpander" Header="Show the Phun Forum Scraper in the sidebar"
                                           Description="A live view of the forum scraper that runs in Docker on your NAS: what it is downloading, how many images it has saved, the pictures it saved most recently, and a Scan now button. Ocula only reads its status over your network; it doesn't run the scraper. The address and token are kept in Ocula's settings on this PC, unencrypted.">
                     <toolkit:SettingsExpander.HeaderIcon><FontIcon Glyph="&#xE896;"/></toolkit:SettingsExpander.HeaderIcon>
                     <ToggleSwitch x:Name="PhunToggle" Toggled="PhunToggle_Toggled"/>

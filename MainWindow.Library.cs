@@ -78,7 +78,7 @@ public sealed partial class MainWindow
         entries.Add(new() { Kind = SidebarEntry.Kinds.Action, Name = "New collection…", Glyph = "\uE710" });
         entries.Add(new() { Kind = SidebarEntry.Kinds.Action, Name = "People…", Glyph = "\uE716" });
         if (AppSettings.PhunTabEnabled)
-            entries.Add(new() { Kind = SidebarEntry.Kinds.Action, Name = "Phun scraper…", Glyph = "\uE896" });
+            entries.Add(new() { Kind = SidebarEntry.Kinds.Action, Name = "Phun Forum Scraper…", Glyph = "\uE896" });
         entries.Add(new() { Kind = SidebarEntry.Kinds.Heading, Name = "SMART ALBUMS" });
         entries.AddRange(albums.Select(a => new SidebarEntry
         {

@@ -44,7 +44,7 @@ public static class AppSettings
         set => Store.Values["SharePeopleWithPorta"] = value;
     }
 
-    /// <summary>Whether the sidebar shows "Phun scraper…": a live view of the forum scraper running on your NAS. Off by default.</summary>
+    /// <summary>Whether the sidebar shows "Phun Forum Scraper…": a live view of the forum scraper running on your NAS. Off by default.</summary>
     public static bool PhunTabEnabled
     {
         get => Store.Values["PhunTabEnabled"] as bool? ?? false;

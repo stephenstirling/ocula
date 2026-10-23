@@ -14,7 +14,7 @@ namespace Ocula.Views;
 
 public sealed partial class ScraperPage : Page
 {
-    // Read from Settings > Phun scraper each time the page opens.
+    // Read from Settings > Phun Forum Scraper each time the page opens.
     private string _downloadsFolder = string.Empty;
     private string? _scraperUrl;
     private string? _scraperToken;
@@ -90,7 +90,7 @@ public sealed partial class ScraperPage : Page
     {
         if (_loadingRecent || _downloadsFolder.Length == 0)
         {
-            if (_downloadsFolder.Length == 0) RecentNote.Text = "Set the downloads folder in Settings > Phun scraper to see the pictures.";
+            if (_downloadsFolder.Length == 0) RecentNote.Text = "Set the downloads folder in Settings > Phun Forum Scraper to see the pictures.";
             return;
         }
         _loadingRecent = true;

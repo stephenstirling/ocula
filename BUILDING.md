@@ -619,11 +619,11 @@ _Still to come_
     10 or an older Windows 11; the Store's view of `unvirtualizedResources`; a refresh caused by a real rename, card, hide or scan (only the switch
     was exercised, and the debounce in isolation); "Delete all face data" (not run on the real library); People turned off while sharing is on; a refresh
     racing a turn-off; a very large list of named people; and what a reader sees while the file is being replaced.
-- **Phun scraper tab (wired in, October 2026; branch `phun-tab`).** `Phun/ScraperPage` (the page), `Phun/ScraperMonitor` (reads the scraper's status) and
+- **Phun Forum Scraper tab (wired in, October 2026; branch `phun-tab`).** `Phun/ScraperPage` (the page), `Phun/ScraperMonitor` (reads the scraper's status) and
   `Phun/LibraryIndex` (reads the scraper's `ocula_library.db`; not used by the page yet) came from the branch `claude/phun-scraper-tab`; the scraper itself is
   `tools/phun-scraper` (Python, runs in Docker on the NAS, not part of the app or the Store build). Ocula only **reads** the scraper's status; it doesn't run it.
-  Settings > Phun scraper has a switch (off by default), the status address (http or https only), the optional token, and the downloads folder. While the
-  switch is on the sidebar shows "Phun scraper…", which opens `PhunWindow`, which hosts the page; the page polls every 2 seconds only while the window is open
+  Settings > Phun Forum Scraper has a switch (off by default), the status address (http or https only), the optional token, and the downloads folder. While the
+  switch is on the sidebar shows "Phun Forum Scraper…", which opens `PhunWindow`, which hosts the page; the page polls every 2 seconds only while the window is open
   and treats a status older than 90 seconds as offline. Scan now needs the address (and the token if the scraper has one). The address and token are
   kept in Ocula's settings on this PC, unencrypted. The branch's `NAV-SNIPPET.md` assumed a `NavigationView` that Ocula's main window doesn't have, so it was not used.
   - **Recently saved (picture grid).** The page shows the 24 newest pictures from the scraper's `ocula_library.db` (`LibraryIndex.Query(limit: 24)`, read from a
