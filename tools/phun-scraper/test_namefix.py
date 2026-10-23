@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import sqlite3
 import tempfile
 import threading
@@ -18,9 +19,10 @@ import unittest
 from contextlib import closing
 
 SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "phun_scraper.py")
-FUNCS = {"sanitize_filename", "rel_library_path", "name_from_title", "plan_name_fixes", "fix_celebrity_names"}
+FUNCS = {"sanitize_filename", "rel_library_path", "name_from_title", "people_from_title", "_second_person", "plan_name_fixes",
+         "fix_celebrity_names", "plan_second_people", "fix_second_people"}
 SCHEMA = """CREATE TABLE images (id INTEGER PRIMARY KEY AUTOINCREMENT, rel_path TEXT NOT NULL UNIQUE, celebrity TEXT, category TEXT,
- tags TEXT, thread_title TEXT);
+ tags TEXT, source_url TEXT, thread_title TEXT, thread_url TEXT, post_date TEXT, phash TEXT, upgraded INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE image_tags (image_id INTEGER NOT NULL REFERENCES images(id) ON DELETE CASCADE, tag TEXT NOT NULL, PRIMARY KEY (image_id, tag));"""
 
 
@@ -40,8 +42,16 @@ def load(root, tagged):
         tagged.append((path, list(tags)))
         return True
 
-    scope = {"os": os, "re": re, "json": json, "hashlib": hashlib, "logging": logging, "closing": closing,
-             "DOWNLOAD_DIR": root, "db_lock": threading.Lock(), "_library_connect": connect, "embed_metadata": embed}
+    def record(path, celebrity, tags, category=None, source_url=None, thread_title=None, thread_url=None, post_date=None, phash=None,
+               upgraded=False):
+        with closing(connect()) as c, c:
+            cur = c.execute("INSERT INTO images (rel_path, celebrity, category, tags, thread_title) VALUES (?,?,?,?,?)",
+                            (scope["rel_library_path"](path), celebrity, category, json.dumps(tags), thread_title))
+            c.executemany("INSERT INTO image_tags VALUES (?,?)", [(cur.lastrowid, t) for t in tags])
+
+    scope = {"os": os, "re": re, "json": json, "hashlib": hashlib, "logging": logging, "closing": closing, "shutil": shutil,
+             "DOWNLOAD_DIR": root, "db_lock": threading.Lock(), "_library_connect": connect, "embed_metadata": embed,
+             "record_image": record}
     exec(compile(ast.Module(body=keep, type_ignores=[]), SOURCE, "exec"), scope)
     return scope, db
 
@@ -147,6 +157,81 @@ class NameFixTests(unittest.TestCase):
         self.add("Somewhere Else/a.jpg", "Kelly Brook for NEXT UK", [], "Kelly Brook for NEXT UK - x")
         self.assertEqual(self.s["fix_celebrity_names"](), 0)
         self.assertTrue(self.exists("Somewhere Else/a.jpg"))
+
+
+class PairTests(unittest.TestCase):
+    TITLE = "Carrie-Anne Moss and Clark Backo for Entertainment Weekly photoshoot - October 2026, ADDS"
+
+    def setUp(self):
+        logging.disable(logging.CRITICAL)
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = self.tmp.name
+        self.tagged = []
+        self.s, self.db = load(self.root, self.tagged)
+        with closing(sqlite3.connect(self.db)) as c, c:
+            c.executescript(SCHEMA)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def add(self, rel, celebrity, tags, title, create=True):
+        if create:
+            path = os.path.join(self.root, *rel.split("/"))
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "wb") as f:
+                f.write(b"x" + rel.encode())
+        with closing(sqlite3.connect(self.db)) as c, c:
+            cur = c.execute("INSERT INTO images (rel_path, celebrity, category, tags, thread_title) VALUES (?,?,?,?,?)",
+                            (rel, celebrity, "Bikini" if "/Bikini/" in rel else None, json.dumps(tags), title))
+            c.executemany("INSERT INTO image_tags VALUES (?,?)", [(cur.lastrowid, t) for t in tags])
+
+    def rows(self):
+        with closing(sqlite3.connect(self.db)) as c:
+            return c.execute("SELECT rel_path, celebrity, tags FROM images ORDER BY id").fetchall()
+
+    def exists(self, rel):
+        return os.path.exists(os.path.join(self.root, *rel.split("/")))
+
+    def test_the_second_person_gets_a_copy_and_both_names_are_tagged(self):
+        self.add("Carrie-Anne Moss/a.jpg", "Carrie-Anne Moss", ["Carrie-Anne Moss", "Magazine"], self.TITLE)
+        self.add("Carrie-Anne Moss/Bikini/b.jpg", "Carrie-Anne Moss", ["Carrie-Anne Moss"], self.TITLE)
+        self.assertEqual(self.s["fix_second_people"](), 2)
+
+        self.assertTrue(self.exists("Clark Backo/a.jpg"))
+        self.assertTrue(self.exists("Clark Backo/Bikini/b.jpg"))                       # same category subfolder
+        self.assertTrue(self.exists("Carrie-Anne Moss/a.jpg"))                          # the original stays
+        rows = self.rows()
+        self.assertEqual([r[:2] for r in rows if r[0].startswith("Clark")],
+                         [("Clark Backo/a.jpg", "Clark Backo"), ("Clark Backo/Bikini/b.jpg", "Clark Backo")])
+        self.assertEqual(json.loads(rows[0][2]), ["Carrie-Anne Moss", "Clark Backo", "Magazine"])   # the original now has both names
+        self.assertEqual(json.loads(rows[2][2]), ["Carrie-Anne Moss", "Clark Backo", "Magazine"])   # and so does the copy
+        self.assertIn((os.path.join(self.root, "Carrie-Anne Moss", "a.jpg"), ["Carrie-Anne Moss", "Clark Backo", "Magazine"]), self.tagged)
+
+    def test_running_it_again_does_nothing(self):
+        self.add("Carrie-Anne Moss/a.jpg", "Carrie-Anne Moss", ["Carrie-Anne Moss"], self.TITLE)
+        self.assertEqual(self.s["fix_second_people"](), 1)
+        self.assertEqual(self.s["fix_second_people"](), 0)
+        self.assertEqual(len(self.rows()), 2)
+
+    def test_the_copy_is_not_treated_as_filed_under_the_wrong_name(self):
+        self.add("Carrie-Anne Moss/a.jpg", "Carrie-Anne Moss", ["Carrie-Anne Moss"], self.TITLE)
+        self.s["fix_second_people"]()
+        self.assertEqual(self.s["fix_celebrity_names"](), 0)                             # the name clean-up leaves the copy where it is
+        self.assertTrue(self.exists("Clark Backo/a.jpg"))
+
+    def test_one_person_threads_and_pictures_filed_under_the_second_person_are_left_alone(self):
+        self.add("Miranda Kerr/a.jpg", "Miranda Kerr", ["Miranda Kerr"], "Miranda Kerr at the 2026 Awards")
+        self.add("Clark Backo/c.jpg", "Clark Backo", ["Carrie-Anne Moss", "Clark Backo"], self.TITLE)
+        self.assertEqual(self.s["fix_second_people"](), 0)
+        self.assertEqual(len(self.rows()), 2)
+
+    def test_a_missing_file_is_skipped_and_a_dry_run_changes_nothing(self):
+        self.add("Carrie-Anne Moss/gone.jpg", "Carrie-Anne Moss", ["Carrie-Anne Moss"], self.TITLE, create=False)
+        self.assertEqual(self.s["fix_second_people"](), 0)
+        self.add("Carrie-Anne Moss/a.jpg", "Carrie-Anne Moss", ["Carrie-Anne Moss"], self.TITLE)
+        self.assertEqual(self.s["fix_second_people"](dry_run=True), 0)
+        self.assertFalse(self.exists("Clark Backo/a.jpg"))
+        self.assertEqual(self.tagged, [])
 
 
 if __name__ == "__main__":

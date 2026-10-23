@@ -8,6 +8,9 @@ services:
     environment:
       - TZ=America/New_York
       - STATUS_PORT=8765
+      - FORUM_PAGES=100      # pages of the forum's thread list read each scan, newest first (about 60 threads a page)
+      - MAX_THREAD_PAGES=10  # pages of replies read in each thread
+      - MIN_FREE_GB=150      # stop saving while the downloads volume has less free space than this
       # - STATUS_TOKEN=change-me      # optional: protects POST /scan-now
     volumes:
       # Left side = the NAS folder that Windows sees as Z:\Babes. CHANGE it to the real path
