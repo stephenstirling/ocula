@@ -17,6 +17,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  python-scraper-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: tools/phun-scraper/requirements.txt
+      - name: Install scraper dependencies
+        run: python -m pip install -r tools/phun-scraper/requirements.txt
+      - name: Test Python scraper helpers
+        run: python -m unittest discover -s tools/phun-scraper -p "test_*.py"
+
   build:
     runs-on: windows-latest
     timeout-minutes: 30
