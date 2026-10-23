@@ -139,7 +139,39 @@ public sealed partial class MainWindow
             item.ApplyIndex(row);
             return item;
         }).ToList();
-        await ApplyToItemsAsync(items, i => { if (!i.Tags.Any(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase))) i.Tags.Add(tag); });
+
+        var cardKeywords = await GetPersonCardKeywordsAsync(tag);
+
+        // ApplyToItemsAsync writes through MetadataStore and updates the library index. Keep the
+        // existing human-readable name tag; structured card keywords are additional searchable tags.
+        await ApplyToItemsAsync(items, i =>
+            PersonCardTagBuilder.MergeInto(i.Tags, new[] { tag }.Concat(cardKeywords)));
+    }
+
+    /// <summary>Applies a tag to the current selection, expanding it only when it matches one saved person card.</summary>
+    private async Task ApplyTagToSelectionAsync(string tag)
+    {
+        var cardKeywords = await GetPersonCardKeywordsAsync(tag);
+        await ApplyToSelectionAsync(i =>
+            PersonCardTagBuilder.MergeInto(i.Tags, new[] { tag }.Concat(cardKeywords)));
+    }
+
+    private async Task<IReadOnlyList<string>> GetPersonCardKeywordsAsync(string tag)
+    {
+        if (!AppSettings.WritePersonCardTagsToFiles) return Array.Empty<string>();
+
+        // Match saved local cards only. Never trigger a network lookup from tagging.
+        var matches = await PersonCardResolver.ResolveFromTagsAsync(_index, new[] { tag });
+        var exactGroupMatches = matches
+            .Where(card => PersonCardResolver.NamesMatch(card.GroupName, tag))
+            .ToList();
+        var resolved = exactGroupMatches.Count == 1 ? exactGroupMatches[0]
+                     : exactGroupMatches.Count == 0 && matches.Count == 1 ? matches[0]
+                     : null;
+
+        return resolved == null
+            ? Array.Empty<string>()
+            : PersonCardTagBuilder.FromFacts(resolved.Facts, resolved.GroupName);
     }
 
     /// <summary>

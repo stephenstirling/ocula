@@ -33,6 +33,7 @@
     <Compile Include="..\..\Services\WebImage.cs" Link="App\WebImage.cs" />
     <Compile Include="..\..\Services\TagSuggester.cs" Link="App\TagSuggester.cs" />
     <Compile Include="..\..\Services\PersonLookup.cs" Link="App\PersonLookup.cs" />
+    <Compile Include="..\..\Services\PersonCardTagBuilder.cs" Link="App\PersonCardTagBuilder.cs" />
     <Compile Include="..\..\Services\ApiIdentity.cs" Link="App\ApiIdentity.cs" />
     <Compile Include="..\..\Phun\ScraperMonitor.cs" Link="App\ScraperMonitor.cs" />
     <Compile Include="..\..\Phun\LibraryIndex.cs" Link="App\LibraryIndex.cs" />

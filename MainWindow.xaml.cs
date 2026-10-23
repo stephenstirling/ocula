@@ -997,10 +997,7 @@ public sealed partial class MainWindow : Window
         TagInput.Text = string.Empty;
         if (tag.Length == 0) return;
 
-        await ApplyToSelectionAsync(i =>
-        {
-            if (!i.Tags.Contains(tag, StringComparer.OrdinalIgnoreCase)) i.Tags.Add(tag);
-        });
+        await ApplyTagToSelectionAsync(tag);
     }
 
     private async void RemoveTag_Click(object sender, RoutedEventArgs e)

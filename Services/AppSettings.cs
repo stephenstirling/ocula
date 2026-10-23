@@ -25,6 +25,16 @@ public static class AppSettings
     }
 
     /// <summary>
+    /// Whether applying a person name tag also writes keywords from that person's already-saved card
+    /// into the photo's System.Keywords metadata or XMP sidecar. No lookup is performed while tagging.
+    /// </summary>
+    public static bool WritePersonCardTagsToFiles
+    {
+        get => Store.Values["WritePersonCardTagsToFiles"] as bool? ?? true;
+        set => Store.Values["WritePersonCardTagsToFiles"] = value;
+    }
+
+    /// <summary>
     /// Whether People may offer "Look up on Wikidata". Nothing is sent until you press that button, and then only the name you gave
     /// the group.
     /// </summary>
