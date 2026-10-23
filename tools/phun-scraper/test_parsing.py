@@ -18,12 +18,13 @@ import requests
 from bs4 import BeautifulSoup
 
 SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "phun_scraper.py")
-WANTED = {"listing_threads", "post_bodies", "direct_from_thumbnail", "extract_metadata_tags", "log_failure", "resolve_image_host_url"}
+WANTED = {"listing_threads", "post_bodies", "direct_from_thumbnail", "extract_metadata_tags", "log_failure", "resolve_image_host_url", "name_from_title"}
 
 
 def load():
     tree = ast.parse(open(SOURCE, encoding="utf-8").read())
-    keep = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in WANTED]
+    keep = [n for n in tree.body if (isinstance(n, ast.FunctionDef) and n.name in WANTED)
+            or (isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) == "NAME_PARTICLES")]
     scope = {"re": re, "is_within_pregnancy_timeline": lambda *a: False, "logging": logging, "threading": threading,
              "failures_lock": threading.Lock(), "BeautifulSoup": BeautifulSoup, "requests": requests, "session": None, "_iso": lambda: "2026-10-22T21:00:00Z", "FAILURES_FILE": None}
     exec(compile(ast.Module(body=keep, type_ignores=[]), SOURCE, "exec"), scope)
@@ -86,6 +87,29 @@ class NameTests(unittest.TestCase):
 
     def test_dash_and_brackets(self):
         self.assertEqual(S["extract_metadata_tags"]("Sadie Sink - Stella McCartney (sep 2022)")[0], "Sadie Sink")
+
+    def test_titles_that_carry_on_in_lower_case_give_just_the_name(self):
+        # real thread titles from phun.org that the first run turned into folder names like "Kelly Brook for NEXT UK"
+        for title, name in [
+            ("Kelly Brook for NEXT UK - Swimwear Collection 2026", "Kelly Brook"),
+            ("Zara Larsson for The New York Times Popcast - October 2026", "Zara Larsson"),
+            ("Kristen Bell for Bustle", "Kristen Bell"),
+            ("Famke Janssen out in NYC", "Famke Janssen"),
+            ("Kylie Jenner arriving at Baldi at the Waldorf Astoria in Beverly Hills", "Kylie Jenner"),
+            ("Carrie-Anne Moss and Clark Backo for Entertainment Weekly photoshoot in LA", "Carrie-Anne Moss"),
+            ("Taylor Swift and Travis Kelce out in New York", "Taylor Swift"),
+            ("Dua Lipa's new look in London", "Dua Lipa"),
+            ("Zoe de Vries at a party", "Zoe de Vries"),
+            ("Charli D'Amelio at The Hollywood Reporter Creator A-List Party", "Charli D'Amelio"),
+            ("Joanna ''JoJo'' Levesque at an event", "Joanna ''JoJo'' Levesque"),
+        ]:
+            self.assertEqual(S["name_from_title"](title), name, title)
+
+    def test_titles_with_nothing_lower_case_fall_back_to_the_old_rules(self):
+        self.assertEqual(S["name_from_title"]("Rihanna"), "Rihanna")
+        self.assertEqual(S["name_from_title"]("Taylor Swift"), "Taylor Swift")
+        # a title-cased sentence must not become a four-word-plus "name"
+        self.assertEqual(S["name_from_title"]("Selena Gomez Attends The Premiere Of Foo In LA"), "Selena Gomez")
 
 
 class FakeResponse:
