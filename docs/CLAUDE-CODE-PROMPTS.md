@@ -43,6 +43,15 @@ Paste the real licence texts (PolyForm Strict and third-party), fill the privacy
 contact, re-answer the IARC questionnaire in store/listing.md (web access: Yes), and follow
 RELEASING.md for a first MSIX build.
 
+## Prompt 9 — Chrome extension hand-off (`ocula:webdownload`)
+Read CLAUDE.md, docs/CHROME-EXTENSION.md, Services/OculaLink.cs, App.xaml.cs, MainWindow.Web.cs,
+WebDownloadWindow.xaml(.cs), Services/PageScanner.cs and BUILDING.md (Phase 6). Implement the
+ocula:webdownload link exactly as docs/CHROME-EXTENSION.md describes: parse it in OculaLink (Url,
+Tags), handle it in HandleLinkAsync by opening WebDownloadWindow on the address, grabbing the page's
+images, ticking them, pre-ticking the user's tags, and filling "Save to" only when the folder is
+inside a library folder. Never start a download without the Download button. Keep every rule in
+CLAUDE.md. Add the unit tests listed in the doc, build, run the tests and commit on a branch.
+
 ## Later
 Person-card lookup (Wikidata -> DBpedia -> MusicBrainz) and search by person details; Porta
 integration (docs/PORTA-INTEGRATION.md, needs stirling-shared); backup to Google Photos/iCloud.

@@ -19,3 +19,6 @@ Ocula-Assets/
 
 # Signing certificates: never commit
 *.pfx
+
+# Chrome extension test dependencies
+extensions/**/node_modules/

@@ -1,0 +1,7 @@
+{
+  "name": "chrome-justjared-tests",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node run-content-tests.mjs" },
+  "devDependencies": { "jsdom": "^24.0.0" }
+}

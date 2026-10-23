@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ocula: Just Jared photos, settings</title>
+<style>
+  :root { color-scheme: light dark; --bd: #c9c9c9; --muted: #666; --danger: #b3261e; --ok: #1e7a3c; }
+  @media (prefers-color-scheme: dark) { :root { --bd: #444; --muted: #aaa; --danger: #f2b8b5; --ok: #8fd6a4; } }
+  body { max-width: 520px; margin: 32px auto; padding: 0 16px; font: 14px/1.5 system-ui, "Segoe UI", sans-serif; }
+  h1 { font-size: 18px; }
+  label { display: block; margin: 16px 0 4px; font-weight: 600; }
+  p.help { margin: 0 0 6px; color: var(--muted); font-size: 13px; }
+  input[type=text] { box-sizing: border-box; width: 100%; padding: 7px 9px; border: 1px solid var(--bd); border-radius: 6px; font: inherit; background: transparent; color: inherit; }
+  button { margin-top: 18px; padding: 7px 16px; border-radius: 6px; border: 1px solid var(--bd); background: transparent; color: inherit; font: inherit; cursor: pointer; }
+  #msg { margin-top: 10px; min-height: 1.4em; }
+  #msg.err { color: var(--danger); }
+  #msg.ok { color: var(--ok); }
+</style>
+</head>
+<body>
+<h1>Ocula: Just Jared photos</h1>
+
+<label for="root">Library folder</label>
+<p class="help">One folder per name is made under this. A "Busy Philipps" article suggests <code>Z:\Babes\Busy Philipps</code>.</p>
+<input id="root" type="text" spellcheck="false" autocomplete="off">
+
+<label for="tags">Tags added to every article</label>
+<p class="help">Optional. Separate with commas. They appear as removable chips in the popup.</p>
+<input id="tags" type="text" autocomplete="off">
+
+<button id="save" type="button">Save</button>
+<p id="msg" role="status"></p>
+<script src="options.js"></script>
+</body>
+</html>

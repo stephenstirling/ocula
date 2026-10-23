@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Ocula: Just Jared photos",
+  "version": "0.1.0",
+  "description": "Personal-use helper. On a Just Jared article, preview the photos and hand the page to Ocula's web downloader.",
+  "permissions": ["activeTab", "storage"],
+  "content_scripts": [
+    {
+      "matches": ["https://www.justjared.com/*", "https://justjared.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Send to Ocula",
+    "default_popup": "popup.html"
+  },
+  "options_page": "options.html"
+}
