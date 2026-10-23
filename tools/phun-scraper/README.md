@@ -18,6 +18,4 @@ Python forum image scraper. Not part of the Ocula app or its Store build.
 - **One folder per person, whatever the capitalisation** ("Mckenna Grace" and "McKenna Grace" are two folders on the NAS but one to Windows, which then can only
   reach one of them): the spelling most pictures use wins, and pictures filed under another spelling are moved at start-up. Pictures that were saved but never
   indexed (the scraper was stopped mid-save) are indexed at start-up too, and tagged with the person's name if they have no tags.
-- **Hosts that block scripts.** turboimagehost.com is behind a Cloudflare challenge ("Just a moment..."), which a script can't pass, and the scraper doesn't try to get
-  around it. Links on it are written once each to `blocked_links.txt` in the downloads folder (date, who, thread, link; tab separated) so they can be opened and saved by
-  hand in a browser. Any other host that answers with such a challenge is reported in `failed_downloads.log` and not retried. About 3% of threads use turboimagehost.
+- **TurboImageHost.** The scraper resolves `img#imageid`, `img.uimg`, or `og:image` from TurboImageHost landing pages and uses a CloudScraper session for page requests. This can handle some challenges, but is not guaranteed to defeat every anti-bot check. If a host still returns a challenge, the image is skipped and the failure is logged rather than repeatedly hammering the host.
