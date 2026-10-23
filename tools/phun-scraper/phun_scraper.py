@@ -29,6 +29,7 @@ FORUM_BASE = "https://forum.phun.org/"  # thread links in the list are relative 
 DOWNLOAD_DIR = os.environ.get("DOWNLOAD_DIR", "/downloads")  # Docker path; mount the NAS "Babes" folder here
 HISTORY_FILE = os.path.join(DOWNLOAD_DIR, "download_history.json")
 CELEB_CACHE_FILE = os.path.join(DOWNLOAD_DIR, "celeb_data_cache.json")
+FAILURES_FILE = os.path.join(DOWNLOAD_DIR, "failed_downloads.log")  # one line per picture that wasn't saved, and why
 LOG_FILE = os.path.join(DOWNLOAD_DIR, "scraper.log")
 LIBRARY_DB = os.path.join(DOWNLOAD_DIR, "ocula_library.db")  # sidecar index read by Ocula
 IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
@@ -671,15 +672,23 @@ def should_skip_thread(thread_title):
 
 
 def resolve_image_host_url(link_url):
+    # pixhost /show/ links end in .jpg but are HTML pages. The picture's server is named on the page (img1, img2, ...,
+    # so it can't be guessed), and og:image there is only a thumbnail.
+    if "pixhost.to/show/" in link_url.lower():
+        try:
+            resp = session.get(link_url, timeout=10)
+            if resp.status_code == 200:
+                img = BeautifulSoup(resp.text, "html.parser").select_one("img#image")
+                if img and img.get("src"):
+                    return img["src"]
+        except requests.RequestException:
+            pass
+        return None
+
     if re.search(r"\.(jpg|jpeg|png|gif|webp)$", link_url, re.IGNORECASE):
         if "imagetwist.com" in link_url:
             return re.sub(r"/th/", "/i/", link_url)
         return link_url
-
-    if "pixhost.to" in link_url:
-        m = re.search(r"pixhost\.to/show/(\d+)/(\d+_[^/]+)", link_url)
-        if m:
-            return f"https://img2.pixhost.to/images/{m.group(1)}/{m.group(2)}"
 
     try:
         resp = session.get(link_url, timeout=10, allow_redirects=True)
@@ -738,8 +747,24 @@ def embed_metadata(file_path, keywords_list):
             return False
 
 
+failures_lock = threading.Lock()
+
+
+def log_failure(url, reason, meta=None, direct_url=None):
+    """Says why a picture wasn't saved: a WARNING in scraper.log, and a line in failed_downloads.log next to the pictures
+    (time, thread, link, the address tried if different, reason; tab separated)."""
+    thread = (meta or {}).get("thread_title") or ""
+    logging.warning("Not saved: %s | %s | %s", reason, url, thread)
+    line = "\t".join([_iso(), thread, url, direct_url if direct_url and direct_url != url else "", reason.replace("\n", " ")])
+    try:
+        with failures_lock, open(FAILURES_FILE, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except OSError as e:
+        logging.warning("Couldn't write %s: %s", FAILURES_FILE, e)
+
+
 def download_file(url, celeb_root_folder, history, keywords_list, meta=None):
-    ok = _download_file(url, celeb_root_folder, history, keywords_list, meta)
+    ok =_download_file(url, celeb_root_folder, history, keywords_list, meta)
     if not ok:
         status.bump("failed_downloads")
     return ok
@@ -753,11 +778,13 @@ def _download_file(url, celeb_root_folder, history, keywords_list, meta=None):
 
     direct_url = resolve_image_host_url(url)
     if not direct_url:
+        log_failure(url, "no picture found at this link (the host page had no og:image, or didn't load)", meta)
         return False
 
     try:
         res = session.get(direct_url, stream=True, timeout=15)
         if res.status_code != 200 or "text/html" in res.headers.get("Content-Type", ""):
+            log_failure(url, f"HTTP {res.status_code}, {res.headers.get('Content-Type', 'no content type')}", meta, direct_url)
             return False
 
         content = bytearray()
@@ -765,7 +792,11 @@ def _download_file(url, celeb_root_folder, history, keywords_list, meta=None):
             content.extend(chunk)
         content = bytes(content)
 
-        if len(content) < MIN_FILE_SIZE_BYTES or not image_ok(content):
+        if len(content) < MIN_FILE_SIZE_BYTES:
+            log_failure(url, f"too small ({len(content)} bytes, minimum {MIN_FILE_SIZE_BYTES})", meta, direct_url)
+            return False
+        if not image_ok(content):
+            log_failure(url, f"not a readable image ({len(content)} bytes)", meta, direct_url)
             return False
 
         current_phash = phash_of(content)
@@ -823,7 +854,7 @@ def _download_file(url, celeb_root_folder, history, keywords_list, meta=None):
         return True
 
     except Exception as e:
-        logging.error("Download failed for %s: %s", url, e)
+        log_failure(url, f"error: {type(e).__name__}: {e}", meta, direct_url)
         return False
 
 

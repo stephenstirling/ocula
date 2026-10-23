@@ -6,21 +6,26 @@ fixtures are cut down from the real phun.org pages (XenForo 1) and from XenForo 
     python -m unittest tools/phun-scraper/test_parsing.py
 """
 import ast
+import logging
 import os
 import re
+import tempfile
+import threading
 import unittest
 from urllib.parse import urljoin
 
+import requests
 from bs4 import BeautifulSoup
 
 SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "phun_scraper.py")
-WANTED = {"listing_threads", "post_bodies", "direct_from_thumbnail", "extract_metadata_tags"}
+WANTED = {"listing_threads", "post_bodies", "direct_from_thumbnail", "extract_metadata_tags", "log_failure", "resolve_image_host_url"}
 
 
 def load():
     tree = ast.parse(open(SOURCE, encoding="utf-8").read())
     keep = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in WANTED]
-    scope = {"re": re, "is_within_pregnancy_timeline": lambda *a: False}
+    scope = {"re": re, "is_within_pregnancy_timeline": lambda *a: False, "logging": logging, "threading": threading,
+             "failures_lock": threading.Lock(), "BeautifulSoup": BeautifulSoup, "requests": requests, "session": None, "_iso": lambda: "2026-10-22T21:00:00Z", "FAILURES_FILE": None}
     exec(compile(ast.Module(body=keep, type_ignores=[]), SOURCE, "exec"), scope)
     return scope
 
@@ -81,6 +86,62 @@ class NameTests(unittest.TestCase):
 
     def test_dash_and_brackets(self):
         self.assertEqual(S["extract_metadata_tags"]("Sadie Sink - Stella McCartney (sep 2022)")[0], "Sadie Sink")
+
+
+class FakeResponse:
+    def __init__(self, status, text=""):
+        self.status_code, self.text = status, text
+
+
+class FakeSession:
+    def __init__(self, response):
+        self.response, self.asked = response, []
+
+    def get(self, url, **kw):
+        self.asked.append(url)
+        if isinstance(self.response, Exception):
+            raise self.response
+        return self.response
+
+
+class ResolveTests(unittest.TestCase):
+    PIXHOST = "https://pixhost.to/show/6626/789917917_1.jpg"
+
+    def test_pixhost_show_page_gives_the_image_on_the_server_the_page_names(self):
+        S["session"] = FakeSession(FakeResponse(200, '<img id="image" src="https://img3.pixhost.to/images/6626/789917917_1.jpg">'
+                                                      '<meta property="og:image" content="https://t3.pixhost.to/thumbs/6626/789917917_1.jpg">'))
+        self.assertEqual(S["resolve_image_host_url"](self.PIXHOST), "https://img3.pixhost.to/images/6626/789917917_1.jpg")
+
+    def test_pixhost_page_that_fails_or_has_no_image_gives_nothing_rather_than_a_guess(self):
+        S["session"] = FakeSession(FakeResponse(404))
+        self.assertIsNone(S["resolve_image_host_url"](self.PIXHOST))
+        S["session"] = FakeSession(FakeResponse(200, "<html>no picture</html>"))
+        self.assertIsNone(S["resolve_image_host_url"](self.PIXHOST))
+        S["session"] = FakeSession(requests.ConnectionError("down"))
+        self.assertIsNone(S["resolve_image_host_url"](self.PIXHOST))
+
+    def test_a_plain_image_link_is_used_as_it_is(self):
+        S["session"] = FakeSession(FakeResponse(500))
+        self.assertEqual(S["resolve_image_host_url"]("https://example.com/a.jpg"), "https://example.com/a.jpg")
+        self.assertEqual(S["session"].asked, [])
+
+
+class FailureLogTests(unittest.TestCase):
+    def test_a_failure_is_written_with_thread_link_and_reason(self):
+        logging.disable(logging.CRITICAL)
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "failed_downloads.log")
+            S["FAILURES_FILE"] = path
+            S["log_failure"]("https://host/a.jpg", "HTTP 404, text/html", {"thread_title": "Jane Doe at a premiere"}, "https://host/i/a.jpg")
+            S["log_failure"]("https://host/b.jpg", "too small (10 bytes)", None)
+            lines = open(path, encoding="utf-8").read().splitlines()
+        self.assertEqual(lines[0].split("	"), ["2026-10-22T21:00:00Z", "Jane Doe at a premiere", "https://host/a.jpg", "https://host/i/a.jpg", "HTTP 404, text/html"])
+        self.assertEqual(lines[1].split("	"), ["2026-10-22T21:00:00Z", "", "https://host/b.jpg", "", "too small (10 bytes)"])
+
+    def test_an_unwritable_log_does_not_stop_the_scraper(self):
+        logging.disable(logging.CRITICAL)
+        S["FAILURES_FILE"] = os.path.join(tempfile.gettempdir(), "no-such-folder-xyz", "f.log")
+        S["log_failure"]("https://host/a.jpg", "x")   # must not raise
 
 
 if __name__ == "__main__":
