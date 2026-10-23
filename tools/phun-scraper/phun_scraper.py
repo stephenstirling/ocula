@@ -702,7 +702,7 @@ def should_skip_thread(thread_title):
 def resolve_image_host_url(link_url):
     # pixhost /show/ links end in .jpg but are HTML pages. The picture's server is named on the page (img1, img2, ...,
     # so it can't be guessed), and og:image there is only a thumbnail.
-    if re.search(r"pixhost\.[a-z]+/show/", link_url, re.IGNORECASE):
+    if re.search(r"pixho(?:st)?\.[a-z]+/show/", link_url, re.IGNORECASE):
         try:
             resp = session.get(link_url, timeout=10)
             if resp.status_code == 200:
@@ -887,7 +887,7 @@ def _download_file(url, celeb_root_folder, history, keywords_list, meta=None):
 
 
 SUPPORTED_HOSTS = [
-    "imagetwist.com", "pixhost.to", "pixhost.cc", "pixhost.org", "imgbox.com",
+    "imagetwist.com", "pixhost.to", "pixhost.cc", "pixho.st", "pixhost.org", "imgbox.com",
     "imagevenue.com", "postimg.cc",
 ]
 
