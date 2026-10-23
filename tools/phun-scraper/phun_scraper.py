@@ -615,14 +615,42 @@ def is_within_pregnancy_timeline(celeb_name, title_text):
     return False
 
 
-def extract_metadata_tags(title_text, post_text=""):
-    clean_title = re.sub(r"\[.*?\]|\(.*?\)", "", title_text).strip()
+NAME_PARTICLES = {"de", "del", "della", "di", "da", "van", "von", "der", "den", "la", "le", "du", "bin", "al", "el", "ter", "ten"}
+
+
+def name_from_title(clean_title):
+    """The person's name at the start of a thread title. Names are capitalised words, and the title carries on in lower
+    case ("Kelly Brook for NEXT UK", "Famke Janssen out in NYC", "Carrie-Anne Moss and Clark Backo ..."), so the name is
+    the leading run of capitalised words when something lower case ends it. Otherwise: the text before " at / in / @ / on / - ",
+    or the first two words. A name of more than four words is cut to two."""
+    words = clean_title.split()
+    run = []
+    stopped = False
+    for i, word in enumerate(words):
+        bare = word.lstrip("'\"")
+        if bare[:1].isupper() or (i > 0 and word.lower() in NAME_PARTICLES):
+            run.append(word)
+        else:
+            stopped = True
+            break
+    while run and run[-1].lower() in NAME_PARTICLES:
+        run.pop()
+    if run:
+        run[-1] = re.sub(r"['’]s$", "", run[-1])
+    if stopped and 1 <= len(run) <= 4:
+        return " ".join(run)
+
     match = re.search(r"^(.*?)\s+(?:at|in|@|on|-)\s+", clean_title, re.IGNORECASE)
     if match:
-        celeb_name = match.group(1).strip()
+        name = match.group(1).strip()
     else:
-        words = clean_title.split()
-        celeb_name = " ".join(words[:2]) if len(words) >= 2 else clean_title
+        name = " ".join(words[:2]) if len(words) >= 2 else clean_title
+    return " ".join(name.split()[:2]) if len(name.split()) > 4 else name
+
+
+def extract_metadata_tags(title_text, post_text=""):
+    clean_title = re.sub(r"\[.*?\]|\(.*?\)", "", title_text).strip()
+    celeb_name = name_from_title(clean_title)
 
     common_keywords = [
         "bikini", "lingerie", "swimsuit", "red carpet", "dress", "gown",
@@ -674,7 +702,7 @@ def should_skip_thread(thread_title):
 def resolve_image_host_url(link_url):
     # pixhost /show/ links end in .jpg but are HTML pages. The picture's server is named on the page (img1, img2, ...,
     # so it can't be guessed), and og:image there is only a thumbnail.
-    if "pixhost.to/show/" in link_url.lower():
+    if re.search(r"pixhost\.[a-z]+/show/", link_url, re.IGNORECASE):
         try:
             resp = session.get(link_url, timeout=10)
             if resp.status_code == 200:
@@ -859,7 +887,7 @@ def _download_file(url, celeb_root_folder, history, keywords_list, meta=None):
 
 
 SUPPORTED_HOSTS = [
-    "imagetwist.com", "pixhost.to", "pixhost.org", "imgbox.com",
+    "imagetwist.com", "pixhost.to", "pixhost.cc", "pixhost.org", "imgbox.com",
     "imagevenue.com", "postimg.cc",
 ]
 
