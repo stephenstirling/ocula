@@ -34,6 +34,13 @@ public static class AppSettings
         set => Store.Values["WritePersonCardTagsToFiles"] = value;
     }
 
+    /// <summary>Whether a saved person card can match a photo through any ancestor directory, rather than only its immediate folder.</summary>
+    public static bool PersonFolderTagIncludeSubfolders
+    {
+        get => Store.Values["PersonFolderTagIncludeSubfolders"] as bool? ?? true;
+        set => Store.Values["PersonFolderTagIncludeSubfolders"] = value;
+    }
+
     /// <summary>
     /// Whether People may offer "Look up on Wikidata". Nothing is sent until you press that button, and then only the name you gave
     /// the group.
