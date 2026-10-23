@@ -265,7 +265,7 @@ public sealed partial class SettingsWindow : Window
         AppSettings.OnlinePersonLookup = PersonLookupToggle.IsOn;
     }
 
-    // ---------- Phun scraper ----------
+    // ---------- Phun Forum Scraper ----------
 
     private void PhunToggle_Toggled(object sender, RoutedEventArgs e)
     {

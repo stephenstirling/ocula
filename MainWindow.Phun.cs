@@ -4,8 +4,8 @@ using Microsoft.UI.Xaml;
 namespace Ocula;
 
 /// <summary>
-/// The Phun scraper tab: a live view of the forum scraper that runs in Docker on the NAS (see tools/phun-scraper). It opens in its own
-/// window from the sidebar entry "Phun scraper…", which only appears when Settings > Phun scraper has it switched on.
+/// The Phun Forum Scraper tab: a live view of the forum scraper that runs in Docker on the NAS (see tools/phun-scraper). It opens in its own
+/// window from the sidebar entry "Phun Forum Scraper…", which only appears when Settings > Phun Forum Scraper has it switched on.
 /// </summary>
 public sealed partial class MainWindow
 {
@@ -28,7 +28,7 @@ public sealed partial class MainWindow
         await OpenPathAsync(path);
     }
 
-    /// <summary>Called by Settings when the Phun scraper is switched on or off: adds or removes the sidebar entry.</summary>
+    /// <summary>Called by Settings when the Phun Forum Scraper is switched on or off: adds or removes the sidebar entry.</summary>
     public void PhunSettingsChanged()
     {
         if (!AppSettings.PhunTabEnabled) _phun?.Close();

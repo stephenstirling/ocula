@@ -5,7 +5,7 @@ using Xunit;
 namespace Ocula.Tests;
 
 /// <summary>
-/// The Phun scraper tab's reader: it turns the scraper's scraper_status.json (written by tools/phun-scraper/phun_scraper.py) into what the page shows.
+/// The Phun Forum Scraper tab's reader: it turns the scraper's scraper_status.json (written by tools/phun-scraper/phun_scraper.py) into what the page shows.
 /// The JSON below has the keys and the UTC "...Z" timestamps the Python status class writes.
 /// </summary>
 public class ScraperMonitorTests : IDisposable

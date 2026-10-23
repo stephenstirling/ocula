@@ -5,7 +5,7 @@ using Microsoft.UI.Xaml;
 
 namespace Ocula;
 
-/// <summary>Hosts the Phun scraper page (Phun/ScraperPage). The page polls the scraper only while this window is open.</summary>
+/// <summary>Hosts the Phun Forum Scraper page (Phun/ScraperPage). The page polls the scraper only while this window is open.</summary>
 public sealed partial class PhunWindow : Window
 {
     public PhunWindow(MainWindow main)
