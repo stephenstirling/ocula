@@ -25,9 +25,11 @@ from exiftool import ExifToolHelper
 
 # --- Configuration ---
 FORUM_URL = "https://forum.phun.org/forums/celebrity-photos.15/"
+FORUM_BASE = "https://forum.phun.org/"  # thread links in the list are relative to this, not to FORUM_URL
 DOWNLOAD_DIR = os.environ.get("DOWNLOAD_DIR", "/downloads")  # Docker path; mount the NAS "Babes" folder here
 HISTORY_FILE = os.path.join(DOWNLOAD_DIR, "download_history.json")
 CELEB_CACHE_FILE = os.path.join(DOWNLOAD_DIR, "celeb_data_cache.json")
+FAILURES_FILE = os.path.join(DOWNLOAD_DIR, "failed_downloads.log")  # one line per picture that wasn't saved, and why
 LOG_FILE = os.path.join(DOWNLOAD_DIR, "scraper.log")
 LIBRARY_DB = os.path.join(DOWNLOAD_DIR, "ocula_library.db")  # sidecar index read by Ocula
 IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
@@ -670,15 +672,23 @@ def should_skip_thread(thread_title):
 
 
 def resolve_image_host_url(link_url):
+    # pixhost /show/ links end in .jpg but are HTML pages. The picture's server is named on the page (img1, img2, ...,
+    # so it can't be guessed), and og:image there is only a thumbnail.
+    if "pixhost.to/show/" in link_url.lower():
+        try:
+            resp = session.get(link_url, timeout=10)
+            if resp.status_code == 200:
+                img = BeautifulSoup(resp.text, "html.parser").select_one("img#image")
+                if img and img.get("src"):
+                    return img["src"]
+        except requests.RequestException:
+            pass
+        return None
+
     if re.search(r"\.(jpg|jpeg|png|gif|webp)$", link_url, re.IGNORECASE):
         if "imagetwist.com" in link_url:
             return re.sub(r"/th/", "/i/", link_url)
         return link_url
-
-    if "pixhost.to" in link_url:
-        m = re.search(r"pixhost\.to/show/(\d+)/(\d+_[^/]+)", link_url)
-        if m:
-            return f"https://img2.pixhost.to/images/{m.group(1)}/{m.group(2)}"
 
     try:
         resp = session.get(link_url, timeout=10, allow_redirects=True)
@@ -737,8 +747,24 @@ def embed_metadata(file_path, keywords_list):
             return False
 
 
+failures_lock = threading.Lock()
+
+
+def log_failure(url, reason, meta=None, direct_url=None):
+    """Says why a picture wasn't saved: a WARNING in scraper.log, and a line in failed_downloads.log next to the pictures
+    (time, thread, link, the address tried if different, reason; tab separated)."""
+    thread = (meta or {}).get("thread_title") or ""
+    logging.warning("Not saved: %s | %s | %s", reason, url, thread)
+    line = "\t".join([_iso(), thread, url, direct_url if direct_url and direct_url != url else "", reason.replace("\n", " ")])
+    try:
+        with failures_lock, open(FAILURES_FILE, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except OSError as e:
+        logging.warning("Couldn't write %s: %s", FAILURES_FILE, e)
+
+
 def download_file(url, celeb_root_folder, history, keywords_list, meta=None):
-    ok = _download_file(url, celeb_root_folder, history, keywords_list, meta)
+    ok =_download_file(url, celeb_root_folder, history, keywords_list, meta)
     if not ok:
         status.bump("failed_downloads")
     return ok
@@ -752,11 +778,13 @@ def _download_file(url, celeb_root_folder, history, keywords_list, meta=None):
 
     direct_url = resolve_image_host_url(url)
     if not direct_url:
+        log_failure(url, "no picture found at this link (the host page had no og:image, or didn't load)", meta)
         return False
 
     try:
         res = session.get(direct_url, stream=True, timeout=15)
         if res.status_code != 200 or "text/html" in res.headers.get("Content-Type", ""):
+            log_failure(url, f"HTTP {res.status_code}, {res.headers.get('Content-Type', 'no content type')}", meta, direct_url)
             return False
 
         content = bytearray()
@@ -764,7 +792,11 @@ def _download_file(url, celeb_root_folder, history, keywords_list, meta=None):
             content.extend(chunk)
         content = bytes(content)
 
-        if len(content) < MIN_FILE_SIZE_BYTES or not image_ok(content):
+        if len(content) < MIN_FILE_SIZE_BYTES:
+            log_failure(url, f"too small ({len(content)} bytes, minimum {MIN_FILE_SIZE_BYTES})", meta, direct_url)
+            return False
+        if not image_ok(content):
+            log_failure(url, f"not a readable image ({len(content)} bytes)", meta, direct_url)
             return False
 
         current_phash = phash_of(content)
@@ -822,7 +854,7 @@ def _download_file(url, celeb_root_folder, history, keywords_list, meta=None):
         return True
 
     except Exception as e:
-        logging.error("Download failed for %s: %s", url, e)
+        log_failure(url, f"error: {type(e).__name__}: {e}", meta, direct_url)
         return False
 
 
@@ -830,6 +862,35 @@ SUPPORTED_HOSTS = [
     "imagetwist.com", "pixhost.to", "pixhost.org", "imgbox.com",
     "imagevenue.com", "postimg.cc",
 ]
+
+
+def listing_threads(soup):
+    """(title, href) for each normal thread in a forum listing, newest activity first. Handles XenForo 2 (structItem) and
+    XenForo 1 (discussionListItem, which phun.org runs); pinned XenForo 1 threads (rules, requests) are skipped."""
+    found = []
+    for a_tag in soup.select("div.structItem-title a[data-tp-primary='on']"):
+        if a_tag.get("href"):
+            found.append((a_tag.text.strip(), a_tag["href"]))
+    for li in soup.select("li.discussionListItem"):
+        if "sticky" in (li.get("class") or []):
+            continue
+        for a_tag in li.select("h3.title a[href]"):
+            if a_tag["href"].startswith("threads/"):
+                found.append((a_tag.text.strip(), a_tag["href"]))
+    return found
+
+
+def post_bodies(soup):
+    """The message bodies of a thread page (XenForo 2 `article.message-body`, XenForo 1 `blockquote.messageText`)."""
+    return soup.select("article.message-body, blockquote.messageText")
+
+
+def direct_from_thumbnail(href, thumb_src):
+    """imagetwist links are HTML pages even when they end in .jpg; the picture itself is the thumbnail's address with
+    /th/ changed to /i/. Returns None when this isn't an imagetwist link with a thumbnail."""
+    if thumb_src and "imagetwist.com" in href.lower() and "/th/" in thumb_src:
+        return thumb_src.replace("/th/", "/i/", 1)
+    return None
 
 
 def process_thread(thread_title, thread_url, history):
@@ -852,21 +913,22 @@ def process_thread(thread_title, thread_url, history):
         return False  # transient errors must not permanently mark the thread done
 
     soup = BeautifulSoup(resp.text, "html.parser")
-    first_post = soup.select_one("article.message-body")
-    post_text = first_post.get_text() if first_post else ""
+    posts = post_bodies(soup)
+    post_text = posts[0].get_text() if posts else ""
 
     celeb_name, keywords_list = extract_metadata_tags(thread_title, post_text)
     celeb_folder = os.path.join(DOWNLOAD_DIR, sanitize_filename(celeb_name))
     os.makedirs(celeb_folder, exist_ok=True)
 
     links = []
-    for post in soup.select("article.message-body"):
+    for post in posts:
         for a in post.find_all("a", href=True):
             href = a["href"]
             if any(h in href.lower() for h in SUPPORTED_HOSTS) or re.search(
                 r"\.(jpg|jpeg|png|webp)$", href, re.IGNORECASE
             ):
-                links.append(href)
+                thumb = a.find("img")
+                links.append(direct_from_thumbnail(href, thumb.get("src") if thumb else None) or href)
     links = list(dict.fromkeys(links))
 
     post_dt = parse_title_date(thread_title)
@@ -912,15 +974,14 @@ def run_cycle():
 
         soup = BeautifulSoup(resp.text, "html.parser")
         pending = []
-        for a_tag in soup.select("div.structItem-title a[data-tp-primary='on']"):
-            href = a_tag.get("href")
-            if not href:
-                continue
-            url = urljoin(FORUM_URL, href)
+        for title, href in listing_threads(soup):
+            url = urljoin(FORUM_BASE, href)
             with history_lock:
                 if url in history["processed_threads"]:
                     continue
-            pending.append((a_tag.text.strip(), url))
+            pending.append((title, url))
+        if not pending and not history["processed_threads"]:
+            logging.warning("The forum list had no threads at all; its markup may have changed")
 
         status.update(threads_total=len(pending), force=True)
         logging.info("%d new threads to process", len(pending))
