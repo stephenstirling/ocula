@@ -193,7 +193,7 @@ public sealed class PersonFolderTaggingService
             };
         }
 
-        var folderNames = new HashSet<string>(paths.Select(Path.GetFileName), StringComparer.OrdinalIgnoreCase);
+        var folderNames = new HashSet<string>(paths.Select(p => Path.GetFileName(p) ?? string.Empty).Where(n => n.Length > 0), StringComparer.OrdinalIgnoreCase);
         var matches = cards.Where(card =>
             folderNames.Contains(card.GroupName) ||
             folderNames.Contains(card.Facts.Name ?? string.Empty) ||
