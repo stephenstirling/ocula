@@ -38,6 +38,7 @@ public sealed partial class SettingsWindow : Window
         // Folders
         foreach (var folder in main.RootFolders) _folders.Add(folder);
         FoldersExpander.ItemsSource = _folders;
+        PersonFolderInheritanceToggle.IsOn = AppSettings.PersonFolderTagIncludeSubfolders;
 
         // Privacy
         CameraToggle.IsOn = AppSettings.OnlineCameraLookup;
@@ -95,6 +96,31 @@ public sealed partial class SettingsWindow : Window
 
         UpdateCacheSize();
         _loading = false;
+    }
+
+    private void PersonFolderInheritance_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        AppSettings.PersonFolderTagIncludeSubfolders = PersonFolderInheritanceToggle.IsOn;
+    }
+
+    private async void PersonFolderBackfill_Click(object sender, RoutedEventArgs e)
+    {
+        var confirm = new ContentDialog
+        {
+            XamlRoot = Root.XamlRoot,
+            RequestedTheme = Root.ActualTheme,
+            Title = "Reapply folder keywords?",
+            Content = "Ocula will revisit every photo in the configured library folders and merge missing keywords from matching saved person cards. Existing keywords, ratings and labels are preserved. Ambiguous matches are skipped. This can take a while, especially on a network library.",
+            PrimaryButtonText = "Reapply",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close
+        };
+        if (await confirm.ShowAsync() != ContentDialogResult.Primary) return;
+
+        PersonFolderBackfillButton.IsEnabled = false;
+        _main.ReapplyPersonFolderTags();
+        PersonFolderBackfillButton.IsEnabled = true;
     }
 
     // ---------- Appearance ----------
