@@ -148,10 +148,10 @@ public sealed partial class ScraperPage : Page
         }
         var image = tile.Image;
         DetailCard.Visibility = Visibility.Visible;
-        DetailName.Text = image.Name;
+        DetailName.Text = image.Person;
         DetailMeta.Text = string.Join(" · ", new[]
         {
-            image.SizeText, image.DownloadedAt is { } d ? $"saved {d.ToLocalTime():g}" : null,
+            image.FileLabel, image.SizeText, image.DownloadedAt is { } d ? $"saved {d.ToLocalTime():g}" : null,
             image.ThreadTitle is { Length: > 0 } t ? $"from “{t}”" : null
         }.Where(s => !string.IsNullOrEmpty(s)));
         DetailTags.Text = "Reading the file…";

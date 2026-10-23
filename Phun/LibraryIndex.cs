@@ -21,6 +21,12 @@ public record IndexedImage(
 {
     public string Name => Path.GetFileName(FullPath);
 
+    /// <summary>Who is in the picture, for captions: the person the scraper filed it under, or the file name when it recorded none.</summary>
+    public string Person => string.IsNullOrWhiteSpace(Celebrity) ? Name : Celebrity.Trim();
+
+    /// <summary>The file name to show beneath <see cref="Person"/>; empty when <see cref="Person"/> already is the file name.</summary>
+    public string FileLabel => string.IsNullOrWhiteSpace(Celebrity) ? "" : Name;
+
     /// <summary>"Upgraded" when the scraper replaced the picture with a larger copy, otherwise "Saved".</summary>
     public string Badge => Upgraded ? "Upgraded" : "Saved";
 

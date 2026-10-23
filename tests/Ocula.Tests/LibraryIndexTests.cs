@@ -159,4 +159,33 @@ public class LibraryIndexTests : IDisposable
         Assert.Equal(new[] { "Red Carpet", "Dress" }, image.MissingFrom(new[] { "Celebrity Name" }));
         Assert.Equal(3, image.MissingFrom(Array.Empty<string>()).Count);
     }
+
+    [Fact]
+    public void A_tile_is_captioned_with_the_person_and_keeps_the_file_name_underneath()
+    {
+        var image = new IndexedImage(1, "Kelly Brook/Bikini/3iz2aec9s6xo.jpg", "Kelly Brook", "Bikini", Array.Empty<string>(), null, null, null, null, 1, 1, 1, false, null);
+
+        Assert.Equal("Kelly Brook", image.Person);
+        Assert.Equal("3iz2aec9s6xo.jpg", image.FileLabel);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void With_no_person_recorded_the_caption_is_the_file_name_and_nothing_is_repeated_beneath_it(string? celebrity)
+    {
+        var image = new IndexedImage(1, "Margot Robbie/old.jpg", celebrity, null, Array.Empty<string>(), null, null, null, null, 1, 1, 1, false, null);
+
+        Assert.Equal("old.jpg", image.Person);
+        Assert.Equal("", image.FileLabel);
+    }
+
+    [Fact]
+    public void The_person_is_trimmed()
+    {
+        var image = new IndexedImage(1, "x/y.jpg", "  Famke Janssen ", null, Array.Empty<string>(), null, null, null, null, 1, 1, 1, false, null);
+
+        Assert.Equal("Famke Janssen", image.Person);
+    }
 }
