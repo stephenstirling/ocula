@@ -919,6 +919,34 @@ public sealed class IndexService : IDisposable
         return cmd.ExecuteScalar() is string json ? PersonFacts.FromJson(json) : null;
     });
 
+    /// <summary>All visible saved person cards, for cautious matching during photo import.</summary>
+    public Task<List<ResolvedPersonCard>> GetAllPersonCardsAsync() => RunAsync(() =>
+    {
+        var result = new List<ResolvedPersonCard>();
+        using var cmd = _db.CreateCommand();
+        cmd.CommandText = @"
+            SELECT p.id, p.name, c.json
+            FROM people p
+            INNER JOIN person_cards c ON c.person_id = p.id
+            WHERE p.name IS NOT NULL AND length(trim(p.name)) > 0 AND p.hidden = 0";
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            var id = reader.GetInt64(0);
+            var groupName = reader.GetString(1);
+            var facts = PersonFacts.FromJson(reader.GetString(2));
+            if (facts == null) continue;
+            result.Add(new ResolvedPersonCard
+            {
+                PersonId = id,
+                GroupName = groupName,
+                Facts = facts,
+                MatchedTag = string.Empty
+            });
+        }
+        return result;
+    });
+
     /// <summary>
     /// Saved person cards whose group name matches any of <paramref name="names"/>
     /// (case-insensitive), or whose card JSON Name/FullName matches.
