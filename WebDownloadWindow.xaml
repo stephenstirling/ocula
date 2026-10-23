@@ -60,6 +60,9 @@
                         <TextBlock x:Name="PageTitle" Style="{StaticResource SubtitleTextBlockStyle}" TextTrimming="CharacterEllipsis"/>
                         <TextBlock x:Name="PageHost" Style="{StaticResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        <TextBlock x:Name="LinkNote" Visibility="Collapsed" TextWrapping="Wrap"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
                     </StackPanel>
                     <Grid Grid.Row="1" ColumnSpacing="12">
                         <Grid.ColumnDefinitions>

@@ -4,6 +4,8 @@
 const DEFAULTS = { root: "Z:\\Babes", defaultTags: [] };
 const MAX_TAGS = 20;
 const MAX_STRIP = 8;
+// Ocula ticks only pictures whose address contains this (Just Jared's photo bucket); the rest stay listed, unticked.
+const MEDIA = "jj-justjared-media";
 
 const $ = (id) => document.getElementById(id);
 const show = (id) => {
@@ -81,7 +83,7 @@ function addTag(raw) {
 function buildLink() {
   const enc = encodeURIComponent;
   const folder = $("folder").value.trim();
-  let link = "ocula:webdownload?url=" + enc(state.url);
+  let link = "ocula:webdownload?url=" + enc(state.url) + "&media=" + enc(MEDIA);
   if (folder) link += "&folder=" + enc(folder);
   if (state.chips.length) link += "&tags=" + enc(state.chips.map((c) => c.text).join(";"));
   return link;

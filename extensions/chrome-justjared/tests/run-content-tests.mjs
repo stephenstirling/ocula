@@ -122,7 +122,7 @@ test("popup: name chip, suggested folder, user tag and the link", async () => {
   doc.getElementById("copy").click();
   await new Promise((r) => setTimeout(r, 20));
   assert.equal(copied[0],
-    "ocula:webdownload?url=" + encodeURIComponent(pageUrl) +
+    "ocula:webdownload?url=" + encodeURIComponent(pageUrl) + "&media=jj-justjared-media" +
     "&folder=Z%3A%5CBabes%5CBusy%20Philipps&tags=Busy%20Philipps%3Bcandid");
 });
 

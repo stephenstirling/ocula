@@ -31,6 +31,11 @@ public sealed partial class MainWindow
             await OpenPersonLinkAsync(link.Id);
             return;
         }
+        if (link.Verb == "webdownload")
+        {
+            OpenWebDownloadFromLink(link);
+            return;
+        }
 
         var folder = OculaLink.CaptureFolderOrDefault(link.Folder ?? AppSettings.CapturesFolder);
         AppSettings.CapturesFolder = folder;

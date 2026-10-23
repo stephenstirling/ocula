@@ -34,6 +34,13 @@ public sealed partial class WebDownloadWindow : Window
     private CancellationTokenSource? _download;
     private bool _ready;
 
+    // Set by OpenFromLink (the owner's browser extension, docs/CHROME-EXTENSION.md).
+    private string? _linkUrl;                       // page to open once the browser pane has started
+    private bool _grabOnLoad;                       // grab the pictures as soon as that page has loaded
+    private IReadOnlyList<string> _linkTags = Array.Empty<string>();
+    private string? _linkMedia;                     // only pictures whose address has this text start ticked
+    private bool _exactFolder;                      // "Save to" is the final folder, not a root that gets a page-title folder
+
     public WebDownloadWindow(MainWindow main)
     {
         InitializeComponent();
@@ -83,7 +90,14 @@ public sealed partial class WebDownloadWindow : Window
                 e.Handled = true; // open pop-ups in the same pane
                 Browser.CoreWebView2.Navigate(e.Uri);
             };
-            if (UrlBox.Text.Length > 0) Navigate(UrlBox.Text);
+            Browser.CoreWebView2.NavigationCompleted += async (_, e) => await OnNavigationCompletedAsync(e);
+            if (_linkUrl != null)
+            {
+                var url = _linkUrl;
+                _linkUrl = null;
+                Navigate(url, grab: true);
+            }
+            else if (UrlBox.Text.Length > 0) Navigate(UrlBox.Text);
         }
         catch (Exception ex)
         {
@@ -91,8 +105,23 @@ public sealed partial class WebDownloadWindow : Window
         }
     }
 
-    private void Navigate(string text)
+    private void Navigate(string text, bool grab = false)
     {
+        // Only a page a link asked for is grabbed on its own. An address the user types waits for the Grab button, and
+        // leaves the link's tags, picture filter and folder behind.
+        _grabOnLoad = grab;
+        if (!grab)
+        {
+            _linkTags = Array.Empty<string>();
+            _linkMedia = null;
+            LinkNote.Visibility = Visibility.Collapsed;
+            if (_exactFolder)
+            {
+                _exactFolder = false;
+                DestinationBox.Text = AppSettings.WebDestination;
+            }
+        }
+
         text = text.Trim();
         if (text.Length == 0 || Browser.CoreWebView2 == null) return;
         if (!text.Contains("://")) text = "https://" + text;
@@ -131,9 +160,87 @@ public sealed partial class WebDownloadWindow : Window
         if (Browser.CoreWebView2 != null) UrlBox.Text = Browser.CoreWebView2.Source;
     }
 
+    // ================= Opened from a link =================
+
+    /// <summary>
+    /// ocula:webdownload from the browser extension: opens the page, grabs its pictures once it has loaded, ticks the
+    /// tags, and suggests the save folder. Nothing is downloaded until the user presses Download.
+    /// </summary>
+    /// <param name="folder">The folder to save into, already checked to be inside a library folder, or null.</param>
+    /// <param name="media">Only pictures whose address contains this text start ticked (others stay listed, unticked).</param>
+    public void OpenFromLink(string url, IReadOnlyList<string> tags, string? folder, bool folderIgnored, string? media)
+    {
+        _linkTags = tags;
+        _linkMedia = string.IsNullOrEmpty(media) ? null : media;
+        _exactFolder = folder != null;
+        if (folder != null) DestinationBox.Text = folder; // set after _exactFolder, so the note reads right
+        UpdateDestinationNote();
+
+        LinkNote.Text = "Opened from the browser extension." +
+                        (folderIgnored ? " The folder it suggested is outside your library folders, so it was ignored." : string.Empty);
+        LinkNote.Visibility = Visibility.Visible;
+
+        UrlBox.Text = url;
+        ShowBrowser(); // leaves the picker if an earlier page was grabbed
+        if (Browser.CoreWebView2 != null) Navigate(url, grab: true);
+        else _linkUrl = url; // InitialiseBrowserAsync opens it once the pane has started
+    }
+
+    private async Task OnNavigationCompletedAsync(Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs e)
+    {
+        if (!_grabOnLoad) return;
+        // The pane starts on a blank page; wait for a real one.
+        if (!Uri.TryCreate(Browser.CoreWebView2.Source, UriKind.Absolute, out var shown) ||
+            (shown.Scheme != Uri.UriSchemeHttp && shown.Scheme != Uri.UriSchemeHttps)) return;
+        _grabOnLoad = false;
+
+        if (!e.IsSuccess)
+        {
+            ShowMessage("The page didn't load", $"{e.WebErrorStatus}. Check the address or your connection, then try again.");
+            return;
+        }
+        try
+        {
+            await Task.Delay(1500); // let script-built and lazy-loaded pictures appear
+            await GrabAsync();
+        }
+        catch (Exception ex)
+        {
+            DiagnosticLog.Write("Web download: grabbing the page from a link failed", ex);
+        }
+    }
+
+    /// <summary>The link's tags, ticked. A suggested chip with the same label is just ticked.</summary>
+    private void ApplyLinkTags()
+    {
+        foreach (var label in _linkTags)
+        {
+            var existing = _tags.FirstOrDefault(t => string.Equals(t.Label, label, StringComparison.OrdinalIgnoreCase));
+            if (existing != null) existing.On = true;
+            else _tags.Add(new TagChip { Label = label, Reason = "From the browser extension", On = true });
+        }
+        _linkTags = Array.Empty<string>(); // once; a later Grab on the same page keeps what the user ticked
+        if (_tags.Count > 0) NoTagsText.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>With a link's picture filter, only matching pictures stay ticked. The rest are listed, unticked.</summary>
+    private void ApplyLinkMedia()
+    {
+        if (_linkMedia == null) return;
+        foreach (var image in _images)
+        {
+            var matches = image.ThumbUrl.Contains(_linkMedia, StringComparison.OrdinalIgnoreCase) ||
+                          image.FullUrl.Contains(_linkMedia, StringComparison.OrdinalIgnoreCase) ||
+                          (image.LinkUrl?.Contains(_linkMedia, StringComparison.OrdinalIgnoreCase) ?? false);
+            if (!matches) image.Selected = false;
+        }
+    }
+
     // ================= Grab =================
 
-    private async void Grab_Click(object sender, RoutedEventArgs e)
+    private async void Grab_Click(object sender, RoutedEventArgs e) => await GrabAsync();
+
+    private async Task GrabAsync()
     {
         if (Browser.CoreWebView2 == null) return;
         _work?.Cancel();
@@ -161,6 +268,7 @@ public sealed partial class WebDownloadWindow : Window
             PageHost.Text = pageUri.Host;
             _tags.Clear();
             foreach (var chip in TagSuggester.Suggest(_page)) _tags.Add(chip);
+            ApplyLinkTags();
             NoTagsText.Visibility = _tags.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             UpdateDestinationNote();
 
@@ -263,6 +371,7 @@ public sealed partial class WebDownloadWindow : Window
             if (!image.Eligible) image.Selected = false;
             else if (selectEligible && image.CanDownload) image.Selected = true;
         }
+        ApplyLinkMedia();
         UpdateSelection();
     }
 
@@ -316,12 +425,18 @@ public sealed partial class WebDownloadWindow : Window
         UpdateDestinationNote();
     }
 
-    private string TargetFolder() =>
-        Path.Combine(DestinationBox.Text.Trim(), WebDownloader.FolderNameFor(_page?.Title ?? string.Empty));
+    private string TargetFolder() => _exactFolder
+        ? DestinationBox.Text.Trim()
+        : Path.Combine(DestinationBox.Text.Trim(), WebDownloader.FolderNameFor(_page?.Title ?? string.Empty));
 
-    private void UpdateDestinationNote() =>
-        FolderNote.Text = DestinationBox.Text.Trim().Length == 0 ? string.Empty
-            : "Photos go into the folder: " + TargetFolder();
+    private void UpdateDestinationNote()
+    {
+        var text = DestinationBox.Text.Trim();
+        FolderNote.Text = text.Length == 0 ? string.Empty
+            : _exactFolder
+                ? "Photos go straight into this folder (" + (Directory.Exists(text) ? "it already exists" : "it will be created") + ")."
+                : "Photos go into the folder: " + TargetFolder();
+    }
 
     private async void Browse_Click(object sender, RoutedEventArgs e)
     {
@@ -329,7 +444,11 @@ public sealed partial class WebDownloadWindow : Window
         picker.FileTypeFilter.Add("*");
         WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
         var folder = await picker.PickSingleFolderAsync();
-        if (folder != null) DestinationBox.Text = folder.Path;
+        if (folder != null)
+        {
+            _exactFolder = false; // a folder picked here is a root again, with the page title added
+            DestinationBox.Text = folder.Path;
+        }
     }
 
     // ================= Download =================
@@ -347,7 +466,7 @@ public sealed partial class WebDownloadWindow : Window
             return;
         }
 
-        AppSettings.WebDestination = destination;
+        if (!_exactFolder) AppSettings.WebDestination = destination; // a link's folder is for this download only
         AppSettings.WebSaveSource = SourceToggle.IsOn;
 
         var tags = _tags.Where(t => t.On).Select(t => t.Label).ToList();

@@ -683,6 +683,11 @@ the tag suggester have been run only on hand-written pages and fake responses, s
   and the folder is opened in the library.
 - Files: `WebImage.cs`, `PageScanner.cs`, `TagSuggester.cs`, `WebDownloader.cs`, `WebDownloadWindow.xaml(.cs)`,
   `MainWindow.Web.cs`.
+- Browser extension hand-off (`ocula:webdownload`, docs/CHROME-EXTENSION.md; code added October 2026, **not compiled or run on Windows**):
+  `OculaLink` reads `url`, `tags`, `media` and a suggested `folder`; `MainWindow.OpenWebDownloadFromLink` opens `WebDownloadWindow`
+  through `OpenFromLink`, which grabs the page once it has loaded, ticks the link's tags, unticks pictures that don't match `media`, and
+  puts a folder that is inside the library into "Save to" in exact-folder mode (no page-title folder). The user still presses Download.
+  The extension itself is in `extensions/chrome-justjared/` (owner's own use, not published).
 - Checked so far (October 2026): the real grab script was run in headless Edge on **hand-written** XenForo, phpBB and Discourse pages
   (not saved from real sites) and on two plain pages (`tests/Ocula.Tests/ForumGrabTests.cs`, pages in `TestData/forums`). On those it kept
   the post pictures, dropped avatars, signature banners, logos, smilies and quoted posts, kept each thumbnail's link, and found the other

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 
 namespace Ocula.Services;
 
@@ -13,10 +14,15 @@ namespace Ocula.Services;
 /// and, for Porta ("Share people with Porta", see PeopleExport):
 ///   ocula:person?id=&lt;id&gt;                              show the photos of a person named in People
 ///                                                      (the id is the "id" in people-index.json)
+/// and, for the owner's browser extension (docs/CHROME-EXTENSION.md):
+///   ocula:webdownload?url=&lt;page&gt;&amp;folder=&lt;…&gt;&amp;tags=&lt;a;b&gt;&amp;media=&lt;text&gt;
+///                                                      open the Web download window on a page, grab its pictures
+///                                                      and tick the tags; nothing is saved until Download is pressed
 /// Values are percent-encoded (Uri.EscapeDataString). Capta checks that Ocula is installed by
 /// asking Windows whether anything handles "ocula:", so the scheme must stay registered.
 /// </summary>
-public sealed record OculaLink(string Verb, string? File, string? Folder, string? Id = null)
+public sealed record OculaLink(string Verb, string? File, string? Folder, string? Id = null,
+                               string? Url = null, IReadOnlyList<string>? Tags = null, string? Media = null)
 {
     public const string Scheme = "ocula";
 
@@ -47,7 +53,79 @@ public sealed record OculaLink(string Verb, string? File, string? Folder, string
         string? Value(string key) => values.TryGetValue(key, out var v) && v.Length > 0 ? v : null;
         // A person's id is 8 to 32 lower-case hex characters. Anything else is dropped, so it can never reach a query as something else.
         var id = Value("id")?.ToLowerInvariant();
-        return new OculaLink(verb, Value("file"), Value("folder"), id != null && System.Text.RegularExpressions.Regex.IsMatch(id, "^[0-9a-f]{8,32}$") ? id : null);
+
+        // Any web page can launch an ocula: link, so a web download link is checked here and again where it is used.
+        // No usable page address means no link at all.
+        string? url = null, media = null;
+        IReadOnlyList<string>? tags = null;
+        if (verb == "webdownload")
+        {
+            url = WebAddress(Value("url"));
+            if (url == null) return null;
+            tags = ParseTags(Value("tags"));
+            media = Value("media") is { Length: <= MaxMediaLength } m && !m.Any(c => char.IsControl(c) || char.IsWhiteSpace(c)) ? m : null;
+        }
+
+        return new OculaLink(verb, Value("file"), Value("folder"),
+            id != null && System.Text.RegularExpressions.Regex.IsMatch(id, "^[0-9a-f]{8,32}$") ? id : null,
+            url, tags, media);
+    }
+
+    public const int MaxTags = 20;
+    public const int MaxTagLength = 60;
+    public const int MaxMediaLength = 80;
+
+    /// <summary>The address if it is an http or https page with a host and no embedded sign-in, else null.</summary>
+    public static string? WebAddress(string? text) =>
+        Uri.TryCreate(text?.Trim(), UriKind.Absolute, out var uri) &&
+        (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps) &&
+        uri.Host.Length > 0 && uri.UserInfo.Length == 0
+            ? uri.AbsoluteUri
+            : null;
+
+    /// <summary>
+    /// Tags from a ";" separated list: control characters become spaces, runs of white space collapse, empty and
+    /// duplicate (any case) items are dropped, an item over 60 characters is dropped, and at most 20 are kept.
+    /// </summary>
+    public static IReadOnlyList<string> ParseTags(string? text)
+    {
+        var tags = new List<string>();
+        if (string.IsNullOrEmpty(text)) return tags;
+        foreach (var part in text.Split(';'))
+        {
+            var spaced = new string(part.Select(c => char.IsControl(c) ? ' ' : c).ToArray());
+            var tag = string.Join(' ', spaced.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+            if (tag.Length == 0 || tag.Length > MaxTagLength) continue;
+            if (tags.Any(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase))) continue;
+            tags.Add(tag);
+            if (tags.Count == MaxTags) break;
+        }
+        return tags;
+    }
+
+    /// <summary>
+    /// The save folder a web download link suggests, as a full path, only when it is fully qualified and inside one of
+    /// the library folders. Otherwise null, and the window keeps its own default. This stops a web page from steering
+    /// where Ocula writes.
+    /// </summary>
+    public static string? DownloadFolderOrNull(string? folder, IEnumerable<string> libraryFolders)
+    {
+        if (string.IsNullOrWhiteSpace(folder)) return null;
+        try
+        {
+            folder = folder.Trim();
+            if (!Path.IsPathFullyQualified(folder)) return null;
+            var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
+            // GetFullPath lets characters through that Windows won't allow in a name (| * ? and a stream's ":").
+            var afterRoot = full[(Path.GetPathRoot(full) ?? string.Empty).Length..];
+            if (afterRoot.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                         .Any(part => part.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)) return null;
+            return IsInside(full, libraryFolders) ? full : null;
+        }
+        catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return null;
+        }
     }
 
     /// <summary>

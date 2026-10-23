@@ -37,11 +37,13 @@ There are no icons yet, so Chrome shows a letter tile. Add `icons/` and an `icon
 ## The link
 
 ```
-ocula:webdownload?url=<article address>&folder=<save folder>&tags=<tag;tag;...>
+ocula:webdownload?url=<article address>&media=jj-justjared-media&folder=<save folder>&tags=<tag;tag;...>
 ```
 
-Values are percent-encoded. `folder` and `tags` are optional. The Ocula side of this is specified in
-`docs/CHROME-EXTENSION.md`; until it is built, Ocula ignores the link.
+Values are percent-encoded. `folder` and `tags` are optional. `media` tells Ocula to tick only
+pictures from Just Jared's photo bucket and leave anything else on the page unticked. The Ocula side
+is built (`MainWindow.OpenWebDownloadFromLink`, `WebDownloadWindow.OpenFromLink`) and specified in
+`docs/CHROME-EXTENSION.md`. It has not been compiled or run on Windows yet.
 
 ## Privacy
 

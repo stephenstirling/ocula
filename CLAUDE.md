@@ -73,6 +73,9 @@ names for tiles and sidebar entries, a Release MSIX build, and the Map page offl
 - Web download on real pages, including forum threads and the image-host rules (ImageTwist, ImageBam, Pixhost,
   TurboImageHost). Only hand-written forum pages and fake responses have been run (BUILDING.md, Phase 6, lists one
   known problem and some smaller ones).
+- Browser extension hand-off: `ocula:webdownload` (Services/OculaLink.cs, `WebDownloadWindow.OpenFromLink`,
+  docs/CHROME-EXTENSION.md) and the extension in `extensions/chrome-justjared/`. Written without a Windows machine; the
+  link parsing was compiled and checked on Linux, the window code was never compiled or run, and nothing was tried on a real page.
 - Delete / Move to Recycle Bin: tested on copies with the real Delete key, the More menu and the 10-photo
   confirmation (Recycle Bin, grid, selection, library rows); RAW+JPEG pairs were not.
 - Update checks and Store packaging with the Windows App Certification Kit.
