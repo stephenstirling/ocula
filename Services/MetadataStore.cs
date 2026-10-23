@@ -18,8 +18,9 @@ public sealed record UserData(List<string> Tags, int Rating, string? Label);
 /// - JPEG, TIFF, HEIC, JPEG XR: tags and rating go inside the file via the Windows property
 ///   system (System.Keywords, System.Rating). Windows has no property for colour labels,
 ///   so for these files labels live in Ocula's library only.
-/// - RAW and other formats: everything goes in an XMP sidecar next to the image
-///   (IMG_0001.CR2 -> IMG_0001.xmp), the Lightroom convention. The RAW file is never modified.
+/// - PNG, AVIF, RAW and other formats: tags, ratings and labels use an XMP sidecar next to the
+///   image (IMG_0001.CR2 -> IMG_0001.xmp). This avoids relying on Windows property handlers
+///   for formats where embedded keyword/rating support is inconsistent; the image is unchanged.
 /// - RAW+JPEG pairs: both of the above, so the values travel with either file.
 /// </summary>
 public static class MetadataStore
