@@ -47,13 +47,15 @@
                         <FontIcon.RenderTransform><ScaleTransform ScaleX="-1"/></FontIcon.RenderTransform>
                     </FontIcon>
                 </ToggleButton>
-                <Button Click="ImportButton_Click" ToolTipService.ToolTip="Import from a memory card" Margin="6,0,0,0">
+                <Button Click="ImportButton_Click" ToolTipService.ToolTip="Import from a memory card" Margin="6,0,0,0"
+                        AutomationProperties.Name="Import from a memory card">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon Glyph="&#xE896;" FontSize="14"/>
                         <TextBlock Text="Import"/>
                     </StackPanel>
                 </Button>
-                <Button Click="WebButton_Click" ToolTipService.ToolTip="Download images from a web page" Margin="6,0,0,0">
+                <Button Click="WebButton_Click" ToolTipService.ToolTip="Download images from a web page" Margin="6,0,0,0"
+                        AutomationProperties.Name="Web: download images from a web page">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon Glyph="&#xE774;" FontSize="14"/>
                         <TextBlock Text="Web"/>
@@ -138,7 +140,7 @@
                         <FontIcon x:Name="CrawlIcon" Glyph="&#xE769;" FontSize="12"/>
                     </Button>
                 </Grid>
-                <Button Grid.Row="3" HorizontalAlignment="Stretch" Click="AddFolder_Click">
+                <Button Grid.Row="3" HorizontalAlignment="Stretch" Click="AddFolder_Click" AutomationProperties.Name="Add folder">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon Glyph="&#xE710;" FontSize="14"/>
                         <TextBlock Text="Add folder"/>
@@ -581,7 +583,8 @@
                             <ItemsRepeater.ItemTemplate>
                                 <DataTemplate>
                                     <Button Tag="{Binding}" Click="RemoveTag_Click" HorizontalAlignment="Stretch"
-                                            HorizontalContentAlignment="Stretch" Padding="10,4" ToolTipService.ToolTip="Remove tag">
+                                            HorizontalContentAlignment="Stretch" Padding="10,4" ToolTipService.ToolTip="Remove tag"
+                                            AutomationProperties.Name="{Binding}">
                                         <Grid ColumnSpacing="6">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*"/>
@@ -609,7 +612,8 @@
                                 <ItemsRepeater.ItemTemplate>
                                     <DataTemplate>
                                         <Button Tag="{Binding}" Click="Suggestion_Click" HorizontalAlignment="Stretch"
-                                                HorizontalContentAlignment="Stretch" Padding="10,4" ToolTipService.ToolTip="Add this tag">
+                                                HorizontalContentAlignment="Stretch" Padding="10,4" ToolTipService.ToolTip="Add this tag"
+                                                AutomationProperties.Name="{Binding}">
                                             <Grid ColumnSpacing="6">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="Auto"/>
@@ -629,7 +633,8 @@
 
                     <StackPanel Spacing="8">
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button Style="{StaticResource AccentButtonStyle}" Click="Export_Click" ToolTipService.ToolTip="Export (Ctrl+E)">
+                            <Button Style="{StaticResource AccentButtonStyle}" Click="Export_Click" ToolTipService.ToolTip="Export (Ctrl+E)"
+                                    AutomationProperties.Name="Export">
                                 <Button.KeyboardAccelerators>
                                     <KeyboardAccelerator Modifiers="Control" Key="E"/>
                                 </Button.KeyboardAccelerators>
@@ -638,7 +643,7 @@
                                     <TextBlock Text="Export…"/>
                                 </StackPanel>
                             </Button>
-                            <Button Click="Share_Click" ToolTipService.ToolTip="Share">
+                            <Button Click="Share_Click" ToolTipService.ToolTip="Share" AutomationProperties.Name="Share">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <FontIcon Glyph="&#xE72D;" FontSize="14"/>
                                     <TextBlock Text="Share"/>
@@ -646,7 +651,7 @@
                             </Button>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button Click="OpenInPhotos_Click">
+                            <Button Click="OpenInPhotos_Click" AutomationProperties.Name="Open in Photos">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <FontIcon Glyph="&#xE8A7;" FontSize="14"/>
                                     <TextBlock Text="Open in Photos"/>
@@ -655,7 +660,8 @@
                             <Button Content="Open with…" Click="OpenWith_Click"/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <SplitButton x:Name="EditButton" Click="EditButton_Click">
+                            <SplitButton x:Name="EditButton" Click="EditButton_Click"
+                                         AutomationProperties.Name="{Binding Text, ElementName=EditButtonText}">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <FontIcon Glyph="&#xE70F;" FontSize="14"/>
                                     <TextBlock x:Name="EditButtonText" Text="Edit in…"/>
