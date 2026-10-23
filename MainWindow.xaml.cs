@@ -164,6 +164,12 @@ public sealed partial class MainWindow : Window
         _ready = true;
     }
 
+    /// <summary>Revisit the library so saved person-card keywords can be applied to existing photos.</summary>
+    public void ReapplyPersonFolderTags()
+    {
+        _crawler.Start(RootFolders, forceRetag: true);
+    }
+
     // ================= Theme =================
 
     private void ThemePicker_SelectionChanged(object sender, SelectionChangedEventArgs e)
