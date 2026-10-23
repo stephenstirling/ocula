@@ -173,7 +173,7 @@ class MultiEngineReverseSearch:
     def _yandex_original_urls(text):
         """Best-effort extraction from Yandex's embedded result data."""
         text = html_lib.unescape(text or "")
-        text = text.replace("\\\\/", "/").replace("\\u0026", "&").replace("\\\\u0026", "&")
+        text = text.replace("\\/", "/").replace("\\u0026", "&").replace("\\u0026", "&")
         candidates = []
         # Keep the same original.url pattern used by the URL-search implementation.
         for match in re.findall(
@@ -181,8 +181,8 @@ class MultiEngineReverseSearch:
             text,
             re.IGNORECASE,
         ):
-            url = match.replace("\\\\/", "/").replace("\\u0026", "&").replace("\\\\u0026", "&")
-            url = url.replace("\\\\", "")
+            url = match.replace("\\/", "/").replace("\\u0026", "&").replace("\\u0026", "&")
+            url = url.replace("\\", "")
             if url.startswith(("http://", "https://")):
                 candidates.append(url)
         return candidates
@@ -309,7 +309,7 @@ class MultiEngineReverseSearch:
                     return []
                 matches = re.findall(r'murl(?:&quot;|")\s*:\s*(?:&quot;|")(https?://[^"&]+)',
                                      resp.text)
-                candidates.extend(html_lib.unescape(m).replace("\\\\/", "/") for m in matches[:10])
+                candidates.extend(html_lib.unescape(m).replace("\\/", "/") for m in matches[:10])
             else:
                 logging.warning("Bing URL reverse search returned HTTP %s or an empty response",
                                 resp.status_code)
@@ -343,7 +343,7 @@ class MultiEngineReverseSearch:
             for candidate in candidates:
                 if not isinstance(candidate, str):
                     continue
-                candidate = html_lib.unescape(candidate.strip()).replace("\\\\/", "/")
+                candidate = html_lib.unescape(candidate.strip()).replace("\\/", "/")
                 if (not candidate.startswith(("http://", "https://"))
                         or candidate == original_url or candidate in seen):
                     continue
