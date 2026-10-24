@@ -170,6 +170,7 @@ class RetagTests(unittest.TestCase):
         with closing(sqlite3.connect(self.db)) as c, c:
             c.executescript(SCHEMA)
         self.s["LOG_FILE"] = os.path.join(self.root, "scraper.log")
+        self.s["RETAG_FILE"] = os.path.join(self.root, "retag_list.txt")
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -205,7 +206,18 @@ class RetagTests(unittest.TestCase):
         self.assertEqual(self.tagged, [(path, ["Callina Liang"])])
 
     def test_no_log_means_nothing_to_do(self):
+        self.s["RETAG_FILE"] = os.path.join(self.root, "retag_list.txt")
         self.assertEqual(self.s["retag_logged_failures"](), 0)
+
+    def test_files_named_in_the_retag_list_are_tagged_again_even_when_the_log_has_forgotten_them(self):
+        folder = os.path.join(self.root, "Elsa Hosk")
+        os.makedirs(folder)
+        path = os.path.join(folder, "a.jpg")
+        open(path, "wb").write(b"x")
+        self.s["RETAG_FILE"] = os.path.join(self.root, "retag_list.txt")
+        open(self.s["RETAG_FILE"], "w", encoding="utf-8").write("# the Getty one\nElsa Hosk/a.jpg\nElsa Hosk/not-there.jpg\n\n")
+        self.assertEqual(self.s["retag_logged_failures"](), 1)
+        self.assertEqual(self.tagged, [(path, ["Elsa Hosk"])])
 
 
 class CaseVariantTests(unittest.TestCase):

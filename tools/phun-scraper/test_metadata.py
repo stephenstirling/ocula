@@ -12,7 +12,7 @@ import threading
 import unittest
 
 SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "phun_scraper.py")
-WANTED = {"IPTC_EXTS", "metadata_tags_for", "_as_list", "embed_metadata", "_write_and_read_back"}
+WANTED = {"IPTC_EXTS", "metadata_tags_for", "_as_list", "embed_metadata", "_write_and_read_back", "exiftool_detail"}
 
 
 class FakeStatus:
@@ -53,9 +53,13 @@ class FakeExifTool:
     def __exit__(self, *a):
         return False
 
+    heal_on_minor = False
+
     def set_tags(self, files, tags, params=None):
         if FakeExifTool.fail_on_write:
             raise RuntimeError("exiftool failed")
+        if FakeExifTool.heal_on_minor and "-m" in (params or []):
+            FakeExifTool.drop = ()          # ignoring minor errors was enough
         FakeExifTool.written.append((files[0], dict(tags), list(params or [])))
 
     executed = []
@@ -76,7 +80,7 @@ class FakeExifTool:
 class MetadataTests(unittest.TestCase):
     def setUp(self):
         FakeExifTool.written, FakeExifTool.drop, FakeExifTool.fail_on_write = [], (), False
-        FakeExifTool.executed, FakeExifTool.heal_on_execute = [], False
+        FakeExifTool.executed, FakeExifTool.heal_on_execute, FakeExifTool.heal_on_minor = [], False, False
         logging.disable(logging.CRITICAL)
         self.scope, self.status = load(FakeExifTool)
 
@@ -128,8 +132,41 @@ class MetadataTests(unittest.TestCase):
         self.assertTrue(scope["embed_metadata"]("x.jpg", ["Elsa Hosk"]))
         self.assertEqual(len(FakeExifTool.executed), 1)
         self.assertIn("-XMP:all=", FakeExifTool.executed[0])
-        self.assertEqual(len(FakeExifTool.written), 2)   # written twice: once normally, once after the block was removed
+        self.assertEqual(len(FakeExifTool.written), 3)   # written normally, again ignoring minor errors, and once more after the block was removed
         self.assertEqual(status.bumps, [])               # and it is not counted as a failure
+
+    def test_ignoring_minor_errors_is_tried_before_anything_is_removed(self):
+        FakeExifTool.drop = ("Elsa Hosk",)
+        FakeExifTool.heal_on_minor = True                # the -m retry is enough
+        scope, status = load(FakeExifTool)
+        self.assertTrue(scope["embed_metadata"]("x.jpg", ["Elsa Hosk"]))
+        self.assertEqual(FakeExifTool.executed, [])      # the file's own XMP block was left alone
+        self.assertEqual(len(FakeExifTool.written), 2)
+        self.assertIn("-m", FakeExifTool.written[1][2])
+
+    def test_an_exiftool_error_on_the_first_write_still_gets_the_later_attempts(self):
+        calls = {"n": 0}
+
+        class FailsOnce(FakeExifTool):
+            def set_tags(self, files, tags, params=None):
+                calls["n"] += 1
+                if calls["n"] == 1:
+                    raise RuntimeError("execute returned a non-zero exit status: 1")
+                return super().set_tags(files, tags, params)
+        scope, status = load(FailsOnce)
+        self.assertTrue(scope["embed_metadata"]("x.jpg", ["Kelly Brook"]))
+        self.assertEqual(status.bumps, [])
+
+    def test_the_log_carries_exiftools_own_message(self):
+        class Refuses(FakeExifTool):
+            def set_tags(self, files, tags, params=None):
+                error = RuntimeError("execute returned a non-zero exit status: 1")
+                error.stderr = "Error: Bad format (-2) for XMP block in x.jpg"
+                raise error
+        scope, status = load(Refuses)
+        self.assertFalse(scope["embed_metadata"]("x.jpg", ["Kelly Brook"]))
+        self.assertEqual(status.bumps, ["metadata_failed"])
+        self.assertIn("Bad format (-2) for XMP block", status.events[-1][1])
 
     def test_a_file_whose_xmp_is_fine_is_never_stripped(self):
         scope, status = load(FakeExifTool)
