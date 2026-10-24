@@ -733,6 +733,50 @@ def fix_celebrity_names(dry_run=False):
     return moved
 
 
+def plan_alias_tags(rows, aliases):
+    """`rows` are (id, rel_path, tags_json); `aliases` is {name_key(wrong name): right name}. The pictures that still carry a wrong name as a
+    tag (the other person's copies of "Kate & Rooney Mara" are tagged "Kate" until "Kate" is an alias of "Kate Mara"), with the corrected
+    list: the right name in the wrong one's place, no name twice."""
+    plan = []
+    for image_id, rel_path, tags_json in rows:
+        try:
+            tags = json.loads(tags_json) if tags_json else []
+        except ValueError:
+            continue
+        fixed = list(dict.fromkeys(aliases.get(name_key(t), t) if isinstance(t, str) else t for t in tags))
+        if fixed != tags:
+            plan.append({"id": image_id, "rel_path": rel_path, "tags": fixed})
+    return plan
+
+
+def fix_alias_tags():
+    """Corrects the name tags (in the file and the index) of pictures that carry a name from name_aliases.txt. Runs at every start, after
+    the names are loaded, and does nothing once there are none. Returns how many pictures were re-tagged."""
+    if not _aliases:
+        return 0
+    with closing(_library_connect()) as conn:
+        rows = conn.execute("SELECT id, rel_path, tags FROM images").fetchall()
+    plan = plan_alias_tags(rows, _aliases)
+    if not plan:
+        return 0
+    logging.info("Alias tags: %d pictures carry a name that is an alias", len(plan))
+    done = 0
+    for item in plan:
+        path = os.path.join(DOWNLOAD_DIR, *item["rel_path"].split("/"))
+        try:
+            if os.path.exists(path):
+                embed_metadata(path, item["tags"])      # failures are logged and counted there; the index is corrected anyway
+            with db_lock, closing(_library_connect()) as conn, conn:
+                conn.execute("UPDATE images SET tags=? WHERE id=?", (json.dumps(item["tags"], ensure_ascii=False), item["id"]))
+                conn.execute("DELETE FROM image_tags WHERE image_id=?", (item["id"],))
+                conn.executemany("INSERT OR IGNORE INTO image_tags(image_id, tag) VALUES (?, ?)", [(item["id"], t) for t in item["tags"]])
+            done += 1
+        except Exception as e:
+            logging.error("Alias tags failed for %s: %s", item["rel_path"], e)
+    logging.info("Alias tags: %d of %d pictures re-tagged", done, len(plan))
+    return done
+
+
 def plan_second_people(rows, people_for_title, existing_rel_paths, canon=None):
     """Pictures from a thread that names two people ("X and Y ...") that are filed under X only. `rows` are (id, rel_path, celebrity,
     category, tags_json, thread_title, source_url, thread_url, post_date, phash, upgraded). For each picture that has no copy under the
@@ -1887,6 +1931,7 @@ def main():
     try:
         fix_folder_names()                  # folders whose name ends in a dot, which Windows can't open
         fix_celebrity_names()
+        fix_alias_tags()                    # the other person's pictures of a title whose first name is an alias
         fix_second_people()
         reindex_existing()                  # pictures saved but never indexed (the scraper was stopped mid-save)
         retag_logged_failures()             # pictures the log says could not be tagged
