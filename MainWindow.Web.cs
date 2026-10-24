@@ -36,7 +36,7 @@ public sealed partial class MainWindow
         var folder = OculaLink.DownloadFolderOrNull(link.Folder, RootFolders);
         var web = EnsureWebWindow();
         web.OpenFromLink(link.Url, link.Tags ?? Array.Empty<string>(), folder,
-                         folderIgnored: !string.IsNullOrWhiteSpace(link.Folder) && folder == null, media: link.Media);
+                         folderIgnored: !string.IsNullOrWhiteSpace(link.Folder) && folder == null, media: link.Media, trim: link.TrimJustJared);
         web.Activate();
     }
 

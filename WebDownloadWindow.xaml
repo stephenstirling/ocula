@@ -151,6 +151,10 @@
 
                             <ToggleSwitch x:Name="SourceToggle" Header="Save the source in each photo"
                                           OnContent="Adds the site and page title as tags" OffContent="Not saved"/>
+
+                            <ToggleSwitch x:Name="TrimToggle" Header="Trim the Just Jared frame and logo"
+                                          OnContent="Cuts the yellow frame and the corner logo; photos are saved again as JPEG (quality 95)"
+                                          OffContent="Photos are saved untouched"/>
                         </StackPanel>
                     </ScrollViewer>
                 </Border>

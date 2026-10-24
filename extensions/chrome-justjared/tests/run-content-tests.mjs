@@ -118,7 +118,7 @@ async function popupFor(scanResult, settings = {}) {
   const w = dom.window;
   const copied = [];
   w.chrome = {
-    storage: { local: { get: async (d) => ({ ...d, ...settings }) } },
+    storage: { local: { get: async (d) => ({ ...d, ...settings }), set: async () => {} } },
     tabs: {
       query: async () => [{ id: 1, url: pageUrl }],
       sendMessage: async () => scanResult,
@@ -144,7 +144,7 @@ test("popup: name chip, suggested folder, user tag and the link", async () => {
   doc.getElementById("copy").click();
   await new Promise((r) => setTimeout(r, 20));
   assert.equal(copied[0],
-    "ocula:webdownload?url=" + encodeURIComponent(pageUrl) + "&media=jj-justjared-media" +
+    "ocula:webdownload?url=" + encodeURIComponent(pageUrl) + "&media=jj-justjared-media&trim=justjared" +
     "&folder=Z%3A%5CBabes%5CBusy%20Philipps&tags=Busy%20Philipps%3Bcandid");
 });
 
@@ -161,6 +161,17 @@ test("popup: empty tag, duplicate tag and a relative folder each show an error",
   await new Promise((r) => setTimeout(r, 20));
   assert.match(doc.getElementById("folderErr").textContent, /full path/);
   assert.equal(copied.length, 0);
+});
+
+test("popup: the trim box is ticked by default, can be cleared, and leaves the link without trim", async () => {
+  const { copied, doc } = await popupFor(scanned);
+  assert.equal(doc.getElementById("trim").checked, true);
+  doc.getElementById("trim").checked = false;
+  doc.getElementById("copy").click();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.ok(!copied[0].includes("trim="));
+  const off = await popupFor(scanned, { trim: false });
+  assert.equal(off.doc.getElementById("trim").checked, false);
 });
 
 test("popup: removing the name chip clears the untouched folder", async () => {

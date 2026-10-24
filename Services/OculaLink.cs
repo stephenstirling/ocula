@@ -22,7 +22,7 @@ namespace Ocula.Services;
 /// asking Windows whether anything handles "ocula:", so the scheme must stay registered.
 /// </summary>
 public sealed record OculaLink(string Verb, string? File, string? Folder, string? Id = null,
-                               string? Url = null, IReadOnlyList<string>? Tags = null, string? Media = null)
+                               string? Url = null, IReadOnlyList<string>? Tags = null, string? Media = null, bool TrimJustJared = false)
 {
     public const string Scheme = "ocula";
 
@@ -57,18 +57,20 @@ public sealed record OculaLink(string Verb, string? File, string? Folder, string
         // Any web page can launch an ocula: link, so a web download link is checked here and again where it is used.
         // No usable page address means no link at all.
         string? url = null, media = null;
+        var trim = false;
         IReadOnlyList<string>? tags = null;
         if (verb == "webdownload")
         {
             url = WebAddress(Value("url"));
             if (url == null) return null;
             tags = ParseTags(Value("tags"));
+            trim = string.Equals(Value("trim"), "justjared", StringComparison.OrdinalIgnoreCase);
             media = Value("media") is { Length: <= MaxMediaLength } m && !m.Any(c => char.IsControl(c) || char.IsWhiteSpace(c)) ? m : null;
         }
 
         return new OculaLink(verb, Value("file"), Value("folder"),
             id != null && System.Text.RegularExpressions.Regex.IsMatch(id, "^[0-9a-f]{8,32}$") ? id : null,
-            url, tags, media);
+            url, tags, media, trim);
     }
 
     public const int MaxTags = 20;

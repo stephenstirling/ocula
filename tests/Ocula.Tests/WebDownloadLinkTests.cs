@@ -156,4 +156,13 @@ public class WebDownloadLinkTests
 
         Assert.Equal("webdownload", link!.Verb);
     }
+
+    [Fact]
+    public void The_trim_option_is_read_only_when_it_says_justjared()
+    {
+        Assert.True(OculaLink.Parse("ocula:webdownload?url=https%3A%2F%2Fexample.com%2Fa&trim=justjared")!.TrimJustJared);
+        Assert.True(OculaLink.Parse("ocula:webdownload?url=https%3A%2F%2Fexample.com%2Fa&trim=JustJared")!.TrimJustJared);
+        Assert.False(OculaLink.Parse("ocula:webdownload?url=https%3A%2F%2Fexample.com%2Fa&trim=yes")!.TrimJustJared);
+        Assert.False(OculaLink.Parse("ocula:webdownload?url=https%3A%2F%2Fexample.com%2Fa")!.TrimJustJared);
+    }
 }

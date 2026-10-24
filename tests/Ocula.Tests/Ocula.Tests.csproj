@@ -33,6 +33,8 @@
     <Compile Include="..\..\Services\WebImage.cs" Link="App\WebImage.cs" />
     <Compile Include="..\..\Services\TagSuggester.cs" Link="App\TagSuggester.cs" />
     <Compile Include="..\..\Services\BodyFocusedWords.cs" Link="App\BodyFocusedWords.cs" />
+    <Compile Include="..\..\Services\JustJaredTrimPlan.cs" Link="App\JustJaredTrimPlan.cs" />
+    <Compile Include="..\..\Services\JustJaredTrim.cs" Link="App\JustJaredTrim.cs" />
     <Compile Include="..\..\Services\PersonLookup.cs" Link="App\PersonLookup.cs" />
     <Compile Include="..\..\Services\PersonCardTagBuilder.cs" Link="App\PersonCardTagBuilder.cs" />
     <Compile Include="..\..\Services\ApiIdentity.cs" Link="App\ApiIdentity.cs" />

@@ -12,7 +12,7 @@ xunit; its Windows-path cases need the PC. Never tried on a real Just Jared page
 ## The link
 
 ```
-ocula:webdownload?url=<article address>&media=<text>&folder=<save folder>&tags=<tag;tag;...>
+ocula:webdownload?url=<article address>&media=<text>&trim=justjared&folder=<save folder>&tags=<tag;tag;...>
 ```
 
 Values are percent-encoded with `encodeURIComponent` (so a space is `%20`, which `Uri.UnescapeDataString`
@@ -22,6 +22,7 @@ reads correctly; a `+` is not a space). Everything except `url` is optional.
 | --- | --- | --- |
 | `url` | The article to open | Required. `http` or `https`, with a host and no embedded sign-in. Anything else (`file:`, `javascript:`, `ocula:`, nothing) drops the whole link. |
 | `media` | Only pictures whose address contains this text start ticked | At most 80 characters, no white space or control characters, otherwise ignored. The extension sends `jj-justjared-media`. |
+| `trim` | Turns on "Trim the Just Jared frame and logo" | Only the exact value `justjared` (any case) counts; anything else leaves it off. |
 | `folder` | Suggested "Save to" folder, the **final** folder | Used only if fully qualified, free of characters Windows rejects in a name, **and** inside a library folder (`DownloadFolderOrNull`, which uses `IsInside` on the normalised path, so `..` can't climb out). Otherwise ignored, a note says so, and the window keeps its own default. |
 | `tags` | Tags to tick, separated by `;` | Control characters become spaces, white space collapses, empty and duplicate (any case) items are dropped, an item over 60 characters is dropped (not cut), at most 20 are kept. |
 
@@ -53,6 +54,19 @@ existing Download button**.
    folder was outside the library and ignored.
 8. Downloading, tagging (`MainWindow.TagDownloadsAsync`) and opening the folder in the library are the
    existing code paths, unchanged.
+
+## Choosing pictures, and trimming
+
+- **Unticking pictures happens in Ocula**, not the extension: the popup only shows a small strip. In Ocula's picker a click on a
+  picture ticks or unticks it, and "Select all" flips the lot; only ticked pictures download.
+- **Trim** (`Services/JustJaredTrimPlan.cs`, `JustJaredTrim.cs`; the "Trim the Just Jared frame and logo" switch in the picker).
+  Off unless the link says `trim=justjared` or the user turns it on. After the download, each saved file loses the 3-pixel yellow
+  frame (4 pixels are cut from every edge) and, when yellow lettering is found in the bottom-right corner, everything below
+  16 pixels above it. Photos without a logo (a sonogram, say) lose only the frame. A cut that would remove more than half the width
+  or 30% of the height is refused. The plan was measured on three real photos from one article (the logo lettering sits 30 to 90
+  pixels above the bottom edge on both a portrait and a landscape photo) and run on one of them; other articles may differ.
+- JPEGs are saved again at quality 95, because a JPEG can't be cut at arbitrary pixels without that. The trimmed file differs from
+  the original, so downloading the same page again does not recognise it as a duplicate.
 
 ## Not to do
 

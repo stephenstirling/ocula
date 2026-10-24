@@ -1,7 +1,7 @@
 // Popup: asks the page's content script what it found, lets you edit the
 // tags and the save folder, then hands the article to Ocula with an
 // ocula:webdownload link. Ocula does the preview and the download.
-const DEFAULTS = { root: "Z:\\Babes", defaultTags: [] };
+const DEFAULTS = { root: "Z:\\Babes", defaultTags: [], trim: true };
 const MAX_TAGS = 20;
 const MAX_STRIP = 8;
 // Ocula ticks only pictures whose address contains this (Just Jared's photo bucket); the rest stay listed, unticked.
@@ -84,6 +84,7 @@ function buildLink() {
   const enc = encodeURIComponent;
   const folder = $("folder").value.trim();
   let link = "ocula:webdownload?url=" + enc(state.url) + "&media=" + enc(MEDIA);
+  if ($("trim").checked) link += "&trim=justjared";
   if (folder) link += "&folder=" + enc(folder);
   if (state.chips.length) link += "&tags=" + enc(state.chips.map((c) => c.text).join(";"));
   return link;
@@ -103,6 +104,8 @@ function validate() {
 async function init() {
   const settings = await chrome.storage.local.get(DEFAULTS);
   state.root = settings.root || DEFAULTS.root;
+  $("trim").checked = settings.trim !== false;
+  $("trim").addEventListener("change", () => chrome.storage.local.set({ trim: $("trim").checked }));
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab || !tab.url || !isArticle(tab.url)) { show("idle"); return; }

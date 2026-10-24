@@ -168,8 +168,9 @@ public sealed partial class WebDownloadWindow : Window
     /// </summary>
     /// <param name="folder">The folder to save into, already checked to be inside a library folder, or null.</param>
     /// <param name="media">Only pictures whose address contains this text start ticked (others stay listed, unticked).</param>
-    public void OpenFromLink(string url, IReadOnlyList<string> tags, string? folder, bool folderIgnored, string? media)
+    public void OpenFromLink(string url, IReadOnlyList<string> tags, string? folder, bool folderIgnored, string? media, bool trim = false)
     {
+        TrimToggle.IsOn = trim;
         _linkTags = tags;
         _linkMedia = string.IsNullOrEmpty(media) ? null : media;
         _exactFolder = folder != null;
@@ -511,6 +512,13 @@ public sealed partial class WebDownloadWindow : Window
         }
 
         if (result == null) return;
+
+        if (result.Saved.Count > 0 && TrimToggle.IsOn)
+        {
+            SelectedText.Text = "Trimming…";
+            var saved = result.Saved.ToList();
+            await Task.Run(() => { foreach (var file in saved) JustJaredTrim.TrimFile(file); });
+        }
 
         if (result.Saved.Count > 0)
         {

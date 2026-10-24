@@ -16,8 +16,7 @@ and does the download. The extension never downloads anything itself.
 4. The first time you press **Preview in Ocula**, Chrome asks whether to open Ocula. Tick
    "Always allow".
 
-There are no icons yet, so Chrome shows a letter tile. Add `icons/` and an `icons` entry in
-`manifest.json` if you want one.
+The icon is Ocula's own (`icons/`, copied from the app's assets).
 
 ## What it does
 
@@ -34,13 +33,15 @@ There are no icons yet, so Chrome shows a letter tile. Add `icons/` and an `icon
   other hosts are skipped.
 - **Tags**: the detected names start as chips (outlined). Remove any, and add your own free-text
   tags. Nothing is suggested for you.
+- **Trim**: a ticked box (remembered) adds `trim=justjared` to the link, so Ocula's "Trim the Just Jared frame and logo" switch starts on.
+  Which photos to download is chosen in Ocula, where each picture can be unticked.
 - **Save to**: your library folder plus the first detected name. Edit it freely. Clear it to let
   Ocula use its own default.
 
 ## The link
 
 ```
-ocula:webdownload?url=<article address>&media=jj-justjared-media&folder=<save folder>&tags=<tag;tag;...>
+ocula:webdownload?url=<article address>&media=jj-justjared-media&trim=justjared&folder=<save folder>&tags=<tag;tag;...>
 ```
 
 Values are percent-encoded. `folder` and `tags` are optional. `media` tells Ocula to tick only
