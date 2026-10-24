@@ -24,7 +24,7 @@ SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "phun_scraper.
 FUNCS = {"sanitize_filename", "rel_library_path", "name_from_title", "people_from_title", "_second_person", "plan_name_fixes",
          "fix_celebrity_names", "plan_second_people", "fix_second_people", "canonical_person", "most_used_spellings",
          "load_canonical_names", "failed_tag_paths", "retag_logged_failures", "name_key", "spelling_rank", "parse_aliases",
-         "remove_empty_folders", "plan_folder_renames", "fix_folder_names"}
+         "remove_empty_folders", "plan_folder_renames", "fix_folder_names", "plan_alias_tags", "fix_alias_tags"}
 SCHEMA = """CREATE TABLE images (id INTEGER PRIMARY KEY AUTOINCREMENT, rel_path TEXT NOT NULL UNIQUE, celebrity TEXT, category TEXT,
  tags TEXT, source_url TEXT, thread_title TEXT, thread_url TEXT, post_date TEXT, phash TEXT, upgraded INTEGER NOT NULL DEFAULT 0,
  downloaded_at TEXT);
@@ -35,7 +35,7 @@ def load(root, tagged):
     with open(SOURCE, encoding="utf-8") as f:
         tree = ast.parse(f.read())
     keep = [n for n in tree.body if (isinstance(n, ast.FunctionDef) and n.name in FUNCS)
-            or (isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) in ("NAME_PARTICLES", "NAME_VERBS", "_canon", "_aliases"))]
+            or (isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) in ("NAME_PARTICLES", "NAME_VERBS", "NAME_RELATIONS", "_canon", "_aliases"))]
     db = os.path.join(root, "ocula_library.db")
 
     def connect():
@@ -278,6 +278,53 @@ class EmptyFolderTests(unittest.TestCase):
         self.assertTrue(os.path.isdir(os.path.join(self.root, "Anyone")))
 
 
+class AliasTagTests(unittest.TestCase):
+    def setUp(self):
+        logging.disable(logging.CRITICAL)
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = self.tmp.name
+        self.tagged = []
+        self.s, self.db = load(self.root, self.tagged)
+        with closing(sqlite3.connect(self.db)) as c, c:
+            c.executescript(SCHEMA)
+        self.s["_aliases"].clear()
+        self.s["_aliases"].update({"kate": "Kate Mara", "este, danielle": "Este Haim"})
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def add(self, rel, celebrity, tags):
+        path = os.path.join(self.root, *rel.split("/"))
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as f:
+            f.write(b"x")
+        with closing(sqlite3.connect(self.db)) as c, c:
+            cur = c.execute("INSERT INTO images (rel_path, celebrity, tags) VALUES (?,?,?)", (rel, celebrity, json.dumps(tags)))
+            c.executemany("INSERT INTO image_tags VALUES (?,?)", [(cur.lastrowid, t) for t in tags])
+
+    def index_tags(self):
+        with closing(sqlite3.connect(self.db)) as c:
+            return sorted(r[0] for r in c.execute("SELECT tag FROM image_tags"))
+
+    def test_the_other_persons_copies_get_the_right_name_in_the_file_and_the_index(self):
+        self.add("Rooney Mara/a.jpg", "Rooney Mara", ["Kate", "Rooney Mara", "Dress"])
+        self.add("Kate Mara/b.jpg", "Kate Mara", ["Kate Mara", "Rooney Mara"])
+        self.assertEqual(self.s["fix_alias_tags"](), 1)
+        self.assertEqual(self.tagged, [(os.path.join(self.root, "Rooney Mara", "a.jpg"), ["Kate Mara", "Rooney Mara", "Dress"])])
+        self.assertEqual(self.index_tags(), ["Dress", "Kate Mara", "Kate Mara", "Rooney Mara", "Rooney Mara"])
+        self.assertEqual(self.s["fix_alias_tags"](), 0)          # nothing left to do the second time
+
+    def test_a_name_is_not_listed_twice_and_other_tags_stay(self):
+        plan = self.s["plan_alias_tags"]([(1, "x/a.jpg", json.dumps(["Kate", "Kate Mara", "Bikini"]))], {"kate": "Kate Mara"})
+        self.assertEqual(plan[0]["tags"], ["Kate Mara", "Bikini"])
+
+    def test_nothing_happens_without_aliases(self):
+        self.s["_aliases"].clear()
+        self.add("Rooney Mara/a.jpg", "Rooney Mara", ["Kate", "Rooney Mara"])
+        self.assertEqual(self.s["fix_alias_tags"](), 0)
+        self.assertEqual(self.tagged, [])
+
+
 class TrailingDotFolderTests(unittest.TestCase):
     def setUp(self):
         logging.disable(logging.CRITICAL)
@@ -348,7 +395,7 @@ class CaseVariantTests(unittest.TestCase):
             tree = ast.parse(f.read())
         keep = [n for n in tree.body if (isinstance(n, ast.FunctionDef) and n.name in {"sanitize_filename", "name_from_title", "people_from_title",
                                                                                         "_second_person", "plan_name_fixes"})
-                or (isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) in ("NAME_PARTICLES", "NAME_VERBS"))]
+                or (isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) in ("NAME_PARTICLES", "NAME_VERBS", "NAME_RELATIONS"))]
         exec(compile(ast.Module(body=keep, type_ignores=[]), SOURCE, "exec"), scope)
         canon = (lambda n: spellings.get(n.lower(), n)) if spellings else None
         return scope["plan_name_fixes"](rows, scope["people_from_title"], canon)
