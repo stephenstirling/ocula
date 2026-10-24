@@ -1,6 +1,7 @@
 import io
 import os
 import shutil
+import unicodedata
 import sys
 import sqlite3
 from contextlib import closing
@@ -13,7 +14,7 @@ import threading
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from logging.handlers import RotatingFileHandler
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urljoin, quote_plus, urlparse
 from concurrent.futures import ThreadPoolExecutor
 from bs4 import BeautifulSoup
@@ -32,6 +33,7 @@ HISTORY_FILE = os.path.join(DOWNLOAD_DIR, "download_history.json")
 CELEB_CACHE_FILE = os.path.join(DOWNLOAD_DIR, "celeb_data_cache.json")
 FAILURES_FILE = os.path.join(DOWNLOAD_DIR, "failed_downloads.log")  # one line per picture that wasn't saved, and why
 RETAG_FILE = os.path.join(DOWNLOAD_DIR, "retag_list.txt")  # files to tag again at start-up: one path per line, relative to the downloads folder
+ALIASES_FILE = os.path.join(DOWNLOAD_DIR, "name_aliases.txt")  # "wrong name = Right name", one per line, for titles with a typo in the name
 LOG_FILE = os.path.join(DOWNLOAD_DIR, "scraper.log")
 LIBRARY_DB = os.path.join(DOWNLOAD_DIR, "ocula_library.db")  # sidecar index read by Ocula
 IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
@@ -389,24 +391,53 @@ def reindex_existing():
     logging.info("Reindex complete: %d added", added)
 
 
-_canon = {}   # lower-case name -> the one spelling used for that person
+_canon = {}     # name without accents, lower case -> the one spelling used for that person
+_aliases = {}   # a wrong name (as the title has it), same form -> the right one
+
+
+def name_key(name):
+    """A name without accents or capitals or doubled spaces: "Penélope Cruz", "Penelope Cruz" and "PENELOPE  CRUZ" are one person."""
+    plain = "".join(c for c in unicodedata.normalize("NFKD", name) if not unicodedata.combining(c))
+    return " ".join(plain.lower().split())
 
 
 def canonical_person(name):
-    """One spelling per person, whatever a title's capitalisation ("Mckenna Grace" and "McKenna Grace" are two folders on the NAS, which is
-    case sensitive, but one folder to Windows, which isn't): the spelling seen first, or at start-up the one most pictures use."""
-    return _canon.setdefault(name.lower(), name)
+    """One spelling per person, whatever a title's capitalisation or accents ("Mckenna Grace" and "McKenna Grace" are two folders on the
+    NAS, which is case sensitive, but one folder to Windows, which isn't). An alias (name_aliases.txt) is applied first; then the spelling
+    already in use, or, if this is the first, this one."""
+    key = name_key(name)
+    if key in _aliases:
+        name = _aliases[key]
+        key = name_key(name)
+    return _canon.setdefault(key, name)
+
+
+def spelling_rank(name, count):
+    """Which spelling of a person to keep: the one with the most accents (the properly written name), then the one most pictures use,
+    then alphabetically so it is the same every time."""
+    accents = sum(1 for c in unicodedata.normalize("NFD", name) if unicodedata.combining(c))
+    return (accents, count, name)
 
 
 def most_used_spellings(counts):
-    """`counts` are (name, number of pictures). Returns {lower-case name: the spelling most pictures use} (a tie goes to the later spelling
-    alphabetically, so it is the same every time)."""
+    """`counts` are (name, number of pictures). Returns {name_key: the spelling to keep}."""
     best = {}
     for name, n in counts:
-        key = name.lower()
-        if key not in best or (n, name) > (best[key][1], best[key][0]):
+        key = name_key(name)
+        if key not in best or spelling_rank(name, n) > spelling_rank(best[key][0], best[key][1]):
             best[key] = (name, n)
     return {k: v[0] for k, v in best.items()}
+
+
+def parse_aliases(text):
+    """name_aliases.txt: lines of `wrong name = Right name` (blank lines and # comments are ignored). Returns {name_key(wrong): right}."""
+    found = {}
+    for line in text.splitlines():
+        if line.strip() and not line.lstrip().startswith("#") and "=" in line:
+            wrong, right = line.split("=", 1)
+            if wrong.strip() and right.strip():
+                found[name_key(wrong)] = right.strip()
+    return found
 
 
 def load_canonical_names():
@@ -418,7 +449,13 @@ def load_canonical_names():
     try:
         for entry in os.listdir(DOWNLOAD_DIR):
             if os.path.isdir(os.path.join(DOWNLOAD_DIR, entry)):
-                _canon.setdefault(entry.lower(), entry)
+                _canon.setdefault(name_key(entry), entry)
+    except OSError:
+        pass
+    _aliases.clear()
+    try:
+        with open(ALIASES_FILE, encoding="utf-8") as f:
+            _aliases.update(parse_aliases(f.read()))
     except OSError:
         pass
 
@@ -434,8 +471,17 @@ def plan_name_fixes(rows, people_for_title, canon=None):
         if not thread_title or not celebrity:
             continue
         people = [canon(p) for p in people_for_title(re.sub(r"\[.*?\]|\(.*?\)", "", thread_title).strip())]
-        correct = people[0] if people else None
-        if not correct or celebrity in people:
+        if not people:
+            continue
+        # Which person of the title this picture belongs to: the one its name is a spelling of (a different capitalisation, accents, or an
+        # alias), else the one its name starts with ("AJ Michalka Exiting" is AJ Michalka, the second person of "Alyson Michalka and AJ
+        # Michalka Exiting ..."), else the first.
+        own = canon(celebrity)
+        if own in people:
+            correct = own
+        else:
+            correct = next((p for p in people if celebrity.lower().startswith(p.lower() + " ")), people[0])
+        if correct == celebrity:
             continue
         parts = rel_path.split("/")
         if len(parts) < 2 or parts[0] != sanitize_filename(celebrity):
@@ -571,6 +617,35 @@ def fix_second_people(dry_run=False):
             logging.error("Pairs failed for %s: %s", item["old_rel"], e)
     logging.info("Pairs: %d of %d copies made", made, len(plan))
     return made
+
+
+def remove_empty_folders():
+    """Removes the folders the scraper made that have nothing in them (a thread whose pictures could not be saved used to leave one,
+    named after whatever the title said). Only folders with no file at any depth, and only ones made since the first picture was saved,
+    so a folder you made yourself earlier is left alone. Returns how many were removed."""
+    with closing(_library_connect()) as conn:
+        first = conn.execute("SELECT MIN(downloaded_at) FROM images").fetchone()[0]
+    if not first:
+        return 0
+    try:
+        cutoff = datetime.strptime(first[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc).timestamp() - 60
+    except ValueError:
+        return 0
+    removed = 0
+    for entry in list(os.scandir(DOWNLOAD_DIR)):
+        if not entry.is_dir() or entry.stat().st_mtime < cutoff:
+            continue
+        if any(files for _, _, files in os.walk(entry.path)):
+            continue
+        for folder, _dirs, _files in sorted(os.walk(entry.path), key=lambda w: -len(w[0])):
+            try:
+                os.rmdir(folder)
+            except OSError:
+                break
+        else:
+            removed += 1
+            logging.info("Removed an empty folder: %s", entry.name)
+    return removed
 
 
 # --- Live status for Ocula ---
@@ -848,6 +923,9 @@ NAME_VERBS = {
     # the plain form, for a title like "The Pussycat Dolls Perform At The 3Arena" (only ones that are not also surnames)
     "perform", "attend", "arrive", "leave", "walk", "pose", "wear", "dine", "visit", "celebrate", "promote", "launch", "unveil",
     "appear", "greet", "depart", "flaunt", "debut", "receive", "reveal", "enjoy", "join", "cheer", "strut", "stun",
+    # words that describe the occasion rather than the person ("Florence Pugh Shopping", "Jenna Ortega Flaunt Magazine")
+    "exiting", "opening", "filming", "promoting", "shopping", "night", "portraits", "photoshoot", "after-party", "afterparty",
+    "magazine", "chats", "cover", "celebration", "live", "interview",
 }
 
 
@@ -857,11 +935,15 @@ def name_from_title(clean_title):
     the leading run of capitalised words when something lower case ends it. Otherwise: the text before " at / in / @ / on / - ",
     or the first two words. A name of more than four words is cut to two."""
     clean_title = clean_title.replace("‘", "'").replace("’", "'")   # one spelling of D'Amelio, whatever the forum typed
+    clean_title = clean_title.replace("“", '"').replace("”", '"')
     words = clean_title.split()
     run = []
     stopped = False
     for i, word in enumerate(words):
         bare = word.lstrip("'\"")
+        if len(run) >= 2 and word[:1] in "'\"" and bare[:1].isalnum():     # a title in quotes ("Klara and the Sun") ends the name
+            stopped = True
+            break
         if bare[:1].isupper() or (i > 0 and word.lower() in NAME_PARTICLES):
             run.append(word)
             if word.endswith(",") and len(run) >= 2:      # "Daisy Edgar-Jones, Esme ...": the name ends at the comma
@@ -876,8 +958,8 @@ def name_from_title(clean_title):
     while len(run) > 1 and run[-1].lower() in NAME_VERBS:
         run.pop()
     if run:
-        run[-1] = re.sub(r"['’]s$", "", run[-1])
-    if stopped and 1 <= len(run) <= 4:
+        run[-1] = re.sub(r"['’]s$", "", run[-1]).rstrip("-–—:;")     # "Monica Barbaro-" is Monica Barbaro
+    if stopped and 1 <= len(run) <= 4 and run[-1]:
         return " ".join(run)
 
     match = re.search(r"^(.*?)\s+(?:at|in|@|on|-)\s+", clean_title, re.IGNORECASE)
@@ -1040,12 +1122,15 @@ def _as_list(value):
 
 def _write_and_read_back(file_path, tags, mode="normal"):
     """Writes `tags` with ExifTool and returns the XMP:Subject keywords (lower case) found in the file afterwards.
-    mode "normal"; "minor" (-m: carry on past minor errors, such as a slightly malformed block); "replace" (-m, and the file's own XMP
-    block is removed first, for a block ExifTool can't edit at all)."""
+    mode "normal"; "no-exif" (XMP and IPTC only: a picture whose own EXIF block is corrupt, "Error reading OtherImageStart data in IFD0",
+    can't be rewritten, and the EXIF description is the only EXIF tag written); "minor" (-m: carry on past minor errors); "replace" (-m,
+    and the file's own XMP block is removed first, for a block ExifTool can't edit at all)."""
+    if mode == "no-exif":
+        tags = {k: v for k, v in tags.items() if not k.startswith("EXIF:")}
     with ExifToolHelper() as et:
         if mode == "replace":
             et.execute("-m", "-overwrite_original", "-XMP:all=", file_path)
-        params = ["-overwrite_original"] + (["-m"] if mode != "normal" else [])
+        params = ["-overwrite_original"] + (["-m"] if mode in ("minor", "replace") else [])
         et.set_tags([file_path], tags=tags, params=params)
         back = et.get_tags([file_path], tags=["XMP:Subject"])
     return {k.lower() for k in _as_list(back[0].get("XMP:Subject") if back else None)}
@@ -1104,10 +1189,11 @@ def embed_metadata(file_path, keywords_list):
     with exif_lock:
         error = None
         tags = metadata_tags_for(file_path, keywords_list)
-        for mode in ("normal", "minor", "replace"):
+        for mode in ("normal", "no-exif", "minor", "replace"):
             if mode != "normal":
                 logging.info("Retagging %s %s", os.path.basename(file_path),
-                             "ignoring minor errors" if mode == "minor" else "without its existing XMP block")
+                             {"no-exif": "without touching its EXIF block", "minor": "ignoring minor errors",
+                              "replace": "without its existing XMP block"}[mode])
             try:
                 found = _write_and_read_back(file_path, tags, mode)
             except Exception as e:
@@ -1401,11 +1487,8 @@ def process_thread(thread_title, thread_url, history):
 
     celeb_name, keywords_list = extract_metadata_tags(thread_title, post_text)
     people = [canonical_person(p) for p in people_from_title(re.sub(r"\[.*?\]|\(.*?\)", "", thread_title).strip())]
-    celeb_folder = os.path.join(DOWNLOAD_DIR, sanitize_filename(celeb_name))
-    os.makedirs(celeb_folder, exist_ok=True)
-    others = [(os.path.join(DOWNLOAD_DIR, sanitize_filename(p)), p) for p in people[1:]]   # a two-person thread is saved for both
-    for folder, _ in others:
-        os.makedirs(folder, exist_ok=True)
+    celeb_folder = os.path.join(DOWNLOAD_DIR, sanitize_filename(celeb_name))      # made when the first picture is saved, so a thread whose
+    others = [(os.path.join(DOWNLOAD_DIR, sanitize_filename(p)), p) for p in people[1:]]   # pictures can't be saved leaves no empty folder
 
     links, blocked = [], []
     for post in posts:
@@ -1534,6 +1617,7 @@ def main():
         fix_second_people()
         reindex_existing()                  # pictures saved but never indexed (the scraper was stopped mid-save)
         retag_logged_failures()             # pictures the log says could not be tagged
+        remove_empty_folders()              # folders left with nothing in them
     except Exception as e:                  # never stop the scraper over a tidy-up
         logging.error("Name fix failed: %s", e)
     while True:

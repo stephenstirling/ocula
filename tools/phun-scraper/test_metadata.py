@@ -54,10 +54,18 @@ class FakeExifTool:
         return False
 
     heal_on_minor = False
+    heal_on_no_exif = False
+    corrupt_exif = False
 
     def set_tags(self, files, tags, params=None):
         if FakeExifTool.fail_on_write:
             raise RuntimeError("exiftool failed")
+        if FakeExifTool.corrupt_exif and any(k.startswith("EXIF:") for k in tags):
+            error = RuntimeError("execute returned a non-zero exit status: 1")
+            error.stderr = "Error: Error reading OtherImageStart data in IFD0"
+            raise error
+        if FakeExifTool.heal_on_no_exif and not any(k.startswith("EXIF:") for k in tags):
+            FakeExifTool.drop = ()          # leaving the EXIF block alone was enough
         if FakeExifTool.heal_on_minor and "-m" in (params or []):
             FakeExifTool.drop = ()          # ignoring minor errors was enough
         FakeExifTool.written.append((files[0], dict(tags), list(params or [])))
@@ -81,6 +89,7 @@ class MetadataTests(unittest.TestCase):
     def setUp(self):
         FakeExifTool.written, FakeExifTool.drop, FakeExifTool.fail_on_write = [], (), False
         FakeExifTool.executed, FakeExifTool.heal_on_execute, FakeExifTool.heal_on_minor = [], False, False
+        FakeExifTool.heal_on_no_exif, FakeExifTool.corrupt_exif = False, False
         logging.disable(logging.CRITICAL)
         self.scope, self.status = load(FakeExifTool)
 
@@ -132,8 +141,20 @@ class MetadataTests(unittest.TestCase):
         self.assertTrue(scope["embed_metadata"]("x.jpg", ["Elsa Hosk"]))
         self.assertEqual(len(FakeExifTool.executed), 1)
         self.assertIn("-XMP:all=", FakeExifTool.executed[0])
-        self.assertEqual(len(FakeExifTool.written), 3)   # written normally, again ignoring minor errors, and once more after the block was removed
+        self.assertEqual(len(FakeExifTool.written), 4)   # normally, without EXIF, ignoring minor errors, and once more after the block was removed
         self.assertEqual(status.bumps, [])               # and it is not counted as a failure
+
+    def test_a_corrupt_exif_block_is_left_alone_and_only_xmp_and_iptc_are_written(self):
+        # the real case: "Error reading OtherImageStart data in IFD0" on 89 pictures, because the EXIF description is written too
+        FakeExifTool.corrupt_exif = True
+        scope, status = load(FakeExifTool)
+        self.assertTrue(scope["embed_metadata"]("x.jpg", ["Selena Gomez"]))
+        self.assertEqual(FakeExifTool.executed, [])      # nothing was removed from the file
+        last_tags = FakeExifTool.written[-1][1]
+        self.assertIn("XMP:Subject", last_tags)
+        self.assertIn("IPTC:Keywords", last_tags)
+        self.assertNotIn("EXIF:ImageDescription", last_tags)
+        self.assertEqual(status.bumps, [])
 
     def test_ignoring_minor_errors_is_tried_before_anything_is_removed(self):
         FakeExifTool.drop = ("Elsa Hosk",)
@@ -141,8 +162,8 @@ class MetadataTests(unittest.TestCase):
         scope, status = load(FakeExifTool)
         self.assertTrue(scope["embed_metadata"]("x.jpg", ["Elsa Hosk"]))
         self.assertEqual(FakeExifTool.executed, [])      # the file's own XMP block was left alone
-        self.assertEqual(len(FakeExifTool.written), 2)
-        self.assertIn("-m", FakeExifTool.written[1][2])
+        self.assertEqual(len(FakeExifTool.written), 3)
+        self.assertIn("-m", FakeExifTool.written[2][2])
 
     def test_an_exiftool_error_on_the_first_write_still_gets_the_later_attempts(self):
         calls = {"n": 0}

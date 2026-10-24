@@ -15,15 +15,19 @@ import shutil
 import sqlite3
 import tempfile
 import threading
+import unicodedata
 import unittest
+from datetime import datetime, timezone
 from contextlib import closing
 
 SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "phun_scraper.py")
 FUNCS = {"sanitize_filename", "rel_library_path", "name_from_title", "people_from_title", "_second_person", "plan_name_fixes",
          "fix_celebrity_names", "plan_second_people", "fix_second_people", "canonical_person", "most_used_spellings",
-         "load_canonical_names", "failed_tag_paths", "retag_logged_failures"}
+         "load_canonical_names", "failed_tag_paths", "retag_logged_failures", "name_key", "spelling_rank", "parse_aliases",
+         "remove_empty_folders"}
 SCHEMA = """CREATE TABLE images (id INTEGER PRIMARY KEY AUTOINCREMENT, rel_path TEXT NOT NULL UNIQUE, celebrity TEXT, category TEXT,
- tags TEXT, source_url TEXT, thread_title TEXT, thread_url TEXT, post_date TEXT, phash TEXT, upgraded INTEGER NOT NULL DEFAULT 0);
+ tags TEXT, source_url TEXT, thread_title TEXT, thread_url TEXT, post_date TEXT, phash TEXT, upgraded INTEGER NOT NULL DEFAULT 0,
+ downloaded_at TEXT);
 CREATE TABLE image_tags (image_id INTEGER NOT NULL REFERENCES images(id) ON DELETE CASCADE, tag TEXT NOT NULL, PRIMARY KEY (image_id, tag));"""
 
 
@@ -31,7 +35,7 @@ def load(root, tagged):
     with open(SOURCE, encoding="utf-8") as f:
         tree = ast.parse(f.read())
     keep = [n for n in tree.body if (isinstance(n, ast.FunctionDef) and n.name in FUNCS)
-            or (isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) in ("NAME_PARTICLES", "NAME_VERBS", "_canon"))]
+            or (isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) in ("NAME_PARTICLES", "NAME_VERBS", "_canon", "_aliases"))]
     db = os.path.join(root, "ocula_library.db")
 
     def connect():
@@ -51,6 +55,7 @@ def load(root, tagged):
             c.executemany("INSERT INTO image_tags VALUES (?,?)", [(cur.lastrowid, t) for t in tags])
 
     scope = {"os": os, "re": re, "json": json, "hashlib": hashlib, "logging": logging, "closing": closing, "shutil": shutil,
+             "unicodedata": unicodedata, "datetime": datetime, "timezone": timezone, "ALIASES_FILE": os.path.join(root, "name_aliases.txt"),
              "DOWNLOAD_DIR": root, "db_lock": threading.Lock(), "_library_connect": connect, "embed_metadata": embed,
              "record_image": record}
     exec(compile(ast.Module(body=keep, type_ignores=[]), SOURCE, "exec"), scope)
@@ -220,6 +225,59 @@ class RetagTests(unittest.TestCase):
         self.assertEqual(self.tagged, [(path, ["Elsa Hosk"])])
 
 
+class EmptyFolderTests(unittest.TestCase):
+    def setUp(self):
+        logging.disable(logging.CRITICAL)
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = self.tmp.name
+        self.s, self.db = load(self.root, [])
+        with closing(sqlite3.connect(self.db)) as c, c:
+            c.executescript(SCHEMA)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def first_picture_saved(self, when="2026-10-22T20:00:00Z"):
+        with closing(sqlite3.connect(self.db)) as c, c:
+            c.execute("INSERT INTO images (rel_path, celebrity, downloaded_at) VALUES ('Kelly Brook/a.jpg', 'Kelly Brook', ?)", (when,))
+
+    def make(self, rel, files=()):
+        path = os.path.join(self.root, *rel.split("/"))
+        os.makedirs(path, exist_ok=True)
+        for name in files:
+            open(os.path.join(path, name), "wb").write(b"x")
+        return path
+
+    def test_an_empty_folder_made_since_the_first_picture_is_removed_and_one_with_a_file_is_kept(self):
+        self.first_picture_saved("2000-01-01T00:00:00Z")           # long ago, so everything here is newer
+        self.make("Christina Aguilera Celebration")
+        self.make("Florence Pugh/Bikini")                          # nested and empty
+        self.make("Kelly Brook", files=["a.jpg"])
+        self.make("Alana Haim/Swimwear", files=["b.jpg"])
+        self.assertEqual(self.s["remove_empty_folders"](), 2)
+        self.assertFalse(os.path.exists(os.path.join(self.root, "Christina Aguilera Celebration")))
+        self.assertFalse(os.path.exists(os.path.join(self.root, "Florence Pugh")))
+        self.assertTrue(os.path.exists(os.path.join(self.root, "Kelly Brook", "a.jpg")))
+        self.assertTrue(os.path.exists(os.path.join(self.root, "Alana Haim", "Swimwear", "b.jpg")))
+
+    def test_a_folder_that_has_any_file_in_it_at_any_depth_is_kept(self):
+        self.first_picture_saved("2000-01-01T00:00:00Z")
+        self.make("Someone/notes", files=["keep.txt"])
+        self.assertEqual(self.s["remove_empty_folders"](), 0)
+        self.assertTrue(os.path.exists(os.path.join(self.root, "Someone", "notes", "keep.txt")))
+
+    def test_an_empty_folder_older_than_the_scraper_is_left_alone(self):
+        self.first_picture_saved("2999-01-01T00:00:00Z")           # the first picture is "later" than this folder
+        path = self.make("Margot Robbie")
+        self.assertEqual(self.s["remove_empty_folders"](), 0)
+        self.assertTrue(os.path.isdir(path))
+
+    def test_nothing_is_removed_when_the_library_is_empty(self):
+        self.make("Anyone")
+        self.assertEqual(self.s["remove_empty_folders"](), 0)
+        self.assertTrue(os.path.isdir(os.path.join(self.root, "Anyone")))
+
+
 class CaseVariantTests(unittest.TestCase):
     """The NAS is case sensitive, so "McKenna Grace" and "Mckenna Grace" are two folders there; a Windows temp folder can't hold both, so these
     test the plan (which pictures move where) rather than the move."""
@@ -243,6 +301,16 @@ class CaseVariantTests(unittest.TestCase):
         self.assertEqual(len(plan), 1)
         self.assertEqual((plan[0]["old_rel"], plan[0]["new_rel"], plan[0]["new_name"]), ("McKenna Grace/a.jpg", "Mckenna Grace/a.jpg", "Mckenna Grace"))
         self.assertEqual(plan[0]["tags"], ["Mckenna Grace", "Dress"])
+
+    def test_a_second_persons_picture_goes_to_the_second_person_not_the_first(self):
+        rows = [(1, "Vittoria Cerettifor Vogue UK/a.jpg", "Vittoria Cerettifor Vogue UK", json.dumps(["Vittoria Cerettifor Vogue UK"]),
+                 "Gigi Hadid & Vittoria Cerettifor Vogue UK - September 2026"),
+                (2, "AJ Michalka Exiting/b.jpg", "AJ Michalka Exiting", json.dumps(["AJ Michalka Exiting"]),
+                 "Alyson Michalka and AJ Michalka Exiting their hotel in Paris 08/02/2026"),
+                (3, "Gigi Hadid/c.jpg", "Gigi Hadid", json.dumps(["Gigi Hadid", "Vittoria Ceretti"]), "Gigi Hadid & Vittoria Cerettifor Vogue UK - September 2026")]
+        plan = self.plan(rows, {"vittoria cerettifor vogue uk": "Vittoria Ceretti"})
+        self.assertEqual([(p["old_name"], p["new_name"]) for p in plan],
+                         [("Vittoria Cerettifor Vogue UK", "Vittoria Ceretti"), ("AJ Michalka Exiting", "AJ Michalka")])
 
     def test_without_a_spelling_table_nothing_changes(self):
         rows = [(1, "McKenna Grace/a.jpg", "McKenna Grace", json.dumps(["McKenna Grace"]), "McKenna Grace - Newport Beach Film Festival")]

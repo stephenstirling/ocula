@@ -12,6 +12,7 @@ import re
 import shutil
 import tempfile
 import threading
+import unicodedata
 import unittest
 from urllib.parse import urljoin, urlparse
 
@@ -21,15 +22,15 @@ from bs4 import BeautifulSoup
 SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "phun_scraper.py")
 WANTED = {"listing_threads", "post_bodies", "direct_from_thumbnail", "extract_metadata_tags", "log_failure", "resolve_image_host_url", "name_from_title", "people_from_title", "_second_person",
           "forum_page_url", "thread_page_url", "last_page_number", "enough_free_space", "hash_ints", "is_near_duplicate", "canonical_person", "most_used_spellings",
-          "is_blocked_host", "note_blocked_links", "download_complete"}
+          "is_blocked_host", "note_blocked_links", "download_complete", "name_key", "spelling_rank", "parse_aliases"}
 
 
 def load():
     tree = ast.parse(open(SOURCE, encoding="utf-8").read())
     keep = [n for n in tree.body if (isinstance(n, ast.FunctionDef) and n.name in WANTED)
-            or (isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) in ("NAME_PARTICLES", "NAME_VERBS", "_canon"))]
+            or (isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) in ("NAME_PARTICLES", "NAME_VERBS", "_canon", "_aliases"))]
     scope = {"re": re, "is_within_pregnancy_timeline": lambda *a: False, "logging": logging, "threading": threading,
-             "urlparse": urlparse, "BLOCKED_HOSTS": ("turboimagehost.com",), "history_lock": threading.Lock(), "blocked_lock": threading.Lock(),
+             "urlparse": urlparse, "unicodedata": unicodedata, "BLOCKED_HOSTS": ("turboimagehost.com",), "history_lock": threading.Lock(), "blocked_lock": threading.Lock(),
              "BLOCKED_FILE": None, "shutil": shutil, "FORUM_URL": "https://forum.phun.org/forums/celebrity-photos.15/", "failures_lock": threading.Lock(), "BeautifulSoup": BeautifulSoup, "requests": requests, "session": None, "_iso": lambda: "2026-10-22T21:00:00Z", "FAILURES_FILE": None}
     exec(compile(ast.Module(body=keep, type_ignores=[]), SOURCE, "exec"), scope)
     return scope
@@ -140,6 +141,35 @@ class NameTests(unittest.TestCase):
         self.assertEqual(S["name_from_title"]("Este, Danielle & Alana Haim at Louis Vuitton"), "Este, Danielle")
         # ... and "& Alana Haim" is still found as the second person, so her pictures stay where they are
         self.assertEqual(S["people_from_title"]("Este, Danielle & Alana Haim at Louis Vuitton"), ["Este, Danielle", "Alana Haim"])
+
+    def test_descriptor_words_and_film_titles_after_a_name_are_not_part_of_it(self):
+        # real folder names from the library
+        for title, name in [
+            ("Florence Pugh Shopping in Soho 10/14/2026", "Florence Pugh"),
+            ('Florence Pugh "Klara and the Sun" Photocall', "Florence Pugh"),
+            ("Camila Mendes Filming ''Upgraded 2'' in Venice", "Camila Mendes"),
+            ("Daisy Edgar-Jones Promoting ''Sense and Sensibility'' in London", "Daisy Edgar-Jones"),
+            ("Jenna Ortega Flaunt Magazine Cover Shoot", "Jenna Ortega"),
+            ("Irina Shayk After-party at Chanel", "Irina Shayk"),
+            ("Becky G Opening a pop-up shop", "Becky G"),
+            ("Inde Navarrette Portraits by a photographer", "Inde Navarrette"),
+            ("Olivia Rodrigo Chats with Zane Lowe", "Olivia Rodrigo"),
+            ("Hailey Bieber Night out in West Hollywood", "Hailey Bieber"),
+            ("AJ Michalka Exiting the studio", "AJ Michalka"),
+            ("T.A.T.U. Performs Live at the arena", "T.A.T.U."),
+            ("Monica Barbaro- at a premiere", "Monica Barbaro"),
+            ("Hilary Duff- soaking up the sun", "Hilary Duff"),
+            ("Pamela Anderson Photoshoot for a magazine", "Pamela Anderson"),
+        ]:
+            self.assertEqual(S["name_from_title"](title), name, title)
+
+    def test_a_nickname_in_quotes_inside_a_name_stays(self):
+        self.assertEqual(S["name_from_title"]("Joanna ''JoJo'' Levesque at Room to Grow Gala"), "Joanna ''JoJo'' Levesque")
+
+    def test_real_names_that_look_like_descriptors_are_kept(self):
+        for title, name in [("Amelia Gray Hamlin at the Met Gala", "Amelia Gray Hamlin"), ("Olivia Taylor Dudley at a premiere", "Olivia Taylor Dudley"),
+                            ("Chanel West Coast at a party", "Chanel West Coast")]:
+            self.assertEqual(S["name_from_title"](title), name, title)
 
     def test_a_verb_is_only_removed_when_a_name_is_left(self):
         self.assertEqual(S["name_from_title"]("Sings at the awards"), "Sings")   # nothing before it: keep what there is
@@ -304,6 +334,30 @@ class HashTests(unittest.TestCase):
 class CanonicalNameTests(unittest.TestCase):
     def setUp(self):
         S["_canon"].clear()
+
+    def test_accents_and_capitals_do_not_make_a_second_person(self):
+        S["_canon"].clear()
+        self.assertEqual(S["canonical_person"]("Penélope Cruz"), "Penélope Cruz")
+        self.assertEqual(S["canonical_person"]("Penelope Cruz"), "Penélope Cruz")
+        self.assertEqual(S["canonical_person"]("PENELOPE  CRUZ"), "Penélope Cruz")
+        self.assertEqual(S["name_key"]("Penélope  Cruz"), "penelope cruz")
+
+    def test_the_properly_accented_spelling_is_the_one_kept(self):
+        spellings = S["most_used_spellings"]([("Penelope Cruz", 260), ("Penélope Cruz", 42), ("Lea Seydoux", 108), ("Léa Seydoux", 49),
+                                              ("Beyonce", 2), ("Beyoncé", 17), ("Kelly Brook", 84)])
+        self.assertEqual(spellings["penelope cruz"], "Penélope Cruz")
+        self.assertEqual(spellings["lea seydoux"], "Léa Seydoux")
+        self.assertEqual(spellings["beyonce"], "Beyoncé")
+        self.assertEqual(spellings["kelly brook"], "Kelly Brook")
+
+    def test_aliases_fix_a_name_with_a_typo_in_the_title(self):
+        S["_canon"].clear()
+        S["_aliases"].clear()
+        S["_aliases"].update(S["parse_aliases"]("# typos in forum titles\nVittoria Cerettifor Vogue UK = Vittoria Ceretti\n\nalix earleat st4rin0=Alix Earle\nbad line\n"))
+        self.assertEqual(S["canonical_person"]("Vittoria Cerettifor Vogue UK"), "Vittoria Ceretti")
+        self.assertEqual(S["canonical_person"]("Alix Earleat ST4RIN0"), "Alix Earle")
+        self.assertEqual(S["canonical_person"]("Kelly Brook"), "Kelly Brook")
+        S["_aliases"].clear()
 
     def test_the_first_spelling_seen_is_used_for_everyone_after_it(self):
         self.assertEqual(S["canonical_person"]("Mckenna Grace"), "Mckenna Grace")
