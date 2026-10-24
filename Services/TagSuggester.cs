@@ -11,6 +11,7 @@ namespace Ocula.Services;
 /// It looks for names and topics that repeat, such as a name in the title that also appears in most
 /// captions. This reads text only: no pictures are analysed and nothing leaves the PC. Nothing is
 /// added until the user ticks it.
+/// Body-focused words (BodyFocusedWords: pregnant, bikini, lingerie and so on) are never proposed, whatever the page says.
 /// Forum-aware: strips common thread prefixes (e.g. APPEARANCE) and treats dashes as separators so
 /// celebrity names in titles like "APPEARANCE - Katy Perry - Attends …" become suggested tags.
 /// </summary>
@@ -73,7 +74,8 @@ public static class TagSuggester
         var wordCounts = new Dictionary<string, int>();
         foreach (var text in imageText)
             foreach (var word in text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Distinct())
-                if (word.Length >= 4 && !Stop.Contains(word) && !siteWords.Contains(word) && !word.Any(char.IsDigit))
+                if (word.Length >= 4 && !Stop.Contains(word) && !siteWords.Contains(word) && !word.Any(char.IsDigit) &&
+                    !BodyFocusedWords.IsBodyFocused(word))
                     wordCounts[word] = wordCounts.GetValueOrDefault(word) + 1;
         foreach (var (word, count) in wordCounts)
         {
@@ -95,6 +97,7 @@ public static class TagSuggester
         var good = phrases.Values
             .Where(p => p.InTitle || p.ImageHits >= 2 || p.HeadingHits >= 2)
             .Where(p => p.Score >= 1.5)
+            .Where(p => !BodyFocusedWords.IsBodyFocused(p.Key)) // a last check; such words are also kept out of the runs below
             .OrderByDescending(p => p.Score).ThenByDescending(p => p.Key.Length)
             .ToList();
         var chosen = new List<Phrase>();
@@ -158,13 +161,15 @@ public static class TagSuggester
         {
             var gap = text.Substring(last, m.Index - last);
             var capital = char.IsUpper(m.Value[0]);
+            // A body-focused word ends the run and is left out, so "Pregnant Busy Philipps" still gives "Busy Philipps".
+            var skip = BodyFocusedWords.IsBodyFocused(m.Value);
             // Treat ASCII hyphen and en/em dashes as separators so "Katy Perry - Attends" splits cleanly.
-            if (!capital || gap.Any(c => c is ',' or ';' or ':' or '|' or '(' or ')' or '/' or '-' or '–' or '—' or '.' or '!' or '?'))
+            if (!capital || skip || gap.Any(c => c is ',' or ';' or ':' or '|' or '(' or ')' or '/' or '-' or '–' or '—' or '.' or '!' or '?'))
             {
                 if (current.Count > 0) runs.Add(current);
                 current = new List<string>();
             }
-            if (capital) current.Add(m.Value);
+            if (capital && !skip) current.Add(m.Value);
             last = m.Index + m.Length;
         }
         if (current.Count > 0) runs.Add(current);

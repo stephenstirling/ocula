@@ -61,12 +61,14 @@ existing Download button**.
 - No telemetry and no new network use: the page load and the downloads are what the user started.
 - No registration changes: `Package.appxmanifest` already registers the `ocula:` scheme.
 
-## Known gap
+## Body-focused words in suggestions
 
-`TagSuggester` (existing code, not changed here) pre-ticks a chip when the word is in the page title or
-on most pictures. On a page whose headline says "Pregnant …" it can offer, and pre-tick, "Pregnant".
-That sits badly with the CLAUDE.md rule about body-focused labels, which so far covers only the
-smart-recognition labels. Decide whether `TagSuggester` should drop such words.
+`TagSuggester` no longer proposes body-focused words (CLAUDE.md rule). `Services/BodyFocusedWords.cs` holds a
+whole-word list (pregnant, bikini, lingerie and so on); `TagSuggester` skips those words when it builds name runs
+and topic words, so a headline such as "Pregnant Busy Philipps Shares Baby's Sonogram Picture!" still gives "Busy
+Philipps" but no "Pregnant". Tests are in `TagSuggesterTests.cs`; they were not run with xunit, but the same cases
+were compiled and run in a scratch project on Linux. Tags the user types, or that arrive in an `ocula:` link, are
+the user's own words and are never filtered. The word list was chosen without the owner: edit it freely.
 
 ## To check on the PC
 

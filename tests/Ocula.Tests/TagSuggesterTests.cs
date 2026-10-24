@@ -54,6 +54,51 @@ public class TagSuggesterTests
     }
 
     [Fact]
+    public void A_body_focused_word_in_the_title_is_never_suggested_but_the_name_next_to_it_is()
+    {
+        var labels = Labels(Thread("Pregnant Busy Philipps Shares Baby's Sonogram Picture!", "busy-philipps-ultrasound-pic-01.jpg", "busy-philipps-ultrasound-pic-02.jpg"));
+
+        Assert.DoesNotContain(labels, l => l.Contains("Pregnan", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(labels, l => l.Contains("Busy Philipps"));
+    }
+
+    [Fact]
+    public void A_body_focused_topic_word_is_not_suggested_but_an_ordinary_one_is()
+    {
+        var labels = Labels(Thread("Day out", "beach_bikini_01.jpg", "beach_bikini_02.jpg", "beach_bikini_03.jpg", "beach_bikini_04.jpg"));
+
+        Assert.Contains("beach", labels);
+        Assert.DoesNotContain(labels, l => l.Contains("bikini", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void A_body_focused_word_joined_by_a_hyphen_is_not_suggested()
+    {
+        var labels = Labels(Thread("Day out", "beach_bikini-clad_01.jpg", "beach_bikini-clad_02.jpg", "beach_bikini-clad_03.jpg"));
+
+        Assert.DoesNotContain(labels, l => l.Contains("bikini", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Theory]
+    [InlineData("Pregnant", true)]
+    [InlineData("PREGNANT", true)]
+    [InlineData("Pregnant Celebrities", true)]
+    [InlineData("baby bump", true)]
+    [InlineData("baby_bump_01.jpg", true)]
+    [InlineData("Bikini-clad", true)]
+    [InlineData("Lingerie", true)]
+    [InlineData("Busy Philipps", false)]
+    [InlineData("Brazil", false)]       // starts with "bra" but isn't the word
+    [InlineData("Bumpkin", false)]
+    [InlineData("Sunset", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void Body_focused_words_are_matched_as_whole_words(string? text, bool expected)
+    {
+        Assert.Equal(expected, BodyFocusedWords.IsBodyFocused(text));
+    }
+
+    [Fact]
     public void Nothing_is_suggested_from_a_page_with_nothing_to_go_on()
     {
         Assert.Empty(TagSuggester.Suggest(new PageSnapshot { Url = "https://x.test/", Title = "page home" }));
