@@ -486,6 +486,7 @@ public sealed partial class WebDownloadWindow : Window
 
         WebDownloadResult? result = null;
         var folder = TargetFolder();
+        var trimOn = TrimToggle.IsOn; // read here, on the window's own thread
         try
         {
             var progress = new Progress<WebDownloadProgress>(p =>
@@ -493,7 +494,8 @@ public sealed partial class WebDownloadWindow : Window
                 DownloadBar.Value = (double)p.Done / p.Total;
                 SelectedText.Text = $"Downloading {p.Done:N0} of {p.Total:N0}";
             });
-            result = await WebDownloader.RunAsync(_http, chosen, folder, new Uri(_page.Url), _cookies, progress, _download.Token);
+            result = await WebDownloader.RunAsync(_http, chosen, folder, new Uri(_page.Url), _cookies, progress, _download.Token,
+                trimOn ? file => JustJaredTrim.TrimFile(file) : null);
         }
         catch (OperationCanceledException)
         {
@@ -512,13 +514,6 @@ public sealed partial class WebDownloadWindow : Window
         }
 
         if (result == null) return;
-
-        if (result.Saved.Count > 0 && TrimToggle.IsOn)
-        {
-            SelectedText.Text = "Trimming…";
-            var saved = result.Saved.ToList();
-            await Task.Run(() => { foreach (var file in saved) JustJaredTrim.TrimFile(file); });
-        }
 
         if (result.Saved.Count > 0)
         {

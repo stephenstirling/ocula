@@ -65,8 +65,12 @@ existing Download button**.
   16 pixels above it. Photos without a logo (a sonogram, say) lose only the frame. A cut that would remove more than half the width
   or 30% of the height is refused. The plan was measured on three real photos from one article (the logo lettering sits 30 to 90
   pixels above the bottom edge on both a portrait and a landscape photo) and run on one of them; other articles may differ.
-- JPEGs are saved again at quality 95, because a JPEG can't be cut at arbitrary pixels without that. The trimmed file differs from
-  the original, so downloading the same page again does not recognise it as a duplicate.
+- The trim happens in `WebDownloader` on the half-downloaded file, before it gets its final name, so the untrimmed original is never
+  saved as a second copy. Duplicates are judged on the trimmed result, and trimming is deterministic, so downloading the page
+  again recognises the files it already has.
+- A JPEG can't be cut at arbitrary pixels without being encoded again (quality 95), so the saved file is not byte-identical to the
+  original apart from the cut. Cutting without re-encoding is only possible on 8 or 16-pixel boundaries, which would leave part of the
+  frame on the top and left.
 
 ## Not to do
 

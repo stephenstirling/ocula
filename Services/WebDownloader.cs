@@ -30,7 +30,8 @@ public static class WebDownloader
     }
 
     public static async Task<WebDownloadResult> RunAsync(HttpClient http, IReadOnlyList<WebImage> items, string folder,
-        Uri page, string? cookies, IProgress<WebDownloadProgress>? progress, CancellationToken cancel)
+        Uri page, string? cookies, IProgress<WebDownloadProgress>? progress, CancellationToken cancel,
+        Action<string>? prepare = null)
     {
         Directory.CreateDirectory(folder);
         var saved = new List<string>();
@@ -46,7 +47,7 @@ public static class WebDownloader
             await gate.WaitAsync(cancel);
             try
             {
-                var result = await DownloadOneAsync(http, item, folder, page, cookies, nameLock, hashes, cancel);
+                var result = await DownloadOneAsync(http, item, folder, page, cookies, nameLock, hashes, prepare, cancel);
                 lock (nameLock)
                 {
                     if (result.Path != null) saved.Add(result.Path);
@@ -75,7 +76,7 @@ public static class WebDownloader
     private sealed record One(string? Path, bool Duplicate, string? Error);
 
     private static async Task<One> DownloadOneAsync(HttpClient http, WebImage item, string folder, Uri page, string? cookies,
-        object nameLock, Dictionary<string, HashSet<string>> hashes, CancellationToken cancel)
+        object nameLock, Dictionary<string, HashSet<string>> hashes, Action<string>? prepare, CancellationToken cancel)
     {
         var url = new Uri(item.FullUrl);
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -111,6 +112,14 @@ public static class WebDownloader
                 length = total;
             }
 
+            // Changes the picture before it gets its final name (the trim option). The file is judged as a duplicate, and
+            // named, only after this, so only the changed version is ever kept and a second download matches it.
+            if (prepare != null)
+            {
+                prepare(temp);
+                length = new FileInfo(temp).Length;
+            }
+
             await using (var check = File.OpenRead(temp))
                 hash = Convert.ToHexString(await SHA256.HashDataAsync(check, cancel));
 
@@ -121,7 +130,7 @@ public static class WebDownloader
                 if (!hashes.TryGetValue(key, out var known))
                 {
                     known = new HashSet<string>();
-                    foreach (var existing in Directory.EnumerateFiles(folder).Where(f => new FileInfo(f).Length == length))
+                    foreach (var existing in Directory.EnumerateFiles(folder).Where(f => !f.EndsWith(".part", StringComparison.OrdinalIgnoreCase) && new FileInfo(f).Length == length))
                     {
                         using var s = File.OpenRead(existing);
                         known.Add(Convert.ToHexString(SHA256.HashData(s)));
