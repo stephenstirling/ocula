@@ -386,6 +386,11 @@ class BlockedHostTests(unittest.TestCase):
         self.assertFalse(S["is_blocked_host"]("https://notturboimagehost.com/p/1/a.jpg.html"))
         self.assertFalse(S["is_blocked_host"]("https://example.com/turboimagehost.com/a.jpg"))
 
+    def test_a_link_that_is_not_a_valid_url_is_not_a_blocked_host_and_does_not_raise(self):
+        # a post with "http://[" in a link made urlparse raise "Invalid IPv6 URL", which ended the whole scan
+        for bad in ("http://[abc", "https://[::1/x.jpg", "http://[turboimagehost.com"):
+            self.assertFalse(S["is_blocked_host"](bad), bad)
+
     def test_each_blocked_link_is_listed_once(self):
         with tempfile.TemporaryDirectory() as d:
             S["BLOCKED_FILE"] = os.path.join(d, "blocked_links.txt")

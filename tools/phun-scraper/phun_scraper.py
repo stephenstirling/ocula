@@ -1282,8 +1282,11 @@ def log_failure(url, reason, meta=None, direct_url=None):
 
 
 def is_blocked_host(url):
-    """True for a link on a host in BLOCKED_HOSTS."""
-    host = urlparse(url).netloc.lower()
+    """True for a link on a host in BLOCKED_HOSTS. A link that can't be read as a URL ("http://[x", a stray bracket in a post) is not one."""
+    try:
+        host = urlparse(url).netloc.lower()
+    except ValueError:                   # "Invalid IPv6 URL" stopped a whole scan at one thread
+        return False
     return any(host == h or host.endswith("." + h) for h in BLOCKED_HOSTS)
 
 
@@ -1646,7 +1649,14 @@ def run_cycle():
                 status.update(last_error=message)
                 paused = True
                 break
-            if process_thread(title, url, history):
+            try:
+                finished = process_thread(title, url, history)
+            except Exception as e:           # one thread's error must not end the scan: count it as a failed attempt and carry on
+                logging.error("Thread failed (%s): %s", url, e)
+                with history_lock:
+                    tries = history["thread_attempts"][url] = history["thread_attempts"].get(url, 0) + 1
+                finished = tries >= THREAD_ATTEMPTS
+            if finished:
                 with history_lock:
                     history["processed_threads"].append(url)
             save_history(history)
