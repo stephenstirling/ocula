@@ -24,7 +24,7 @@ SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "phun_scraper.
 FUNCS = {"sanitize_filename", "rel_library_path", "name_from_title", "people_from_title", "_second_person", "plan_name_fixes",
          "fix_celebrity_names", "plan_second_people", "fix_second_people", "canonical_person", "most_used_spellings",
          "load_canonical_names", "failed_tag_paths", "retag_logged_failures", "name_key", "spelling_rank", "parse_aliases",
-         "remove_empty_folders"}
+         "remove_empty_folders", "plan_folder_renames", "fix_folder_names"}
 SCHEMA = """CREATE TABLE images (id INTEGER PRIMARY KEY AUTOINCREMENT, rel_path TEXT NOT NULL UNIQUE, celebrity TEXT, category TEXT,
  tags TEXT, source_url TEXT, thread_title TEXT, thread_url TEXT, post_date TEXT, phash TEXT, upgraded INTEGER NOT NULL DEFAULT 0,
  downloaded_at TEXT);
@@ -276,6 +276,65 @@ class EmptyFolderTests(unittest.TestCase):
         self.make("Anyone")
         self.assertEqual(self.s["remove_empty_folders"](), 0)
         self.assertTrue(os.path.isdir(os.path.join(self.root, "Anyone")))
+
+
+class TrailingDotFolderTests(unittest.TestCase):
+    def setUp(self):
+        logging.disable(logging.CRITICAL)
+        self.tmp = tempfile.TemporaryDirectory()
+        # Windows drops a trailing dot from a folder name unless the path starts with \?\ (the NAS, which is Linux, keeps it)
+        self.root = ("\\\\?\\" + self.tmp.name) if os.name == "nt" else self.tmp.name
+        self.s, self.db = load(self.tmp.name, [])
+        self.s["DOWNLOAD_DIR"] = self.root
+        with closing(sqlite3.connect(self.db)) as c, c:
+            c.executescript(SCHEMA)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def add(self, rel, create=True):
+        if create:
+            path = os.path.join(self.root, *rel.split("/"))
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "wb") as f:
+                f.write(b"x")
+        with closing(sqlite3.connect(self.db)) as c, c:
+            c.execute("INSERT INTO images (rel_path, celebrity, tags) VALUES (?,?,?)", (rel, rel.split("/")[0], "[]"))
+
+    def rels(self):
+        with closing(sqlite3.connect(self.db)) as c:
+            return sorted(r[0] for r in c.execute("SELECT rel_path FROM images"))
+
+    def test_a_folder_name_never_ends_in_a_dot_or_a_space(self):
+        self.assertEqual(self.s["sanitize_filename"]("T.A.T.U."), "T.A.T.U")
+        self.assertEqual(self.s["sanitize_filename"]("Jr. "), "Jr")
+        self.assertEqual(self.s["sanitize_filename"]("St. John Smith"), "St. John Smith")
+        self.assertEqual(self.s["sanitize_filename"]("a:b.jpg"), "ab.jpg")
+
+    def test_pictures_move_out_of_a_folder_windows_cannot_open(self):
+        # the real case: T.A.T.U. Performs Live was shortened to T.A.T.U. and the folder kept the dot
+        self.add("T.A.T.U./a.jpg")
+        self.add("T.A.T.U./b.jpg")
+        self.add("Kelly Brook/c.jpg")
+        self.assertEqual(self.s["fix_folder_names"](), 2)
+        self.assertEqual(self.rels(), ["Kelly Brook/c.jpg", "T.A.T.U/a.jpg", "T.A.T.U/b.jpg"])
+        self.assertTrue(os.path.exists(os.path.join(self.root, "T.A.T.U", "a.jpg")))
+        self.assertFalse(os.path.exists(os.path.join(self.root, "T.A.T.U.")) and os.listdir(os.path.join(self.root, "T.A.T.U.")))
+
+    def test_a_picture_with_the_same_file_name_in_the_target_is_kept_too(self):
+        self.add("T.A.T.U./a.jpg")
+        self.add("T.A.T.U/a.jpg")
+        self.assertEqual(self.s["fix_folder_names"](), 1)
+        rels = self.rels()
+        self.assertEqual(len(rels), 2)
+        self.assertEqual(len(set(rels)), 2)
+        self.assertTrue(all(r.startswith("T.A.T.U/") for r in rels))
+        self.assertTrue(all(os.path.exists(os.path.join(self.root, *r.split("/"))) for r in rels))
+
+    def test_nothing_happens_when_every_folder_is_fine(self):
+        self.add("Kelly Brook/c.jpg")
+        self.assertEqual(self.s["fix_folder_names"](), 0)
+        self.assertEqual(self.rels(), ["Kelly Brook/c.jpg"])
 
 
 class CaseVariantTests(unittest.TestCase):
