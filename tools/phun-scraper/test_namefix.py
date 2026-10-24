@@ -21,7 +21,7 @@ from contextlib import closing
 SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "phun_scraper.py")
 FUNCS = {"sanitize_filename", "rel_library_path", "name_from_title", "people_from_title", "_second_person", "plan_name_fixes",
          "fix_celebrity_names", "plan_second_people", "fix_second_people", "canonical_person", "most_used_spellings",
-         "load_canonical_names"}
+         "load_canonical_names", "failed_tag_paths", "retag_logged_failures"}
 SCHEMA = """CREATE TABLE images (id INTEGER PRIMARY KEY AUTOINCREMENT, rel_path TEXT NOT NULL UNIQUE, celebrity TEXT, category TEXT,
  tags TEXT, source_url TEXT, thread_title TEXT, thread_url TEXT, post_date TEXT, phash TEXT, upgraded INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE image_tags (image_id INTEGER NOT NULL REFERENCES images(id) ON DELETE CASCADE, tag TEXT NOT NULL, PRIMARY KEY (image_id, tag));"""
@@ -158,6 +158,54 @@ class NameFixTests(unittest.TestCase):
         self.add("Somewhere Else/a.jpg", "Kelly Brook for NEXT UK", [], "Kelly Brook for NEXT UK - x")
         self.assertEqual(self.s["fix_celebrity_names"](), 0)
         self.assertTrue(self.exists("Somewhere Else/a.jpg"))
+
+
+class RetagTests(unittest.TestCase):
+    def setUp(self):
+        logging.disable(logging.CRITICAL)
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = self.tmp.name
+        self.tagged = []
+        self.s, self.db = load(self.root, self.tagged)
+        with closing(sqlite3.connect(self.db)) as c, c:
+            c.executescript(SCHEMA)
+        self.s["LOG_FILE"] = os.path.join(self.root, "scraper.log")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_the_failed_files_are_read_from_the_log_once_each(self):
+        text = ("2026-10-23 00:46:30 [ERROR] Metadata error tagging /downloads/Elsa Hosk/a.jpg: tags not found after writing: elsa hosk\n"
+                "2026-10-23 00:47:00 [INFO] Saved to Root: b.jpg\n"
+                "2026-10-23 06:47:59 [ERROR] Metadata error tagging /downloads/Callina Liang/c.jpg: tags not found after writing: callina liang\n"
+                "2026-10-23 07:00:00 [ERROR] Metadata error tagging /downloads/Elsa Hosk/a.jpg: tags not found after writing: elsa hosk\n")
+        self.assertEqual(self.s["failed_tag_paths"](text), ["/downloads/Elsa Hosk/a.jpg", "/downloads/Callina Liang/c.jpg"])
+        self.assertEqual(self.s["failed_tag_paths"]("nothing to see"), [])
+
+    def test_files_the_log_names_are_tagged_again_with_their_index_tags_and_gone_files_are_skipped(self):
+        folder = os.path.join(self.root, "Elsa Hosk")
+        os.makedirs(folder)
+        kept, gone = os.path.join(folder, "a.jpg"), os.path.join(folder, "gone.jpg")
+        open(kept, "wb").write(b"x")
+        with closing(sqlite3.connect(self.db)) as c, c:
+            c.execute("INSERT INTO images (rel_path, celebrity, tags) VALUES (?,?,?)", ("Elsa Hosk/a.jpg", "Elsa Hosk", json.dumps(["Elsa Hosk", "Dress"])))
+        open(self.s["LOG_FILE"], "w", encoding="utf-8").write(
+            f"x [ERROR] Metadata error tagging {kept}: tags not found after writing: elsa hosk\n"
+            f"x [ERROR] Metadata error tagging {gone}: tags not found after writing: elsa hosk\n")
+        self.assertEqual(self.s["retag_logged_failures"](), 1)
+        self.assertEqual(self.tagged, [(kept, ["Elsa Hosk", "Dress"])])
+
+    def test_a_file_that_is_not_in_the_index_gets_the_name_of_its_folder(self):
+        folder = os.path.join(self.root, "Callina Liang")
+        os.makedirs(folder)
+        path = os.path.join(folder, "c.jpg")
+        open(path, "wb").write(b"x")
+        open(self.s["LOG_FILE"], "w", encoding="utf-8").write(f"x [ERROR] Metadata error tagging {path}: tags not found after writing: callina liang\n")
+        self.assertEqual(self.s["retag_logged_failures"](), 1)
+        self.assertEqual(self.tagged, [(path, ["Callina Liang"])])
+
+    def test_no_log_means_nothing_to_do(self):
+        self.assertEqual(self.s["retag_logged_failures"](), 0)
 
 
 class CaseVariantTests(unittest.TestCase):

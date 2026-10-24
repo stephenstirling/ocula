@@ -1037,6 +1037,48 @@ def _as_list(value):
     return [str(v) for v in value] if isinstance(value, (list, tuple)) else [str(value)]
 
 
+def _write_and_read_back(file_path, tags, replace_xmp=False):
+    """Writes `tags` with ExifTool and returns the XMP:Subject keywords (lower case) found in the file afterwards."""
+    with ExifToolHelper() as et:
+        if replace_xmp:
+            et.execute("-m", "-overwrite_original", "-XMP:all=", file_path)
+        params = ["-overwrite_original", "-m"] if replace_xmp else ["-overwrite_original"]
+        et.set_tags([file_path], tags=tags, params=params)
+        back = et.get_tags([file_path], tags=["XMP:Subject"])
+    return {k.lower() for k in _as_list(back[0].get("XMP:Subject") if back else None)}
+
+
+def failed_tag_paths(log_text):
+    """The files the log says couldn't be tagged (its "Metadata error tagging <path>: ..." lines), once each, in order."""
+    return list(dict.fromkeys(re.findall(r"Metadata error tagging (.+?\.[A-Za-z0-9]{3,4}): ", log_text)))
+
+
+def retag_logged_failures():
+    """At start-up, tries again on the files the log says couldn't be tagged (now with the fallback in embed_metadata). Files that have
+    moved or gone since are skipped; the tags are the index's for that file, or the person's name."""
+    try:
+        with open(LOG_FILE, encoding="utf-8", errors="replace") as f:
+            text = f.read()
+    except OSError:
+        return 0
+    fixed = 0
+    for path in failed_tag_paths(text):
+        if not os.path.exists(path):
+            continue
+        rel = rel_library_path(path)
+        with closing(_library_connect()) as conn:
+            row = conn.execute("SELECT tags FROM images WHERE rel_path = ?", (rel,)).fetchone()
+        try:
+            tags = json.loads(row[0]) if row and row[0] else []
+        except ValueError:
+            tags = []
+        if embed_metadata(path, tags or [rel.split("/")[0]]):
+            fixed += 1
+    if fixed:
+        logging.info("Retagged %d picture(s) that couldn't be tagged before", fixed)
+    return fixed
+
+
 def embed_metadata(file_path, keywords_list):
     """Writes the tags into the file, reads them back, and returns True only if they are there.
     A failure is logged, shown in the scraper's activity list and counted (metadata_failed), because a file
@@ -1045,10 +1087,12 @@ def embed_metadata(file_path, keywords_list):
     with exif_lock:
         try:
             tags = metadata_tags_for(file_path, keywords_list)
-            with ExifToolHelper() as et:
-                et.set_tags([file_path], tags=tags, params=["-overwrite_original"])
-                back = et.get_tags([file_path], tags=["XMP:Subject"])
-            found = {k.lower() for k in _as_list(back[0].get("XMP:Subject") if back else None)}
+            found = _write_and_read_back(file_path, tags)
+            if not wanted <= found:
+                # A few pictures arrive with an XMP block ExifTool can't edit (agency files whose XMP is malformed), so the write doesn't
+                # take. Only then: remove that block and write again. Pictures whose XMP is fine are never touched this way.
+                logging.info("Retagging %s without its existing XMP block", os.path.basename(file_path))
+                found = _write_and_read_back(file_path, tags, replace_xmp=True)
             if not wanted <= found:
                 raise ValueError("tags not found after writing: %s" % ", ".join(sorted(wanted - found)))
             return True
@@ -1461,6 +1505,7 @@ def main():
         fix_celebrity_names()
         fix_second_people()
         reindex_existing()                  # pictures saved but never indexed (the scraper was stopped mid-save)
+        retag_logged_failures()             # pictures the log says could not be tagged
     except Exception as e:                  # never stop the scraper over a tidy-up
         logging.error("Name fix failed: %s", e)
     while True:

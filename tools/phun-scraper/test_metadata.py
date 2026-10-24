@@ -12,7 +12,7 @@ import threading
 import unittest
 
 SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "phun_scraper.py")
-WANTED = {"IPTC_EXTS", "metadata_tags_for", "_as_list", "embed_metadata"}
+WANTED = {"IPTC_EXTS", "metadata_tags_for", "_as_list", "embed_metadata", "_write_and_read_back"}
 
 
 class FakeStatus:
@@ -58,6 +58,15 @@ class FakeExifTool:
             raise RuntimeError("exiftool failed")
         FakeExifTool.written.append((files[0], dict(tags), list(params or [])))
 
+    executed = []
+    heal_on_execute = False
+
+    def execute(self, *params):
+        FakeExifTool.executed.append(params)
+        if FakeExifTool.heal_on_execute:
+            FakeExifTool.drop = ()          # the broken XMP block is gone, so the next write takes
+        return ""
+
     def get_tags(self, files, tags):
         _, written, _ = FakeExifTool.written[-1]
         subject = [k for k in written.get("XMP:Subject", []) if k not in FakeExifTool.drop]
@@ -67,6 +76,7 @@ class FakeExifTool:
 class MetadataTests(unittest.TestCase):
     def setUp(self):
         FakeExifTool.written, FakeExifTool.drop, FakeExifTool.fail_on_write = [], (), False
+        FakeExifTool.executed, FakeExifTool.heal_on_execute = [], False
         logging.disable(logging.CRITICAL)
         self.scope, self.status = load(FakeExifTool)
 
@@ -110,6 +120,29 @@ class MetadataTests(unittest.TestCase):
         scope, status = load(Lower)
         self.assertTrue(scope["embed_metadata"]("x.jpg", ["Celeb Name"]))
         self.assertEqual(status.bumps, [])
+
+    def test_a_write_that_does_not_take_is_retried_once_without_the_files_own_xmp(self):
+        FakeExifTool.drop = ("Elsa Hosk",)               # the first write silently doesn't take
+        FakeExifTool.heal_on_execute = True              # removing the XMP block lets the second one through
+        scope, status = load(FakeExifTool)
+        self.assertTrue(scope["embed_metadata"]("x.jpg", ["Elsa Hosk"]))
+        self.assertEqual(len(FakeExifTool.executed), 1)
+        self.assertIn("-XMP:all=", FakeExifTool.executed[0])
+        self.assertEqual(len(FakeExifTool.written), 2)   # written twice: once normally, once after the block was removed
+        self.assertEqual(status.bumps, [])               # and it is not counted as a failure
+
+    def test_a_file_whose_xmp_is_fine_is_never_stripped(self):
+        scope, status = load(FakeExifTool)
+        self.assertTrue(scope["embed_metadata"]("x.jpg", ["Kelly Brook"]))
+        self.assertEqual(FakeExifTool.executed, [])
+        self.assertEqual(len(FakeExifTool.written), 1)
+
+    def test_if_the_retry_does_not_help_it_is_reported_as_a_failure(self):
+        FakeExifTool.drop = ("Elsa Hosk",)
+        scope, status = load(FakeExifTool)
+        self.assertFalse(scope["embed_metadata"]("x.jpg", ["Elsa Hosk"]))
+        self.assertEqual(len(FakeExifTool.executed), 1)
+        self.assertEqual(status.bumps, ["metadata_failed"])
 
     def test_a_single_value_comes_back_as_a_string_not_a_list(self):
         class Single(FakeExifTool):
