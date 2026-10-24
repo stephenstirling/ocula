@@ -35,7 +35,7 @@ def load(root, tagged):
     with open(SOURCE, encoding="utf-8") as f:
         tree = ast.parse(f.read())
     keep = [n for n in tree.body if (isinstance(n, ast.FunctionDef) and n.name in FUNCS)
-            or (isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) in ("NAME_PARTICLES", "NAME_VERBS", "_canon", "_aliases"))]
+            or (isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) in ("NAME_PARTICLES", "NAME_VERBS", "NAME_RELATIONS", "_canon", "_aliases"))]
     db = os.path.join(root, "ocula_library.db")
 
     def connect():
@@ -348,7 +348,7 @@ class CaseVariantTests(unittest.TestCase):
             tree = ast.parse(f.read())
         keep = [n for n in tree.body if (isinstance(n, ast.FunctionDef) and n.name in {"sanitize_filename", "name_from_title", "people_from_title",
                                                                                         "_second_person", "plan_name_fixes"})
-                or (isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) in ("NAME_PARTICLES", "NAME_VERBS"))]
+                or (isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) in ("NAME_PARTICLES", "NAME_VERBS", "NAME_RELATIONS"))]
         exec(compile(ast.Module(body=keep, type_ignores=[]), SOURCE, "exec"), scope)
         canon = (lambda n: spellings.get(n.lower(), n)) if spellings else None
         return scope["plan_name_fixes"](rows, scope["people_from_title"], canon)

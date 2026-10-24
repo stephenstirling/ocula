@@ -1164,8 +1164,12 @@ NAME_VERBS = {
     "appear", "greet", "depart", "flaunt", "debut", "receive", "reveal", "enjoy", "join", "cheer", "strut", "stun",
     # words that describe the occasion rather than the person ("Florence Pugh Shopping", "Jenna Ortega Flaunt Magazine")
     "exiting", "opening", "filming", "promoting", "shopping", "night", "portraits", "photoshoot", "after-party", "afterparty",
-    "magazine", "chats", "cover", "celebration", "live", "interview",
+    "magazine", "chats", "cover", "celebration", "live", "interview", "go",
 }
+
+# Who someone is to the first person, written before the second person's name ("Gisele Bundchen & Husband Joaquim Valente"): not part of it.
+NAME_RELATIONS = {"husband", "wife", "boyfriend", "girlfriend", "fiance", "partner", "mom", "mum", "dad", "mother", "father", "son",
+                  "daughter", "sister", "brother", "friend", "friends", "pal", "ex-husband", "ex-wife", "ex-boyfriend", "ex-girlfriend"}
 
 
 def name_from_title(clean_title):
@@ -1228,6 +1232,8 @@ def _second_person(words):
         run.pop()
     while len(run) > 1 and run[-1].lower() in NAME_VERBS:
         run.pop()
+    while len(run) > 2 and run[0].lower() in NAME_RELATIONS:
+        run.pop(0)
     if run:
         run[-1] = re.sub(r"['\u2019]s$", "", run[-1])
     return " ".join(run) if 2 <= len(run) <= 4 else None

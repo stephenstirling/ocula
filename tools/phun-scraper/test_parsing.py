@@ -28,7 +28,7 @@ WANTED = {"listing_threads", "post_bodies", "direct_from_thumbnail", "extract_me
 def load():
     tree = ast.parse(open(SOURCE, encoding="utf-8").read())
     keep = [n for n in tree.body if (isinstance(n, ast.FunctionDef) and n.name in WANTED)
-            or (isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) in ("NAME_PARTICLES", "NAME_VERBS", "_canon", "_aliases"))]
+            or (isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) in ("NAME_PARTICLES", "NAME_VERBS", "NAME_RELATIONS", "_canon", "_aliases"))]
     scope = {"re": re, "is_within_pregnancy_timeline": lambda *a: False, "logging": logging, "threading": threading,
              "urlparse": urlparse, "urljoin": urljoin, "BLOCKED_HOSTS": (), "history_lock": threading.Lock(), "blocked_lock": threading.Lock(),
              "BLOCKED_FILE": None, "shutil": shutil, "FORUM_URL": "https://forum.phun.org/forums/celebrity-photos.15/", "failures_lock": threading.Lock(), "BeautifulSoup": BeautifulSoup, "requests": requests, "session": None, "_iso": lambda: "2026-10-22T21:00:00Z", "FAILURES_FILE": None}
@@ -171,6 +171,15 @@ class NameTests(unittest.TestCase):
         for title, name in [("Amelia Gray Hamlin at the Met Gala", "Amelia Gray Hamlin"), ("Olivia Taylor Dudley at a premiere", "Olivia Taylor Dudley"),
                             ("Chanel West Coast at a party", "Chanel West Coast")]:
             self.assertEqual(S["name_from_title"](title), name, title)
+
+    def test_who_someone_is_to_the_first_person_is_not_part_of_the_second_name(self):
+        # the real folder: "Husband Joaquim Valente Go"
+        self.assertEqual(S["people_from_title"]("Gisele Bündchen & Husband Joaquim Valente Go for a Bike Ride Together in Brazil"),
+                         ["Gisele Bündchen", "Joaquim Valente"])
+        self.assertEqual(S["people_from_title"]("Kate Hudson and Boyfriend Danny Fujikawa at a party"), ["Kate Hudson", "Danny Fujikawa"])
+        # a name that starts with one of these words, with nothing after it, is left alone
+        self.assertEqual(S["people_from_title"]("Kate Hudson and Mom Goldie Hawn at a party"), ["Kate Hudson", "Goldie Hawn"])
+        self.assertEqual(S["people_from_title"]("Kate Hudson and Sister Hawn at a party"), ["Kate Hudson", "Sister Hawn"])
 
     def test_a_verb_is_only_removed_when_a_name_is_left(self):
         self.assertEqual(S["name_from_title"]("Sings at the awards"), "Sings")   # nothing before it: keep what there is
