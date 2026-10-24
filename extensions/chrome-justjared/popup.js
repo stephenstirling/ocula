@@ -17,7 +17,7 @@ let state = { url: "", root: DEFAULTS.root, chips: [], folderTouched: false };
 const isArticle = (u) => {
   try {
     const x = new URL(u);
-    return /(^|\.)justjared\.com$/.test(x.hostname) && /^\/\d{4}\/\d{2}\/\d{2}\//.test(x.pathname);
+    return /(^|\.)justjared\.com$/.test(x.hostname) && (/^\/\d{4}\/\d{2}\/\d{2}\//.test(x.pathname) || /^\/photo-gallery\/\d+\//.test(x.pathname));
   } catch { return false; }
 };
 

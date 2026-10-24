@@ -16,8 +16,8 @@ const contentJs = readFileSync(join(here, "..", "content.js"), "utf8");
 const B = "https://jj-justjared-media.s3.us-east-1.amazonaws.com/wp-content/uploads/2013/06/philipps-ultrasound/";
 const pageUrl = "https://www.justjared.com/2013/06/07/pregnant-busy-philipps-shares-babys-sonogram-picture/";
 
-async function scan(html, pages = {}) {
-  const dom = new JSDOM(html, { url: pageUrl, runScripts: "outside-only" });
+async function scan(html, pages = {}, url = pageUrl) {
+  const dom = new JSDOM(html, { url, runScripts: "outside-only" });
   const w = dom.window;
   let listener;
   w.chrome = { runtime: { onMessage: { addListener: (fn) => { listener = fn; } } } };
@@ -54,6 +54,28 @@ test("direct image links: five photos, one name, category tag and body mention d
   assert.equal(r.images.length, 5);
   assert.equal(r.images[4], B + "busy-philipps-shares-babys-ultrasound-pic-05.jpg");
   assert.ok(r.images.every((u) => u.includes("jj-justjared-media") && !u.includes("ad-banner")));
+});
+
+// Structure seen on the live site (October 2026): a gallery page shows one photo, a filmstrip of "/thumbs/" copies
+// linking to sibling gallery pages, and structured data naming the article and its categories.
+test("gallery page: filmstrip thumbs give the full photos, name and article address come from the page data", async () => {
+  const T = "https://jj-justjared-media.s3.amazonaws.com/wp-content/uploads/2013/06/philipps-ultrasound/thumbs/";
+  const strip = [1, 2, 3, 4, 5].map((n) =>
+    `<a href="https://www.justjared.com/photo-gallery/28866${n}/busy-philipps-shares-babys-ultrasound-pic-0${n}/"><img src="${T}busy-philipps-shares-babys-ultrasound-pic-0${n}.jpg"></a>`).join("");
+  const ld = JSON.stringify({ "@graph": [{ "@type": "Article", articleSection: ["Busy Philipps", "Pregnant Celebrities"],
+    mainEntityOfPage: { "@id": pageUrl } }] });
+  const html = `<!doctype html><html><head><title>Pregnant Busy Philipps Shares Baby's Sonogram Picture! | Just Jared</title>
+    <script type="application/ld+json">${ld}</script></head><body>
+    <a href="https://www.justjared.com/"><img src="https://www.justjared.com/wp-content/uploads/2026/04/cropped-justjared-600px.png"></a>
+    <h1>Pregnant Busy Philipps Shares Baby's Sonogram Picture!</h1>
+    <a href="${B}busy-philipps-shares-babys-ultrasound-pic-04.jpg"><img src="${B}busy-philipps-shares-babys-ultrasound-pic-04.jpg"></a>
+    <div>${strip}</div></body></html>`;
+  const r = await scan(html, {}, "https://www.justjared.com/photo-gallery/2886605/busy-philipps-shares-babys-ultrasound-pic-04/");
+  assert.equal(r.url, pageUrl);
+  assert.deepEqual(r.names, ["Busy Philipps"]);
+  assert.equal(r.images.length, 5);
+  assert.ok(r.images.every((u) => !u.includes("/thumbs/") && u.includes("jj-justjared-media")));
+  assert.ok(r.images.some((u) => u.endsWith("/philipps-ultrasound/busy-philipps-shares-babys-ultrasound-pic-01.jpg")));
 });
 
 test("tag text stored in capitals is tidied", async () => {

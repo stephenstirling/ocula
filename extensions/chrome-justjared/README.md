@@ -21,7 +21,10 @@ There are no icons yet, so Chrome shows a letter tile. Add `icons/` and an `icon
 
 ## What it does
 
-- Recognises Just Jared article addresses (`/YYYY/MM/DD/slug/`). Anywhere else the popup says so.
+- Recognises Just Jared article addresses (`/YYYY/MM/DD/slug/`) and single-photo gallery pages
+  (`/photo-gallery/ID/slug/`, the page you land on from a photo). On a gallery page it reads the
+  filmstrip (each `/thumbs/` picture maps to the full photo one folder up), takes the names from the
+  article's page data, and sends Ocula the article's own address. Anywhere else the popup says so.
 - **Names** come from the article's own tag links, using the same rules as `justjared_scraper.py`:
   names in the headline win, a name only mentioned in the body is a fallback, and category tags
   such as "Pregnant Celebrities" are dropped because they never appear in the text. No face

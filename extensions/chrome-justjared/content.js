@@ -35,11 +35,41 @@
   // down (a quoted tweet, say) is used only when the headline has none, and a
   // category tag such as "Pregnant Celebrities" never appears in the text, so
   // it is dropped.
+  // The page's structured data: the article's categories/tags and its canonical address.
+  function getLd() {
+    for (const el of document.querySelectorAll("script[type='application/ld+json']")) {
+      try {
+        const data = JSON.parse(el.textContent);
+        const graph = Array.isArray(data) ? data : data["@graph"] || [data];
+        const art = graph.find((x) => x && x["@type"] === "Article");
+        if (art) return art;
+      } catch { /* not JSON we can read */ }
+    }
+    return null;
+  }
+
+  // Gallery pages (/photo-gallery/ID/slug/) show one photo of the article; the article itself is named in the page data.
+  function articleUrl() {
+    const art = getLd();
+    const main = art && art.mainEntityOfPage && art.mainEntityOfPage["@id"];
+    try {
+      const u = new URL(main, location.href);
+      if (u.hostname.endsWith("justjared.com") && /^\/\d{4}\/\d{2}\/\d{2}\//.test(u.pathname)) return u.origin + u.pathname;
+    } catch { /* fall through */ }
+    return location.origin + location.pathname;
+  }
+
   function getNames(title) {
     const prose = (title + " " + [...document.querySelectorAll("p")]
       .map((p) => p.textContent).join(" ")).toLowerCase();
     const inTitle = [];
     const inBody = [];
+    const art = getLd();
+    const sections = art && Array.isArray(art.articleSection) ? art.articleSection : [];
+    sections.forEach((text) => {
+      const t = tidy(String(text));
+      if (looksLikeName(t) && title.toLowerCase().includes(t.toLowerCase())) inTitle.push(t);
+    });
     document.querySelectorAll("a[rel~='tag'], .entry-content a, article a").forEach((a) => {
       const text = tidy(a.textContent);
       if (!looksLikeName(text)) return;
@@ -86,19 +116,25 @@
   }
 
   async function getImages() {
-    const root = document.querySelector("article, .entry-content, .post-content, #content") || document.body;
+    const gallery = /^\/photo-gallery\//.test(location.pathname);
+    const root = (!gallery && document.querySelector("article, .entry-content, .post-content, #content")) || document.body;
     const found = [];
     const pages = [];
 
     root.querySelectorAll("a[href]").forEach((a) => {
       if (IMG_RE.test(a.href)) found.push(a.href);
-      else if (a.querySelector("img") && isSiteLink(a.href)) pages.push(a.href);
+      else if (a.querySelector("img") && isSiteLink(a.href) && !a.querySelector("img[src*='/thumbs/']")) pages.push(a.href);
+    });
+    // The filmstrip on a gallery page: the original sits one folder up from its "/thumbs/" copy.
+    root.querySelectorAll("img").forEach((img) => {
+      const src = bestSrc(img);
+      if (src.includes(MEDIA_HOST) && src.includes("/thumbs/")) found.push(src.replace("/thumbs/", "/"));
     });
     root.querySelectorAll("img").forEach((img) => {
       const src = bestSrc(img);
       const a = img.closest("a[href]");
       const handled = a && (IMG_RE.test(a.href) || isSiteLink(a.href));
-      if (src && !handled) found.push(src);
+      if (src && !handled && !src.includes("/thumbs/")) found.push(src);
     });
 
     for (const link of uniq(pages).slice(0, MAX_PAGE_LINKS)) {
@@ -106,19 +142,26 @@
       if (og) found.push(og);
     }
 
-    return uniq(
-      found
-        .filter((u) => !u.startsWith("data:") && !SKIP.some((w) => u.toLowerCase().includes(w)))
-        .filter((u) => u.includes(MEDIA_HOST))
-        .map(fullSize)
-    );
+    // The same photo can come from two S3 host names (s3.amazonaws.com and s3.us-east-1...), so compare by path.
+    const seen = new Set();
+    return found
+      .filter((u) => !u.startsWith("data:") && !SKIP.some((w) => u.toLowerCase().includes(w)))
+      .filter((u) => u.includes(MEDIA_HOST))
+      .map(fullSize)
+      .filter((u) => {
+        let key = u;
+        try { key = new URL(u).pathname; } catch { /* keep the whole address */ }
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (!message || message.type !== "scan") return false;
     (async () => {
       const title = getTitle();
-      sendResponse({ ok: true, url: location.origin + location.pathname, title, names: getNames(title), images: await getImages() });
+      sendResponse({ ok: true, url: articleUrl(), title, names: getNames(title), images: await getImages() });
     })().catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true; // the response is sent asynchronously
   });
