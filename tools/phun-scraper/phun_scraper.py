@@ -619,6 +619,59 @@ def fix_second_people(dry_run=False):
     return made
 
 
+def plan_folder_renames(rows):
+    """`rows` are (id, rel_path). Pictures filed in a folder whose name Windows can't open (ends in a dot or space): gives
+    (id, old_rel, new_rel) with the name sanitize_filename would make."""
+    plan = []
+    for image_id, rel_path in rows:
+        parts = rel_path.split("/")
+        fixed = sanitize_filename(parts[0])
+        if len(parts) >= 2 and fixed and fixed != parts[0]:
+            plan.append((image_id, rel_path, "/".join([fixed] + parts[1:])))
+    return plan
+
+
+def fix_folder_names():
+    """Moves pictures out of folders Windows can't open ("T.A.T.U." -> "T.A.T.U") and updates the index. Runs at every start and does
+    nothing once none are left. Returns how many pictures were moved."""
+    with closing(_library_connect()) as conn:
+        rows = conn.execute("SELECT id, rel_path FROM images").fetchall()
+    plan = plan_folder_renames(rows)
+    if not plan:
+        return 0
+    logging.info("Folder names: %d pictures are in a folder Windows can't open", len(plan))
+    taken = {r[1] for r in rows}
+    moved, old_dirs = 0, set()
+    for image_id, old_rel, new_rel in plan:
+        old_path = os.path.join(DOWNLOAD_DIR, *old_rel.split("/"))
+        new_path = os.path.join(DOWNLOAD_DIR, *new_rel.split("/"))
+        try:
+            if os.path.exists(old_path):
+                if new_rel in taken or os.path.exists(new_path):          # same file name already there: keep both
+                    name, ext = os.path.splitext(new_path)
+                    new_path = f"{name}_{hashlib.md5(old_rel.encode()).hexdigest()[:6]}{ext}"
+                os.makedirs(os.path.dirname(new_path), exist_ok=True)
+                os.rename(old_path, new_path)
+            elif not os.path.exists(new_path):
+                logging.warning("Folder names: %s is missing, skipped", old_rel)
+                continue
+            new_rel = rel_library_path(new_path)
+            with db_lock, closing(_library_connect()) as conn, conn:
+                conn.execute("UPDATE images SET rel_path=? WHERE id=?", (new_rel, image_id))
+            taken.add(new_rel)
+            old_dirs.add(os.path.dirname(old_path))
+            moved += 1
+        except Exception as e:
+            logging.error("Folder names: %s failed: %s", old_rel, e)
+    for folder in old_dirs:
+        try:
+            os.rmdir(folder)
+        except OSError:
+            pass
+    logging.info("Folder names: %d of %d pictures moved", moved, len(plan))
+    return moved
+
+
 def remove_empty_folders():
     """Removes the folders the scraper made that have nothing in them (a thread whose pictures could not be saved used to leave one,
     named after whatever the title said). Only folders with no file at any depth, and only ones made since the first picture was saved,
@@ -774,7 +827,9 @@ def start_status_server():
 
 
 def sanitize_filename(name):
-    return re.sub(r'[\\/*?:"<>|]', "", name).strip()
+    """A name Windows can open: no reserved characters, and no dot or space at the end ("T.A.T.U." is the folder "T.A.T.U": Windows drops
+    a trailing dot, so a folder that keeps it can't be opened from the PC or Ocula, which sees it as T7925Q~9)."""
+    return re.sub(r'[\\/*?:"<>|]', "", name).strip().rstrip(". ")
 
 
 # --- Date helper ---
@@ -1613,6 +1668,7 @@ def main():
     start_status_server()
     status.update(force=True)
     try:
+        fix_folder_names()                  # folders whose name ends in a dot, which Windows can't open
         fix_celebrity_names()
         fix_second_people()
         reindex_existing()                  # pictures saved but never indexed (the scraper was stopped mid-save)
