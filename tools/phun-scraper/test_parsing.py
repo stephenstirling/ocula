@@ -21,7 +21,7 @@ from bs4 import BeautifulSoup
 SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "phun_scraper.py")
 WANTED = {"listing_threads", "post_bodies", "direct_from_thumbnail", "extract_metadata_tags", "log_failure", "resolve_image_host_url", "name_from_title", "people_from_title", "_second_person",
           "forum_page_url", "thread_page_url", "last_page_number", "enough_free_space", "hash_ints", "is_near_duplicate", "canonical_person", "most_used_spellings",
-          "is_blocked_host", "note_blocked_links"}
+          "is_blocked_host", "note_blocked_links", "download_complete"}
 
 
 def load():
@@ -385,6 +385,22 @@ class BlockedHostTests(unittest.TestCase):
             S["BLOCKED_FILE"] = os.path.join(d, "blocked_links.txt")
             self.assertEqual(S["note_blocked_links"]([], ["X Y"], {}, {"blocked_urls": []}), 0)
             self.assertFalse(os.path.exists(S["BLOCKED_FILE"]))
+
+
+class DownloadCompleteTests(unittest.TestCase):
+    class Response:
+        def __init__(self, headers):
+            self.headers = headers
+
+    def test_a_small_file_that_arrived_whole_is_the_real_one(self):
+        self.assertTrue(S["download_complete"](self.Response({"Content-Length": "8183"}), b"x" * 8183))
+        self.assertTrue(S["download_complete"](self.Response({}), b"x" * 10))                       # no length given: take it as whole
+
+    def test_a_cut_short_download_is_not_complete_so_it_will_be_retried(self):
+        self.assertFalse(S["download_complete"](self.Response({"Content-Length": "500000"}), b"x" * 8183))
+
+    def test_an_odd_length_header_is_ignored(self):
+        self.assertTrue(S["download_complete"](self.Response({"Content-Length": "abc"}), b"x" * 5))
 
 
 class FailureLogTests(unittest.TestCase):

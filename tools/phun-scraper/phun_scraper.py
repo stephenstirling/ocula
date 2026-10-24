@@ -33,6 +33,7 @@ DOWNLOAD_DIR = os.environ.get("DOWNLOAD_DIR", "/downloads")  # Docker path; moun
 HISTORY_FILE = os.path.join(DOWNLOAD_DIR, "download_history.json")
 CELEB_CACHE_FILE = os.path.join(DOWNLOAD_DIR, "celeb_data_cache.json")
 FAILURES_FILE = os.path.join(DOWNLOAD_DIR, "failed_downloads.log")  # one line per picture that wasn't saved, and why
+RETAG_FILE = os.path.join(DOWNLOAD_DIR, "retag_list.txt")  # files to tag again at start-up: one path per line, relative to the downloads folder
 LOG_FILE = os.path.join(DOWNLOAD_DIR, "scraper.log")
 LIBRARY_DB = os.path.join(DOWNLOAD_DIR, "ocula_library.db")  # sidecar index read by Ocula
 IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
@@ -1238,12 +1239,14 @@ def _as_list(value):
     return [str(v) for v in value] if isinstance(value, (list, tuple)) else [str(value)]
 
 
-def _write_and_read_back(file_path, tags, replace_xmp=False):
-    """Writes `tags` with ExifTool and returns the XMP:Subject keywords (lower case) found in the file afterwards."""
+def _write_and_read_back(file_path, tags, mode="normal"):
+    """Writes `tags` with ExifTool and returns the XMP:Subject keywords (lower case) found in the file afterwards.
+    mode "normal"; "minor" (-m: carry on past minor errors, such as a slightly malformed block); "replace" (-m, and the file's own XMP
+    block is removed first, for a block ExifTool can't edit at all)."""
     with ExifToolHelper() as et:
-        if replace_xmp:
+        if mode == "replace":
             et.execute("-m", "-overwrite_original", "-XMP:all=", file_path)
-        params = ["-overwrite_original", "-m"] if replace_xmp else ["-overwrite_original"]
+        params = ["-overwrite_original"] + (["-m"] if mode != "normal" else [])
         et.set_tags([file_path], tags=tags, params=params)
         back = et.get_tags([file_path], tags=["XMP:Subject"])
     return {k.lower() for k in _as_list(back[0].get("XMP:Subject") if back else None)}
@@ -1261,9 +1264,15 @@ def retag_logged_failures():
         with open(LOG_FILE, encoding="utf-8", errors="replace") as f:
             text = f.read()
     except OSError:
-        return 0
+        text = ""
+    paths = failed_tag_paths(text)
+    try:                                           # files named by hand, for ones whose log line has scrolled away
+        with open(RETAG_FILE, encoding="utf-8") as f:
+            paths += [os.path.join(DOWNLOAD_DIR, *line.strip().split("/")) for line in f if line.strip() and not line.startswith("#")]
+    except OSError:
+        pass
     fixed = 0
-    for path in failed_tag_paths(text):
+    for path in dict.fromkeys(paths):
         if not os.path.exists(path):
             continue
         rel = rel_library_path(path)
@@ -1280,28 +1289,40 @@ def retag_logged_failures():
     return fixed
 
 
+def exiftool_detail(error):
+    """What ExifTool itself said, when the exception carries it (PyExifTool's execute errors do), for the log."""
+    parts = [str(getattr(error, attr, "") or "").strip() for attr in ("stderr", "stdout")]
+    return " | ".join(p for p in parts if p)[:400]
+
+
 def embed_metadata(file_path, keywords_list):
     """Writes the tags into the file, reads them back, and returns True only if they are there.
-    A failure is logged, shown in the scraper's activity list and counted (metadata_failed), because a file
-    without its tags can't be found by tag in Ocula."""
+    A few pictures arrive with an XMP block ExifTool can't edit (agency files with malformed XMP), so the write does not take or
+    ExifTool refuses. Only then it tries again, gently first (ignore minor errors), and only as a last step with that block removed.
+    A failure is logged (with ExifTool's own message), shown in the scraper's activity list and counted (metadata_failed), because a
+    file without its tags can't be found by tag in Ocula."""
     wanted = {k.lower() for k in keywords_list}
     with exif_lock:
-        try:
-            tags = metadata_tags_for(file_path, keywords_list)
-            found = _write_and_read_back(file_path, tags)
-            if not wanted <= found:
-                # A few pictures arrive with an XMP block ExifTool can't edit (agency files whose XMP is malformed), so the write doesn't
-                # take. Only then: remove that block and write again. Pictures whose XMP is fine are never touched this way.
-                logging.info("Retagging %s without its existing XMP block", os.path.basename(file_path))
-                found = _write_and_read_back(file_path, tags, replace_xmp=True)
-            if not wanted <= found:
-                raise ValueError("tags not found after writing: %s" % ", ".join(sorted(wanted - found)))
-            return True
-        except Exception as e:
-            logging.error("Metadata error tagging %s: %s", file_path, e)
-            status.bump("metadata_failed")
-            status.add_event("ERROR", "Couldn't tag %s: %s" % (os.path.basename(file_path), e))
-            return False
+        error = None
+        tags = metadata_tags_for(file_path, keywords_list)
+        for mode in ("normal", "minor", "replace"):
+            if mode != "normal":
+                logging.info("Retagging %s %s", os.path.basename(file_path),
+                             "ignoring minor errors" if mode == "minor" else "without its existing XMP block")
+            try:
+                found = _write_and_read_back(file_path, tags, mode)
+            except Exception as e:
+                error = e
+                continue
+            if wanted <= found:
+                return True
+            error = ValueError("tags not found after writing: %s" % ", ".join(sorted(wanted - found)))
+        detail = exiftool_detail(error)
+        message = f"{error}: {detail}" if detail and detail not in str(error) else str(error)
+        logging.error("Metadata error tagging %s: %s", file_path, message)
+        status.bump("metadata_failed")
+        status.add_event("ERROR", "Couldn't tag %s: %s" % (os.path.basename(file_path), message[:200]))
+        return False
 
 
 failures_lock = threading.Lock()
@@ -1349,9 +1370,16 @@ def note_blocked_links(links, people, meta, history):
     return len(new)
 
 
+def download_complete(response, content):
+    """True when what arrived is all of it (it matches the Content-Length, or none was given), so a small file is the real, small file
+    (for example a host's "image removed" placeholder) and fetching it again would give the same."""
+    length = response.headers.get("Content-Length")
+    return length is None or not str(length).isdigit() or int(length) == len(content)
+
+
 def download_file(url, celeb_root_folder, history, keywords_list, meta=None, also_for=None):
     ok = _download_file(url, celeb_root_folder, history, keywords_list, meta, also_for)
-    if ok is False:                                  # None means "blocked by a bot check": reported, but not a failure to retry
+    if ok is False:                                  # None: reported in failed_downloads.log, but nothing to retry (a bot check, a removed picture)
         status.bump("failed_downloads")
     return ok
 
@@ -1398,7 +1426,7 @@ def _download_file(url, celeb_root_folder, history, keywords_list, meta=None, al
 
         if len(content) < MIN_FILE_SIZE_BYTES:
             log_failure(url, f"too small ({len(content)} bytes, minimum {MIN_FILE_SIZE_BYTES})", meta, direct_url)
-            return False
+            return None if download_complete(res, content) else False      # a complete small file will not get bigger: don't retry the thread
         if not image_ok(content):
             log_failure(url, f"not a readable image ({len(content)} bytes)", meta, direct_url)
             return False
